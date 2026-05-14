@@ -1,4 +1,4 @@
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { threads, messages } from "./schema.js";
 import type { AnyDb } from "./users.js";
 import type { ThreadSummary, ThreadDetail, MessageView, Role } from "@cogni/contract";
@@ -36,6 +36,20 @@ export async function getThreadDetail(db: AnyDb, threadId: string): Promise<Thre
     title: t[0].title,
     messages: msgs.map(toMessageView),
   };
+}
+
+/** Authorization check: does this thread exist AND belong to this user? */
+export async function threadBelongsToUser(
+  db: AnyDb,
+  threadId: string,
+  userId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: threads.id })
+    .from(threads)
+    .where(and(eq(threads.id, threadId), eq(threads.userId, userId)))
+    .limit(1);
+  return rows.length > 0;
 }
 
 export async function appendMessage(

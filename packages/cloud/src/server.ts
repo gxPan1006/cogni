@@ -1,12 +1,20 @@
 import { Hono } from "hono";
 import { createNodeWebSocket } from "@hono/node-ws";
+import { logger } from "@cogni/shared";
 import type { AnyDb } from "./db/client.js";
-import type { Auth } from "./auth.js";
+import type { Auth, SessionClaims } from "./auth.js";
 import type { HostRouter } from "./host-router.js";
 import type { ClientHub } from "./client-hub.js";
 import type { ChatDomain } from "./domains/chat.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerHostWs } from "./routes/host-ws.js";
+import { registerClientRoutes } from "./routes/client.js";
+
+declare module "hono" {
+  interface ContextVariableMap {
+    claims: SessionClaims;
+  }
+}
 
 export interface ServerDeps {
   db: AnyDb;
@@ -23,9 +31,14 @@ export function createServer(deps: ServerDeps) {
 
   app.get("/health", (c) => c.json({ ok: true }));
 
-  registerAuthRoutes(app, deps);               // Task 11
-  registerHostWs(app, upgradeWebSocket, deps);   // Task 12
-  // registerClientRoutes(app, upgradeWebSocket, deps); // Task 13
+  app.onError((err, c) => {
+    logger.error({ err: String(err), path: c.req.path }, "unhandled request error");
+    return c.json({ error: "internal" }, 500);
+  });
+
+  registerAuthRoutes(app, deps);                   // Task 11
+  registerHostWs(app, upgradeWebSocket, deps);     // Task 12
+  registerClientRoutes(app, upgradeWebSocket, deps); // Task 13
 
   return { app, injectWebSocket };
 }

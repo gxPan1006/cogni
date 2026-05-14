@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { makeTestDb } from "./test-db.js";
 import { findOrCreateUser } from "./users.js";
-import { createThread, listThreads, getThreadDetail, appendMessage, touchThread } from "./threads.js";
+import { createThread, listThreads, getThreadDetail, appendMessage, touchThread, threadBelongsToUser } from "./threads.js";
 
 describe("thread repository", () => {
   it("creates, lists, appends messages, and reads back detail", async () => {
@@ -38,6 +38,17 @@ describe("thread repository", () => {
     const { db, close } = await makeTestDb();
     const missing = await getThreadDetail(db, "00000000-0000-0000-0000-000000000000");
     expect(missing).toBeNull();
+    await close();
+  });
+
+  it("threadBelongsToUser is true only for the owner", async () => {
+    const { db, close } = await makeTestDb();
+    const owner = await findOrCreateUser(db, { oauthSub: "g|owner", email: "owner@x.com" });
+    const other = await findOrCreateUser(db, { oauthSub: "g|other", email: "other@x.com" });
+    const thread = await createThread(db, { userId: owner.id, tenantId: owner.tenantId });
+    expect(await threadBelongsToUser(db, thread.id, owner.id)).toBe(true);
+    expect(await threadBelongsToUser(db, thread.id, other.id)).toBe(false);
+    expect(await threadBelongsToUser(db, "00000000-0000-0000-0000-000000000000", owner.id)).toBe(false);
     await close();
   });
 });
