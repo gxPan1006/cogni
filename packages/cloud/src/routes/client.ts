@@ -20,7 +20,11 @@ export function registerClientRoutes(
   deps: ServerDeps,
 ): void {
   // --- HTTP: Bearer-auth middleware for /api/* ---
+  // /api/ws is exempt: a browser WebSocket handshake cannot send an
+  // Authorization header, so that endpoint carries the JWT in the ?token=
+  // query param and authenticates inside its own upgradeWebSocket handler.
   app.use("/api/*", async (c, next) => {
+    if (c.req.path === "/api/ws") return next();
     const auth = c.req.header("Authorization");
     const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
     const claims = token ? await deps.auth.verifyToken(token) : null;
@@ -72,6 +76,7 @@ export function registerClientRoutes(
     upgradeWebSocket(async (c) => {
       const claims = await deps.auth.verifyToken(c.req.query("token") ?? "");
       const clientId = randomUUID();
+      let processing: Promise<void> = Promise.resolve();
       return {
         onOpen(_e, ws) {
           if (!claims) {
@@ -84,30 +89,35 @@ export function registerClientRoutes(
             send: (m: CloudToClient) => ws.send(JSON.stringify(m)),
           });
         },
-        async onMessage(evt) {
-          try {
-            if (!claims) return;
-            let raw: unknown;
-            try {
-              raw = JSON.parse(String(evt.data));
-            } catch {
-              return; // non-JSON frame — ignore
-            }
-            const parsed = clientToCloudSchema.safeParse(raw);
-            if (!parsed.success) return;
-            const msg = parsed.data;
-            if (msg.t === "subscribe") {
-              if (!(await threadBelongsToUser(deps.db, msg.threadId, claims.userId))) return;
-              deps.clients.subscribe(clientId, msg.threadId);
-              const host = deps.hosts.getHostForUser(claims.userId);
-              deps.clients.broadcast(msg.threadId, { t: "host-status", online: host !== null });
-            } else if (msg.t === "send") {
-              if (!(await threadBelongsToUser(deps.db, msg.threadId, claims.userId))) return;
-              await deps.chat.handleClientSend(claims.userId, msg.threadId, msg.text);
-            }
-          } catch (err) {
-            logger.warn({ err: String(err), clientId }, "client-ws onMessage failed");
-          }
+        onMessage(evt) {
+          // The `ws` library does not await an async onMessage, so streamed
+          // frames would interleave. Chain them per-connection so messages are
+          // processed in arrival order.
+          processing = processing
+            .then(async () => {
+              if (!claims) return;
+              let raw: unknown;
+              try {
+                raw = JSON.parse(String(evt.data));
+              } catch {
+                return; // non-JSON frame — ignore
+              }
+              const parsed = clientToCloudSchema.safeParse(raw);
+              if (!parsed.success) return;
+              const msg = parsed.data;
+              if (msg.t === "subscribe") {
+                if (!(await threadBelongsToUser(deps.db, msg.threadId, claims.userId))) return;
+                deps.clients.subscribe(clientId, msg.threadId);
+                const host = deps.hosts.getHostForUser(claims.userId);
+                deps.clients.broadcast(msg.threadId, { t: "host-status", online: host !== null });
+              } else if (msg.t === "send") {
+                if (!(await threadBelongsToUser(deps.db, msg.threadId, claims.userId))) return;
+                await deps.chat.handleClientSend(claims.userId, msg.threadId, msg.text);
+              }
+            })
+            .catch((err) => {
+              logger.warn({ err: String(err), clientId }, "client-ws onMessage failed");
+            });
         },
         onClose() {
           deps.clients.unregister(clientId);

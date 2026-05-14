@@ -43,9 +43,11 @@ export async function setRunnerSessionStatus(db: AnyDb, sessionId: string, statu
 }
 
 /**
- * Append one event to a thread's stream. seq is the next per-thread integer.
- * SP-1 runs one Runner Host per user so events for a thread arrive serially;
- * the `events_thread_seq_uq` constraint is the backstop if that ever breaks.
+ * Append one event to a thread's stream, assigning the next per-thread `seq`.
+ * Per-connection message processing is serialized in the host WS endpoint, so
+ * events from a given host are appended in arrival order; the
+ * `events_thread_seq_uq` constraint is the backstop if concurrency ever breaks
+ * that assumption (e.g. multiple hosts, SP-2).
  */
 export async function appendEvent(
   db: AnyDb,

@@ -17,53 +17,59 @@ export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, de
       const token = c.req.query("token") ?? "";
       let hostId: string | null = null;
       let userId: string | null = null;
+      let processing: Promise<void> = Promise.resolve();
 
       return {
-        async onMessage(evt, ws) {
-          try {
-            let raw: unknown;
-            try {
-              raw = JSON.parse(String(evt.data));
-            } catch {
-              return; // non-JSON frame — ignore
-            }
-            const parsed = hostToCloudSchema.safeParse(raw);
-            if (!parsed.success) return;
-            const msg = parsed.data;
+        onMessage(evt, ws) {
+          // The `ws` library does not await an async onMessage, so streamed
+          // frames would interleave. Chain them per-connection so events are
+          // processed — and broadcast — in arrival order.
+          processing = processing
+            .then(async () => {
+              let raw: unknown;
+              try {
+                raw = JSON.parse(String(evt.data));
+              } catch {
+                return; // non-JSON frame — ignore
+              }
+              const parsed = hostToCloudSchema.safeParse(raw);
+              if (!parsed.success) return;
+              const msg = parsed.data;
 
-            if (msg.t === "register") {
-              if (hostId) return; // already registered on this socket — idempotent
-              const host = await findHostByToken(deps.db, token);
-              if (!host) { ws.close(4001, "bad token"); return; }
-              hostId = host.id;
-              userId = host.userId;
-              await setHostStatus(deps.db, host.id, "online", msg.capabilities);
-              deps.hosts.register({
-                hostId: host.id,
-                userId: host.userId,
-                send: (m: CloudToHost) => ws.send(JSON.stringify(m)),
-              });
-              ws.send(JSON.stringify({ t: "registered" } satisfies CloudToHost));
-              deps.clients.sendToUser(host.userId, { t: "host-status", online: true });
-              logger.info({ hostId, userId }, "runner host registered");
-              return;
-            }
-            if (!hostId) return; // ignore anything before register
+              if (msg.t === "register") {
+                if (hostId) return; // already registered on this socket — idempotent
+                const host = await findHostByToken(deps.db, token);
+                if (!host) { ws.close(4001, "bad token"); return; }
+                hostId = host.id;
+                userId = host.userId;
+                await setHostStatus(deps.db, host.id, "online", msg.capabilities);
+                deps.hosts.register({
+                  hostId: host.id,
+                  userId: host.userId,
+                  send: (m: CloudToHost) => ws.send(JSON.stringify(m)),
+                });
+                ws.send(JSON.stringify({ t: "registered" } satisfies CloudToHost));
+                deps.clients.sendToUser(host.userId, { t: "host-status", online: true });
+                logger.info({ hostId, userId }, "runner host registered");
+                return;
+              }
+              if (!hostId) return; // ignore anything before register
 
-            if (msg.t === "heartbeat") {
-              await setHostStatus(deps.db, hostId, "online");
-            } else if (msg.t === "event") {
-              // SP-1: no ownership check that msg.sessionId belongs to this host —
-              // runner_sessions has no hostId column yet (see the onClose note below).
-              // One host per user + 256-bit registration tokens bound the exposure;
-              // proper per-session ownership enforcement is an SP-2 concern.
-              await deps.chat.handleHostEvent(msg.sessionId, msg.event);
-            } else if (msg.t === "session-update") {
-              await deps.chat.handleSessionUpdate(msg.sessionId, msg.status);
-            }
-          } catch (err) {
-            logger.warn({ err: String(err), hostId }, "host-ws onMessage failed");
-          }
+              if (msg.t === "heartbeat") {
+                await setHostStatus(deps.db, hostId, "online");
+              } else if (msg.t === "event") {
+                // SP-1: no ownership check that msg.sessionId belongs to this host —
+                // runner_sessions has no hostId column yet (see the onClose note below).
+                // One host per user + 256-bit registration tokens bound the exposure;
+                // proper per-session ownership enforcement is an SP-2 concern.
+                await deps.chat.handleHostEvent(msg.sessionId, msg.event);
+              } else if (msg.t === "session-update") {
+                await deps.chat.handleSessionUpdate(msg.sessionId, msg.status);
+              }
+            })
+            .catch((err) => {
+              logger.warn({ err: String(err), hostId }, "host-ws onMessage failed");
+            });
         },
         async onClose() {
           try {
