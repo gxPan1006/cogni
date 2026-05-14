@@ -8,6 +8,10 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "deep-link:default"
+    "deep-link:default",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [{ "name": "cogni-runner-host", "sidecar": true }]
+    }
   ]
 }

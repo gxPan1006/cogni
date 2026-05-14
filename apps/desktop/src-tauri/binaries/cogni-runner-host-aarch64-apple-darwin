@@ -1,0 +1,11 @@
+#!/bin/sh
+# SP-1 STOPGAP sidecar wrapper for the Cogni runner-host daemon.
+#
+# Tauri's `externalBin` expects a real binary here; for SP-1 the plan
+# explicitly accepts a shell script that shells out to `node <dist>/main.js`.
+# Proper single-binary packaging (pkg/bun/SEA) lands in SP-4.
+#
+# Path is resolved relative to this script so it survives the repo moving,
+# but NOT a bundled .app — the bundled path is also an SP-4 concern.
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+exec node "$SCRIPT_DIR/../../../../packages/runner-host/dist/main.js" "$@"

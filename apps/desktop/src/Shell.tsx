@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { ThreadSummary } from "@cogni/contract";
 import { api, ApiError } from "./api.js";
 import { Sidebar } from "./Sidebar.js";
@@ -19,6 +20,26 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   const refreshThreads = () => api.listThreads(token).then(setThreads).catch(handleApiError);
   useEffect(() => {
     refreshThreads();
+  }, [token]);
+
+  // On login, make sure the user has a runner-host registered with the cloud and
+  // that its local daemon is running. First login on a fresh machine registers a
+  // host, writes ~/.cogni/host.json, then spawns the bundled runner-host sidecar;
+  // later launches see a live pid and don't double-spawn. Once the daemon
+  // connects, the conversation view's "本地运行环境未连接" banner clears.
+  useEffect(() => {
+    (async () => {
+      const hosts = await api.listHosts(token);
+      if (hosts.length === 0) {
+        const reg = await api.createHost(token, "My Computer");
+        await invoke("write_host_config", {
+          hostId: reg.hostId,
+          registrationToken: reg.registrationToken,
+          cloudUrl: api.wsUrl,
+        });
+      }
+      await invoke("ensure_daemon");
+    })().catch(handleApiError);
   }, [token]);
 
   const newChat = async () => {
