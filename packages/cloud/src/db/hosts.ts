@@ -25,12 +25,11 @@ export async function setHostStatus(
   db: AnyDb,
   hostId: string,
   status: "online" | "offline",
-  capabilities: string[] = [],
+  capabilities?: string[],
 ): Promise<void> {
-  await db
-    .update(hosts)
-    .set({ status, capabilitiesJson: capabilities, lastSeen: new Date() })
-    .where(eq(hosts.id, hostId));
+  const patch: Partial<typeof hosts.$inferInsert> = { status, lastSeen: new Date() };
+  if (capabilities !== undefined) patch.capabilitiesJson = capabilities;
+  await db.update(hosts).set(patch).where(eq(hosts.id, hostId));
 }
 
 export async function getUserHosts(db: AnyDb, userId: string) {
