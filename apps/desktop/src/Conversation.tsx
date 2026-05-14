@@ -10,6 +10,7 @@ function EventBlock({ event }: { event: RunnerEvent }) {
     return <pre style={{ background: "#f0f7f0" }}>↳ {String(event.output).slice(0, 200)}</pre>;
   if (event.type === "error")
     return <pre style={{ color: "crimson" }}>⚠ {event.code}: {event.message}</pre>;
+  // `permission-request` intentionally falls through to null — no permission-prompt UI until SP-3.
   return null;
 }
 

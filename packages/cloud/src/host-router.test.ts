@@ -2,17 +2,15 @@ import { describe, it, expect, vi } from "vitest";
 import { HostRouter } from "./host-router.js";
 
 describe("HostRouter", () => {
-  it("routes a dispatch to the user's connected host", () => {
+  it("returns the connected host for a registered user", () => {
     const router = new HostRouter();
     const send = vi.fn();
     router.register({ hostId: "h1", userId: "u1", send });
-    const ok = router.dispatch("u1", { t: "dispatch", sessionId: "s1", threadId: "t1", adapter: "claude-code", runnerSessionId: null, message: "hi" });
-    expect(ok).toBe(true);
-    expect(send).toHaveBeenCalledOnce();
+    expect(router.getHostForUser("u1")).toMatchObject({ hostId: "h1", userId: "u1" });
   });
-  it("returns false when the user has no online host", () => {
+  it("returns null when the user has no online host", () => {
     const router = new HostRouter();
-    expect(router.dispatch("u1", { t: "registered" })).toBe(false);
+    expect(router.getHostForUser("u1")).toBeNull();
   });
   it("forgets a host after unregister", () => {
     const router = new HostRouter();
@@ -26,8 +24,6 @@ describe("HostRouter", () => {
     const newSend = vi.fn();
     router.register({ hostId: "h1", userId: "u1", send: oldSend });
     router.register({ hostId: "h2", userId: "u1", send: newSend });
-    router.dispatch("u1", { t: "dispatch", sessionId: "s1", threadId: "t1", adapter: "claude-code", runnerSessionId: null, message: "hi" });
-    expect(newSend).toHaveBeenCalledOnce();
-    expect(oldSend).not.toHaveBeenCalled();
+    expect(router.getHostForUser("u1")).toMatchObject({ hostId: "h2" });
   });
 });

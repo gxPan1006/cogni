@@ -59,9 +59,10 @@ export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, de
                 await setHostStatus(deps.db, hostId, "online");
               } else if (msg.t === "event") {
                 // SP-1: no ownership check that msg.sessionId belongs to this host —
-                // runner_sessions has no hostId column yet (see the onClose note below).
-                // One host per user + 256-bit registration tokens bound the exposure;
-                // proper per-session ownership enforcement is an SP-2 concern.
+                // SP-1 does not record `host_id` on `runner_sessions` (the column
+                // exists but is unwritten), so there's no host→session mapping to
+                // check against. One host per user + 256-bit registration tokens
+                // bound the exposure; per-session ownership enforcement is an SP-2 concern.
                 await deps.chat.handleHostEvent(msg.sessionId, msg.event);
               } else if (msg.t === "session-update") {
                 await deps.chat.handleSessionUpdate(msg.sessionId, msg.status);
@@ -78,9 +79,11 @@ export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, de
               await setHostStatus(deps.db, hostId, "offline");
               if (userId) deps.clients.sendToUser(userId, { t: "host-status", online: false });
               // SP-1: in-flight `running` runner_sessions for this host are NOT
-              // force-failed here — runner_sessions has no hostId recorded yet, and
-              // SP-1's chat domain does not gate dispatch on status, so a reconnect
-              // self-heals. Proper in-flight-session cleanup is an SP-2 concern.
+              // force-failed here — SP-1 does not record `host_id` on
+              // `runner_sessions` (the column exists but is unwritten), so there's
+              // no host→session mapping yet; and SP-1's chat domain does not gate
+              // dispatch on status, so a reconnect self-heals. Proper in-flight-session
+              // cleanup (and populating `host_id`) is an SP-2 concern.
               logger.info({ hostId }, "runner host disconnected");
             }
           } catch (err) {

@@ -29,11 +29,4 @@ export class HostRouter {
     const hostId = this.byUser.get(userId);
     return hostId ? this.byHost.get(hostId) ?? null : null;
   }
-
-  dispatch(userId: string, msg: CloudToHost): boolean {
-    const host = this.getHostForUser(userId);
-    if (!host) return false;
-    host.send(msg);
-    return true;
-  }
 }

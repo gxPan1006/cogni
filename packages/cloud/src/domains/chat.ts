@@ -67,6 +67,8 @@ export class ChatDomain {
 
     const stored = await appendEvent(this.db, { threadId, sessionId, event });
 
+    // SP-1 doesn't special-case `permission-request` — it's persisted + fanned out
+    // like any event, but there's no permission-prompt UI/flow until SP-3.
     if (event.type === "session-id") {
       await setRunnerSessionId(this.db, sessionId, event.id);
     } else if (event.type === "text") {
