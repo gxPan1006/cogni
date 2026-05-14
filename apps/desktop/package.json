@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "typecheck": "tsc --noEmit",
+    "build": "pnpm --filter @cogni/contract build && tsc && vite build",
+    "typecheck": "pnpm --filter @cogni/contract build && tsc --noEmit",
     "preview": "vite preview",
     "tauri": "tauri"
   },

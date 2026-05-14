@@ -72,18 +72,27 @@ pnpm install
 
 ---
 
-## 4. Build the Runner Host
+## 4. Build the workspace packages
 
-The desktop app's SP-1 sidecar is a small shell-script wrapper that
-`exec node`s `packages/runner-host/dist/main.js`. That file must exist before
-you launch the desktop app, or the daemon will fail to spawn:
+The library packages publish their `dist/` (gitignored) as their entry point,
+and the runtime tools resolve them from there:
+
+- `pnpm --filter @cogni/cloud dev` (`tsx`) loads `@cogni/contract` + `@cogni/shared`
+  from their built `dist/`.
+- The desktop app's SP-1 sidecar is a small shell-script wrapper that
+  `exec node`s `packages/runner-host/dist/main.js` — that file must exist or the
+  daemon won't spawn.
+
+So build all of them once after `pnpm install`:
 
 ```sh
-pnpm --filter @cogni/runner-host build
+pnpm build
 ```
 
-This produces `packages/runner-host/dist/main.js`. Re-run it whenever you
-change `packages/runner-host` source.
+This builds `contract`, `shared`, `cloud`, and `runner-host` into their `dist/`
+dirs. Re-run it whenever you change a `packages/*` source file. (`pnpm test`
+needs no build — vitest resolves the workspace packages from source; `pnpm typecheck`
+and `pnpm --filter desktop build` build what they need automatically.)
 
 ---
 
