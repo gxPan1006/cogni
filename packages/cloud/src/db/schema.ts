@@ -51,7 +51,9 @@ export const runnerSessions = pgTable("runner_sessions", {
   runnerSessionId: text("runner_session_id"),
   status: text("status").notNull().default("idle"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (t) => ({
+  threadUq: unique("runner_sessions_thread_uq").on(t.threadId),
+}));
 
 export const events = pgTable("events", {
   id: uuid("id").primaryKey().defaultRandom(),
