@@ -14,6 +14,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             greet,
+            daemon::has_host_config,
             daemon::write_host_config,
             daemon::ensure_daemon
         ])

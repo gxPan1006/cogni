@@ -23,14 +23,13 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   }, [token]);
 
   // On login, make sure the user has a runner-host registered with the cloud and
-  // that its local daemon is running. First login on a fresh machine registers a
-  // host, writes ~/.cogni/host.json, then spawns the bundled runner-host sidecar;
-  // later launches see a live pid and don't double-spawn. Once the daemon
-  // connects, the conversation view's "本地运行环境未连接" banner clears.
+  // that its local daemon is running. If local host config was deleted while the
+  // cloud still has old host rows, register a fresh host for this machine.
   useEffect(() => {
     (async () => {
       const hosts = await api.listHosts(token);
-      if (hosts.length === 0) {
+      const hasHostConfig = await invoke<boolean>("has_host_config");
+      if (hosts.length === 0 || !hasHostConfig) {
         const reg = await api.createHost(token, "My Computer");
         await invoke("write_host_config", {
           hostId: reg.hostId,

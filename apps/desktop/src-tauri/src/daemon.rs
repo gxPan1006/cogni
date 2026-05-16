@@ -1,7 +1,8 @@
 //! Runner-host daemon lifecycle: register the host with the cloud and spawn
 //! the bundled `cogni-runner-host` sidecar.
 //!
-//! Two Tauri commands are exposed to the frontend (see `Shell.tsx`):
+//! Tauri commands exposed to the frontend (see `Shell.tsx`):
+//!   - `has_host_config`  — checks whether this machine has runner-host creds
 //!   - `write_host_config` — persists `~/.cogni/host.json`
 //!   - `ensure_daemon`     — spawns the sidecar unless a live one is recorded
 
@@ -22,8 +23,15 @@ fn cogni_home() -> PathBuf {
         })
 }
 
+/// Whether this machine has local runner-host credentials.
+#[tauri::command]
+pub fn has_host_config() -> bool {
+    cogni_home().join("host.json").is_file()
+}
+
 /// Write `~/.cogni/host.json` with the credentials the runner-host needs to
-/// connect to the cloud. Called once on first login when the user has no host.
+/// connect to the cloud. Called once on first login when the user has no host,
+/// or when cloud still has old host rows but local state was deleted.
 #[tauri::command]
 pub fn write_host_config(
     host_id: String,
@@ -32,6 +40,7 @@ pub fn write_host_config(
 ) -> Result<(), String> {
     let dir = cogni_home();
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    stop_recorded_daemon(&dir)?;
     let cfg = serde_json::json!({
         "hostId": host_id,
         "registrationToken": registration_token,
@@ -42,6 +51,20 @@ pub fn write_host_config(
         serde_json::to_string_pretty(&cfg).unwrap(),
     )
     .map_err(|e| e.to_string())
+}
+
+fn stop_recorded_daemon(dir: &PathBuf) -> Result<(), String> {
+    let pid_file = dir.join("daemon.pid");
+    if let Ok(pid_str) = fs::read_to_string(&pid_file) {
+        if let Ok(pid) = pid_str.trim().parse::<i32>() {
+            terminate(pid);
+        }
+    }
+    match fs::remove_file(pid_file) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// Ensure the runner-host daemon is running. Returns `Ok(true)` if a new
@@ -87,8 +110,18 @@ fn is_alive(pid: i32) -> bool {
     unsafe { libc::kill(pid, 0) == 0 }
 }
 
+#[cfg(unix)]
+fn terminate(pid: i32) {
+    unsafe {
+        libc::kill(pid, libc::SIGTERM);
+    }
+}
+
 /// SP-1 Windows stopgap: assume alive. SP-4 adds a real liveness check.
 #[cfg(windows)]
 fn is_alive(_pid: i32) -> bool {
     true
 }
+
+#[cfg(windows)]
+fn terminate(_pid: i32) {}

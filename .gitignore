@@ -6,6 +6,7 @@ build/
 .env
 .env.*
 !.env.example
-changelog/
 .worktrees/
+.claude/
+.superpowers/
 *.tsbuildinfo
