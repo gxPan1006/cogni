@@ -1,28 +1,118 @@
-/* Composer — owned by Track B. Track B replaces the stub rules below. */
-.composer {
+/* ------------------------------------------------------------------------ *
+ * Composer — owned by Track B. Visual target: ai-cognit webchat composer.
+ *
+ * Layout:
+ *   .composer-block            — vertical stack, padded, holds the composer
+ *     .composer                — rounded panel (textarea + toolbar)
+ *       .composer__input       — autosizing textarea
+ *       .composer__bar         — toolbar row: attach · spacer · model · mic · send
+ *
+ * .icon-btn / .icon-btn--lg / .badge come from styles/base.css.
+ * ------------------------------------------------------------------------ */
+
+.composer-block {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-6) var(--space-5);
+  width: 100%;
+}
+
+.composer-block--disabled {
+  opacity: 0.6;
+}
+.composer-block--disabled .composer {
+  cursor: not-allowed;
+}
+
+/* ─── composer panel ───────────────────────────────────────────────────── */
+.composer {
+  width: 100%;
+  max-width: var(--composer-max-width);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  max-width: var(--composer-max-width);
-  margin: 0 auto var(--space-5);
-  width: 100%;
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+.composer:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
 }
 
 .composer__input {
+  display: block;
   width: 100%;
+  min-height: 24px;
+  max-height: 200px;
   resize: none;
+  padding: var(--space-1) var(--space-1);
+  font-family: var(--font-sans);
   font-size: var(--text-md);
   line-height: var(--leading-snug);
   color: var(--fg);
+  background: transparent;
+  overflow-y: auto;
 }
+.composer__input::placeholder { color: var(--fg-mute); }
+.composer__input:disabled { color: var(--fg-mute); cursor: not-allowed; }
 
+/* ─── toolbar row ─────────────────────────────────────────────────────── */
 .composer__bar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: var(--space-2);
+  margin-top: var(--space-2);
 }
+.composer__spacer { flex: 1; }
+
+/* Model picker pill — disabled stub in SP-1. */
+.model-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+.model-btn:hover:not(:disabled) { background: var(--hover); }
+.model-btn:disabled { opacity: 0.85; cursor: not-allowed; }
+.model-btn__name { font-weight: var(--weight-medium); }
+.model-btn__chev {
+  color: var(--fg-mute);
+  font-size: var(--text-xs);
+  margin-left: var(--space-1);
+}
+
+/* Send button — circular accent variant of .icon-btn--lg.
+   Empty draft → muted bg; with text → solid accent. */
+.composer__send {
+  border-radius: var(--radius-pill);
+  background: var(--bg-strong);
+  color: var(--fg-mute);
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out),
+              transform var(--duration-fast) var(--ease-out);
+}
+.composer__send:not(:disabled) {
+  background: var(--accent);
+  color: #ffffff;
+}
+.composer__send:not(:disabled):hover {
+  background: var(--accent-strong);
+}
+.composer__send:not(:disabled):active {
+  transform: translateY(1px);
+}
+.composer__send:disabled {
+  cursor: not-allowed;
+}
+.composer__send svg { width: 16px; height: 16px; }
