@@ -8,6 +8,7 @@ import { createHost } from "./db/hosts.js";
 import { HostRouter } from "./host-router.js";
 import { ClientHub } from "./client-hub.js";
 import { ChatDomain } from "./domains/chat.js";
+import { FakeTransport } from "./email/transport.js";
 import { makeAuth } from "./auth.js";
 import { createServer } from "./server.js";
 
@@ -62,6 +63,8 @@ describe("cloud server e2e (headless spine)", () => {
       hosts,
       clients,
       chat,
+      emailTransport: new FakeTransport(),
+      magicLinkTtlMinutes: 15,
       publicUrl: "http://localhost",
     });
     const server = serve({ fetch: app.fetch, port: 0 });

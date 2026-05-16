@@ -7,7 +7,9 @@ import type { Auth, SessionClaims } from "./auth.js";
 import type { HostRouter } from "./host-router.js";
 import type { ClientHub } from "./client-hub.js";
 import type { ChatDomain } from "./domains/chat.js";
+import type { EmailTransport } from "./email/transport.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerEmailRoutes } from "./routes/email.js";
 import { registerHostWs } from "./routes/host-ws.js";
 import { registerClientRoutes } from "./routes/client.js";
 
@@ -23,6 +25,8 @@ export interface ServerDeps {
   hosts: HostRouter;
   clients: ClientHub;
   chat: ChatDomain;
+  emailTransport: EmailTransport;
+  magicLinkTtlMinutes: number;
   publicUrl: string;
 }
 
@@ -48,9 +52,10 @@ export function createServer(deps: ServerDeps) {
     return c.json({ error: "internal" }, 500);
   });
 
-  registerAuthRoutes(app, deps);                   // Task 11
-  registerHostWs(app, upgradeWebSocket, deps);     // Task 12
-  registerClientRoutes(app, upgradeWebSocket, deps); // Task 13
+  registerAuthRoutes(app, deps);                   // Google OAuth + dev-token
+  registerEmailRoutes(app, deps);                  // Magic-link send/callback
+  registerHostWs(app, upgradeWebSocket, deps);
+  registerClientRoutes(app, upgradeWebSocket, deps);
 
   return { app, injectWebSocket };
 }
