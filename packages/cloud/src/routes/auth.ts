@@ -31,6 +31,26 @@ export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
     for (const [k, v] of pending) if (now - v.createdAt > TTL_MS) pending.delete(k);
   };
 
+  // Dev-only: signs a JWT for a stand-in user, bypassing Google OAuth.
+  // Refuses to register in production. Used by the desktop dev fallback in
+  // apps/desktop/src/useAuth.ts when the user has no localStorage token —
+  // makes dogfood instant on networks where Google OAuth is unreachable
+  // (e.g. flaky GFW). Mirrors the standalone packages/cloud/src/scripts/
+  // mint-dev-token.ts but over HTTP so the desktop can self-serve.
+  if (process.env.NODE_ENV !== "production") {
+    app.post("/auth/dev-token", async (c) => {
+      const user = await findOrCreateUser(deps.db, {
+        oauthSub: "dev|manual",
+        email: "dev-manual@local.test",
+      });
+      const token = await deps.auth.issueToken({
+        userId: user.id,
+        tenantId: user.tenantId,
+      });
+      return c.json({ token });
+    });
+  }
+
   // Desktop app opens this in the system browser with ?redirect=cogni://auth
   app.get("/auth/google/start", (c) => {
     sweep();

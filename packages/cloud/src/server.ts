@@ -30,14 +30,16 @@ export function createServer(deps: ServerDeps) {
   const app = new Hono();
   const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
 
-  app.use(
-    "/api/*",
-    cors({
-      origin: ["tauri://localhost", "http://localhost:1420"],
-      allowHeaders: ["Authorization", "Content-Type"],
-      allowMethods: ["GET", "POST", "OPTIONS"],
-    }),
-  );
+  const corsMiddleware = cors({
+    origin: ["tauri://localhost", "http://localhost:1420"],
+    allowHeaders: ["Authorization", "Content-Type"],
+    allowMethods: ["GET", "POST", "OPTIONS"],
+  });
+  app.use("/api/*", corsMiddleware);
+  // /auth/dev-token is an XHR from the desktop dev fallback (see useAuth.ts);
+  // the rest of /auth/* are browser-redirect endpoints and CORS is a no-op for
+  // them. Cheap to enable across the whole prefix.
+  app.use("/auth/*", corsMiddleware);
 
   app.get("/health", (c) => c.json({ ok: true }));
 
