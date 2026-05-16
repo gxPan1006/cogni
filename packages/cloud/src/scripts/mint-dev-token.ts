@@ -9,7 +9,8 @@
 //      they're bypassing auth for a real user row in the DB.
 import { loadEnv } from "../env.js";
 import { makeDb } from "../db/client.js";
-import { findOrCreateUser } from "../db/users.js";
+import { findOrCreateUserByEmail } from "../db/users.js";
+import { upsertIdentity } from "../db/identities.js";
 import { makeAuth } from "../auth.js";
 
 if (process.env.NODE_ENV === "production") {
@@ -23,9 +24,8 @@ if (process.env.COGNI_DEV_TOKEN_ACK !== "yes") {
       "[mint-dev-token] refusing to run without explicit acknowledgement.",
       "",
       "This script bypasses Google OAuth by creating/finding a real user",
-      "in Neon (oauthSub=dev|manual, email=dev-manual@local.test) and signing",
-      "a 30-day JWT for them. Only use it when Google OAuth is unavailable",
-      "from your network.",
+      "in Neon (email=dev-manual@local.test) and signing a 30-day JWT for",
+      "them. Only use it when Google OAuth is unavailable from your network.",
       "",
       "To proceed, re-run with:",
       "  COGNI_DEV_TOKEN_ACK=yes <command>",
@@ -45,10 +45,8 @@ const auth = makeAuth({
   },
 });
 
-const user = await findOrCreateUser(db, {
-  oauthSub: "dev|manual",
-  email: "dev-manual@local.test",
-});
+const user = await findOrCreateUserByEmail(db, "dev-manual@local.test");
+await upsertIdentity(db, user.id, "dev", "manual");
 const token = await auth.issueToken({ userId: user.id, tenantId: user.tenantId });
 console.log(token);
 process.exit(0);

@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { generateState, generateCodeVerifier, decodeIdToken } from "arctic";
-import { findOrCreateUser } from "../db/users.js";
+import { findOrCreateUserByEmail } from "../db/users.js";
+import { upsertIdentity } from "../db/identities.js";
 import { logger } from "@cogni/shared";
 import type { ServerDeps } from "../server.js";
 
@@ -39,10 +40,8 @@ export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
   // mint-dev-token.ts but over HTTP so the desktop can self-serve.
   if (process.env.NODE_ENV !== "production") {
     app.post("/auth/dev-token", async (c) => {
-      const user = await findOrCreateUser(deps.db, {
-        oauthSub: "dev|manual",
-        email: "dev-manual@local.test",
-      });
+      const user = await findOrCreateUserByEmail(deps.db, "dev-manual@local.test");
+      await upsertIdentity(deps.db, user.id, "dev", "manual");
       const token = await deps.auth.issueToken({
         userId: user.id,
         tenantId: user.tenantId,
@@ -79,7 +78,8 @@ export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
       if (typeof claims.email !== "string") {
         logger.warn({ sub }, "google id token had no email claim; using fallback");
       }
-      const user = await findOrCreateUser(deps.db, { oauthSub: `google|${sub}`, email });
+      const user = await findOrCreateUserByEmail(deps.db, email);
+      await upsertIdentity(deps.db, user.id, "google", sub);
       const token = await deps.auth.issueToken({ userId: user.id, tenantId: user.tenantId });
       const target = new URL(entry.redirect);
       target.searchParams.set("token", token);
