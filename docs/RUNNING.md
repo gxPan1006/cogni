@@ -72,6 +72,43 @@ pnpm install
 
 ---
 
+## 3.5 Set up email magic-link login (optional, recommended)
+
+Magic-link login lets users sign in without Google OAuth — essential when the
+runtime network can't reliably reach Google (Chinese mainland over GFW being the
+case that prompted this).
+
+**Dev mode (no real emails):** leave `EMAIL_TRANSPORT=console` in `.env` (the
+default if you don't set it). The cloud will print the magic URL to stdout
+instead of sending an email — copy it from Terminal 1 and run
+`open 'cogni://auth?magic=…'` from a shell to deliver the deep link to the
+desktop app.
+
+**Production / staging (real emails via Resend):**
+
+1. Create a [Resend](https://resend.com) account (free tier covers 3k
+   emails/mo — plenty for SP-1).
+2. In Resend → Domains, add and verify the domain you want to send from
+   (DNS records: SPF + DKIM). Verification usually takes 5-15 min once
+   records are propagated.
+3. Create an API key (Domains → API Keys → Create).
+4. Fill the new vars in `packages/cloud/.env`:
+
+   ```
+   EMAIL_TRANSPORT=resend
+   RESEND_API_KEY=re_…
+   EMAIL_FROM=Cogni <login@yourdomain.com>
+   MAGIC_LINK_TTL_MIN=15
+   ```
+
+5. Restart `pnpm --filter @cogni/cloud dev`.
+
+Rate limits enforced server-side: 1 send/min + 5/hour per email, 3 sends/min +
+20/hour per IP. The desktop Login page automatically shows both CTAs (email +
+Google) — nothing extra to configure on the client.
+
+---
+
 ## 4. Build the workspace packages
 
 The library packages publish their `dist/` (gitignored) as their entry point,
@@ -143,6 +180,20 @@ Run through these by hand to sign off SP-1. All seven must pass.
 7. **host 离线空态** — Quit the runner-host daemon
    (`kill $(cat ~/.cogni/daemon.pid)`); the conversation shows the yellow
    "本地运行环境未连接" banner.
+8. **邮件 magic-link 登录** — Logout (sidebar menu), and on the Login page
+   enter a fresh email address (anything that hasn't been used before) and
+   click "发送登录链接". The hero swaps to the "已发送…" card with a 60s resend
+   countdown. With `EMAIL_TRANSPORT=console`, copy the `cogni://auth?magic=…`
+   URL printed in Terminal 1 and run `open '<url>'` in any shell; the desktop
+   app should drop straight into Welcome. Then click "发送登录链接" a second
+   time within a minute and verify the form surfaces a red error
+   (`POST .../auth/email/send → 429` — proves the rate limiter is wired in).
+9. **同一 email 在 Google 和 magic link 间复用同一身份** — Sign in via Google
+   first, note the email, logout, then sign in via magic-link with the same
+   email. The Recents list should be identical across both logins. In Neon:
+   `SELECT * FROM users WHERE email = '<that-email>';` returns exactly one
+   row, and `SELECT * FROM user_identities WHERE user_id = '<that-id>';`
+   shows both `google|<sub>` and `email|<that-email>` rows.
 
 ---
 

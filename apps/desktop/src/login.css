@@ -102,3 +102,111 @@
     gap: var(--space-4);
   }
 }
+
+/* ─── magic-link form: email input + send button stacked, then divider,
+   then bordered Google CTA. Mirrors the spacing rhythm of the original
+   single-CTA layout so the surrounding hero / star / title don't shift. */
+
+.login__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 320px;
+  margin: var(--space-5) auto 0;
+}
+
+.login__input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  font-size: var(--text-md);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.login__input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.login__input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login__error {
+  color: var(--danger-fg);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.login__divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 320px;
+  margin: var(--space-5) auto 0;
+  color: var(--fg-mute);
+  font-size: var(--text-sm);
+}
+.login__divider::before,
+.login__divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Secondary CTA for Google — bordered rather than filled so the email
+   magic-link is visually primary (matches the product decision that email
+   is the recommended path; Google is the fallback for users who prefer it). */
+.login__google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 320px;
+  margin: var(--space-3) auto 0;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+.login__google:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: var(--border);
+}
+.login__google:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.login__google .login__cta-icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* "用其他邮箱?" — text link in the post-send state. */
+.login__link {
+  display: block;
+  margin: var(--space-3) auto 0;
+  padding: var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.login__link:hover {
+  color: var(--fg);
+}

@@ -1,28 +1,120 @@
 /**
  * Login — pre-auth landing page.
  *
- * Owned by Track C (Login + Welcome). Phase 1 settled: props (`onLogin`), root
- * className (`.login`), CSS module (`login.css`). Track C fills the visual
- * design. Visual target: dark Anthropic-style hero with brand mark + tagline
- * + the single "用 Google 登录" CTA. Keep it deliberately spartan — SP-1 has
- * no other entry point.
+ * Two CTAs that both end in a `cogni://auth?…` deep link delivered to useAuth:
+ *   1. Email magic link: type address → POST /auth/email/send → switch to "sent"
+ *      state with a 60s resend cooldown. User opens email client, clicks the link,
+ *      macOS routes cogni:// back to Cogni, useAuth redeems and sets the JWT.
+ *   2. Google OAuth: standard browser-redirect dance, server-side callback,
+ *      JWT comes back in the cogni:// URL.
  *
- * Behaviour the user sees:
- *   - Fills 100vh, fully centered on the dark canvas (`--bg-app`).
- *   - Brand row: large serif wordmark "Cogni" with an Anthropic-orange ✳ to
- *     its left, sitting on the optical centerline.
- *   - Tagline underneath in dimmed body text.
- *   - Single accent-orange pill CTA "用 Google 登录" (the only entry point in
- *     SP-1). Clicking it triggers the parent's `onLogin()` which kicks off the
- *     OAuth deep-link flow.
- *   - Fine-print legal line at the bottom of the hero (placeholder copy, no
- *     real links in SP-1 — reserved hook for SP-2).
- *   - Below ~600px width the hero stays vertically centered and the wordmark
- *     scales down via responsive font-size.
+ * State machine:
+ *   form     — initial; show email input + Google button
+ *   sending  — POST /auth/email/send in flight; disable inputs
+ *   sent     — email queued; show "check your inbox" + resend countdown
+ *   error    — show inline error, keep the user's email pre-filled
+ *
+ * Behaviour the user sees end-to-end:
+ *   - On open: serif "Cogni" wordmark + orange ✳, tagline, email input with
+ *     placeholder `you@example.com`, orange "发送登录链接" pill, "或" divider,
+ *     bordered "用 Google 登录" button, fine-print legal line.
+ *   - On submit (valid email): the form's button text flips to "发送中…" and
+ *     disables; on success the whole hero swaps to the "已发送 ..." card
+ *     with a "60s 后可重发" button (counts down 1Hz) and an underlined
+ *     "用其他邮箱?" link that returns to the form.
+ *   - On invalid email: inline red error under the input ("请输入合法的邮箱地址"),
+ *     the input stays focused so the user can fix it in place.
+ *   - On network/4xx error: same inline error, content from ApiError.message
+ *     (typically "POST .../send → 429" for rate-limit; we render the raw msg —
+ *     not pretty, but informative for SP-1 dogfood).
  */
+import { useEffect, useState } from "react";
 import "./login.css";
 
-export function Login({ onLogin }: { onLogin: () => void }) {
+type State =
+  | { kind: "form"; email: string; error?: string }
+  | { kind: "sending"; email: string }
+  | { kind: "sent"; email: string; resendAt: number }
+  | { kind: "error"; email: string; reason: string };
+
+const RESEND_COOLDOWN_MS = 60_000;
+
+export function Login({
+  onLoginWithGoogle,
+  onLoginWithEmail,
+}: {
+  onLoginWithGoogle: () => void;
+  onLoginWithEmail: (email: string) => Promise<void>;
+}) {
+  const [state, setState] = useState<State>({ kind: "form", email: "" });
+  const [now, setNow] = useState(Date.now());
+
+  // tick once a second when in 'sent' state so the cooldown label updates
+  useEffect(() => {
+    if (state.kind !== "sent") return;
+    const id = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(id);
+  }, [state.kind]);
+
+  const submitEmail = async (email: string) => {
+    setState({ kind: "sending", email });
+    try {
+      await onLoginWithEmail(email);
+      setState({ kind: "sent", email, resendAt: Date.now() + RESEND_COOLDOWN_MS });
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : "网络错误,请重试";
+      setState({ kind: "error", email, reason });
+    }
+  };
+
+  if (state.kind === "sent") {
+    const remaining = Math.max(0, Math.ceil((state.resendAt - now) / 1000));
+    return (
+      <div className="login">
+        <div className="login__hero">
+          <div className="login__brand">
+            <span className="login__star" aria-hidden="true">
+              ✳
+            </span>
+            <h1 className="login__title">Cogni</h1>
+          </div>
+          <p className="login__subtitle">
+            已发送登录链接到 <strong>{state.email}</strong>,请在邮件中点击「登录 Cogni」
+          </p>
+          <button
+            className="btn-primary login__cta"
+            disabled={remaining > 0}
+            onClick={() => submitEmail(state.email)}
+          >
+            {remaining > 0 ? `${remaining}s 后可重发` : "重发邮件"}
+          </button>
+          <button
+            className="login__link"
+            onClick={() => setState({ kind: "form", email: "" })}
+          >
+            用其他邮箱?
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const formEmail =
+    state.kind === "form"
+      ? state.email
+      : state.kind === "error"
+        ? state.email
+        : state.kind === "sending"
+          ? state.email
+          : "";
+  const formError =
+    state.kind === "error"
+      ? state.reason
+      : state.kind === "form"
+        ? state.error
+        : undefined;
+  const isSubmitting = state.kind === "sending";
+
   return (
     <div className="login">
       <div className="login__hero">
@@ -33,12 +125,44 @@ export function Login({ onLogin }: { onLogin: () => void }) {
           <h1 className="login__title">Cogni</h1>
         </div>
         <p className="login__subtitle">有记忆、跨设备在场的 AI 助手</p>
-        <button className="btn-primary login__cta" onClick={onLogin}>
-          <svg
-            className="login__cta-icon"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
+
+        <form
+          className="login__form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const trimmed = formEmail.trim();
+            if (!trimmed.includes("@")) {
+              setState({ kind: "form", email: formEmail, error: "请输入合法的邮箱地址" });
+              return;
+            }
+            void submitEmail(trimmed);
+          }}
+        >
+          <input
+            type="email"
+            className="login__input"
+            placeholder="you@example.com"
+            value={formEmail}
+            disabled={isSubmitting}
+            autoComplete="email"
+            onChange={(e) => setState({ kind: "form", email: e.target.value })}
+          />
+          {formError && <div className="login__error">{formError}</div>}
+          <button type="submit" className="btn-primary login__cta" disabled={isSubmitting}>
+            {isSubmitting ? "发送中…" : "发送登录链接"}
+          </button>
+        </form>
+
+        <div className="login__divider">
+          <span>或</span>
+        </div>
+
+        <button
+          className="login__google"
+          onClick={onLoginWithGoogle}
+          disabled={isSubmitting}
+        >
+          <svg className="login__cta-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path
               fill="currentColor"
               d="M21.6 12.227c0-.709-.064-1.39-.182-2.045H12v3.868h5.382a4.6 4.6 0 0 1-1.995 3.018v2.51h3.232c1.891-1.742 2.981-4.305 2.981-7.351z"
@@ -58,9 +182,8 @@ export function Login({ onLogin }: { onLogin: () => void }) {
           </svg>
           <span>用 Google 登录</span>
         </button>
-        <p className="login__legal">
-          登录即代表同意《服务条款》与《隐私政策》
-        </p>
+
+        <p className="login__legal">登录即代表同意《服务条款》与《隐私政策》</p>
       </div>
     </div>
   );
