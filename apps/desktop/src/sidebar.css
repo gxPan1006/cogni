@@ -94,7 +94,12 @@
   padding: 0 var(--space-5);
 }
 .sidebar__section-title {
-  font-size: var(--text-sm);
+  /* uppercase + tracked label so the section breaks the recents list more
+     decisively than a plain dimmed line. ai-cognit-equivalent treatment. */
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--fg-mute);
   margin-bottom: var(--space-2);
   padding: 0 var(--space-1);

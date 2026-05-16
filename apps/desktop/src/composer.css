@@ -70,22 +70,23 @@
 }
 .composer__spacer { flex: 1; }
 
-/* Model picker pill — disabled stub in SP-1. */
+/* Model picker pill — disabled stub in SP-1. Sized down to ai-cognit's
+   tertiary-control scale so it doesn't compete with the textarea visually. */
 .model-btn {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--fg);
-  font-size: var(--text-sm);
+  color: var(--fg-dim);
+  font-size: var(--text-xs);
   transition: background var(--duration-fast) var(--ease-out),
               color var(--duration-fast) var(--ease-out);
 }
-.model-btn:hover:not(:disabled) { background: var(--hover); }
+.model-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
 .model-btn:disabled { opacity: 0.85; cursor: not-allowed; }
-.model-btn__name { font-weight: var(--weight-medium); }
+.model-btn__name { font-weight: var(--weight-regular); }
 .model-btn__chev {
   color: var(--fg-mute);
   font-size: var(--text-xs);
