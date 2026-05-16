@@ -48,8 +48,21 @@ pnpm install
    pnpm --filter @cogni/cloud exec drizzle-kit push
    ```
 
-   This creates `tenants`, `users`, `hosts`, `threads`, `messages`,
-   `runner_sessions`, and `events`.
+   This creates `tenants`, `users`, `user_identities`, `hosts`, `threads`,
+   `messages`, `runner_sessions`, and `events`.
+
+   **Upgrading from a pre-magic-link cloud (had `users.oauth_sub`)?** Run the
+   one-off migration to backfill `user_identities` from the legacy column and
+   drop it:
+
+   ```sh
+   pnpm --filter @cogni/cloud exec tsx --env-file=.env \
+     src/scripts/migrate-2026-05-16-add-user-identities.ts
+   ```
+
+   The script is idempotent (uses `CREATE TABLE IF NOT EXISTS`,
+   `ON CONFLICT DO NOTHING`, `DROP COLUMN IF EXISTS`) and reports a per-user
+   diff of what it backfilled — safe to re-run.
 
 ---
 
