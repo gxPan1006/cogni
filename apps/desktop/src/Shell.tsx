@@ -36,13 +36,23 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   useEffect(() => { refreshThreads(); }, [token]);
 
   // First login on a fresh machine → register a runner-host, write
-  // ~/.cogni/host.json, spawn the bundled sidecar. If local host.json was
-  // deleted while the cloud still has rows, treat as fresh and re-register.
+  // ~/.cogni/host.json, spawn the bundled sidecar. We register fresh in any
+  // of three cases:
+  //   1. The cloud has no host for this user.
+  //   2. There's no local host.json at all.
+  //   3. The local host.json's hostId is NOT in this user's host list —
+  //      i.e. it was written for a different account (common during dogfood:
+  //      sign out of Google, sign in as dev user, host.json still points at
+  //      the old Google-owned host → daemon registers under the wrong user
+  //      → cloud broadcasts host-status to that user's clients (none) →
+  //      this user's webview thinks host is offline forever).
   useEffect(() => {
     (async () => {
       const hosts = await api.listHosts(token);
-      const hasHostConfig = await invoke<boolean>("has_host_config");
-      if (hosts.length === 0 || !hasHostConfig) {
+      const localHostId = await invoke<string | null>("read_host_id");
+      const localHostBelongsToUser =
+        localHostId !== null && hosts.some((h) => h.id === localHostId);
+      if (hosts.length === 0 || !localHostBelongsToUser) {
         const reg = await api.createHost(token, "My Computer");
         await invoke("write_host_config", {
           hostId: reg.hostId,

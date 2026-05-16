@@ -29,6 +29,20 @@ pub fn has_host_config() -> bool {
     cogni_home().join("host.json").is_file()
 }
 
+/// The hostId currently recorded in `~/.cogni/host.json`, or `None` if the
+/// file is missing / malformed / lacks the field. The frontend uses this to
+/// cross-check that the local host record actually belongs to the
+/// signed-in user before reusing it (otherwise leftover host.json from a
+/// different login causes a perma-offline banner because the daemon ends
+/// up registered under the wrong user).
+#[tauri::command]
+pub fn read_host_id() -> Option<String> {
+    let path = cogni_home().join("host.json");
+    let bytes = fs::read(path).ok()?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    value.get("hostId")?.as_str().map(|s| s.to_string())
+}
+
 /// Write `~/.cogni/host.json` with the credentials the runner-host needs to
 /// connect to the cloud. Called once on first login when the user has no host,
 /// or when cloud still has old host rows but local state was deleted.

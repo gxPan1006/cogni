@@ -15,6 +15,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             daemon::has_host_config,
+            daemon::read_host_id,
             daemon::write_host_config,
             daemon::ensure_daemon
         ])
