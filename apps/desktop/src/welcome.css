@@ -1,0 +1,132 @@
+/* ------------------------------------------------------------------------ *
+ * Welcome — owned by Track C.
+ *
+ * Visual target (matches ai-cognit webchat empty state):
+ *   - Vertically + horizontally centered hero column in the main slot.
+ *   - Serif greeting with orange ✳, large.
+ *   - Composer block below (Track B's component — we just position it).
+ *   - Five quick-prompt chips below the composer, wrapping pills with an
+ *     inline icon + label.
+ *
+ * All sizes / colors / spacing / radii / motion go through tokens.css — no
+ * literal pixel/hex/duration values (SVG path geometry is intrinsic to the
+ * icons and not a layout literal).
+ * ------------------------------------------------------------------------ */
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-7) var(--space-6);
+  overflow-y: auto;
+}
+
+/* Inner wrapper caps width so the greeting + composer + chips share the same
+   readable column on wide monitors. */
+.welcome__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-7);
+  width: 100%;
+  max-width: var(--composer-max-width);
+}
+
+/* ─── greeting ──────────────────────────────────────────────────────── */
+.welcome__greeting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  margin: 0;
+  font-family: "New York", "Times New Roman", ui-serif, Georgia, serif;
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-regular);
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  line-height: var(--leading-tight);
+  text-align: center;
+}
+
+.welcome__star {
+  color: var(--accent);
+  font-size: var(--text-2xl);
+  line-height: 1;
+  display: inline-block;
+}
+
+/* ─── composer + chips block ────────────────────────────────────────── */
+.welcome__composer-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+}
+
+/* ─── action chips (Write / Learn / Code / Life stuff / Surprise) ───── */
+.welcome__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 0 var(--space-1);
+}
+
+.welcome__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.welcome__chip:hover {
+  background: var(--hover);
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
+.welcome__chip:active {
+  background: var(--hover-strong);
+}
+
+.welcome__chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-dim);
+}
+
+.welcome__chip:hover .welcome__chip-icon {
+  color: var(--fg);
+}
+
+.welcome__chip-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ─── responsive: narrow windows ─────────────────────────────────────── */
+@media (max-width: 600px) {
+  .welcome__greeting {
+    font-size: var(--text-2xl);
+  }
+  .welcome__inner {
+    gap: var(--space-6);
+  }
+}

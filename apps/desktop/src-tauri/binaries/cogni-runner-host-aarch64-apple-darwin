@@ -5,7 +5,18 @@
 # explicitly accepts a shell script that shells out to `node <dist>/main.js`.
 # Proper single-binary packaging (pkg/bun/SEA) lands in SP-4.
 #
-# Path is resolved relative to this script so it survives the repo moving,
-# but NOT a bundled .app — the bundled path is also an SP-4 concern.
+# Resolve from this script upward so both `tauri dev` and the debug `.app`
+# bundle produced inside the repo can launch the same built runner-host.
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-exec node "$SCRIPT_DIR/../../../../packages/runner-host/dist/main.js" "$@"
+SEARCH_DIR=$SCRIPT_DIR
+
+while [ "$SEARCH_DIR" != "/" ]; do
+  MAIN_JS="$SEARCH_DIR/packages/runner-host/dist/main.js"
+  if [ -f "$MAIN_JS" ]; then
+    exec node "$MAIN_JS" "$@"
+  fi
+  SEARCH_DIR=$(dirname "$SEARCH_DIR")
+done
+
+echo "cogni-runner-host: could not locate packages/runner-host/dist/main.js" >&2
+exit 1

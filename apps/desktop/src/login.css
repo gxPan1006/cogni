@@ -1,0 +1,104 @@
+/* ------------------------------------------------------------------------ *
+ * Login — owned by Track C.
+ *
+ * Visual target (matches ai-cognit webchat language):
+ *   - Full-bleed dark canvas (`--bg-app`).
+ *   - Hero column centered both axes, capped width so it doesn't sprawl on
+ *     wide windows.
+ *   - Serif wordmark + orange ✳ accent, dimmed tagline, single pill CTA,
+ *     fine-print legal line.
+ *
+ * All sizes / colors / spacing / radii / motion go through tokens.css — no
+ * literal pixel/hex/duration values (SVG path geometry is intrinsic to the
+ * icon and not a layout literal).
+ * ------------------------------------------------------------------------ */
+
+.login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  padding: var(--space-7) var(--space-6);
+  background: var(--bg-app);
+  color: var(--fg);
+}
+
+.login__hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-5);
+  max-width: 420px;
+  width: 100%;
+}
+
+.login__brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.login__star {
+  color: var(--accent);
+  font-size: var(--text-2xl);
+  line-height: 1;
+  display: inline-block;
+}
+
+.login__title {
+  margin: 0;
+  font-family: "New York", "Times New Roman", ui-serif, Georgia, serif;
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  line-height: var(--leading-tight);
+}
+
+.login__subtitle {
+  margin: 0;
+  font-size: var(--text-md);
+  color: var(--fg-dim);
+  line-height: var(--leading-snug);
+}
+
+.login__cta {
+  /* .btn-primary handles pill shape + accent fill; we just space it out
+     from the tagline and give it a touch more horizontal padding so the
+     Google logo + CN text breathe. */
+  margin-top: var(--space-4);
+  padding-left: var(--space-6);
+  padding-right: var(--space-6);
+  font-size: var(--text-md);
+}
+
+.login__cta-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.login__legal {
+  margin: 0;
+  margin-top: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--fg-mute);
+  line-height: var(--leading-snug);
+}
+
+/* ─── responsive: narrow windows (<=600px) ───────────────────────────── */
+@media (max-width: 600px) {
+  .login__title {
+    font-size: var(--text-2xl);
+  }
+  .login__subtitle {
+    font-size: var(--text-base);
+  }
+  .login__hero {
+    gap: var(--space-4);
+  }
+}

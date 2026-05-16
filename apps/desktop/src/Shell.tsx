@@ -1,36 +1,58 @@
+/**
+ * Shell — top-level authenticated layout.
+ *
+ * Owned by Phase 1 (this file). Phase 2 agents do NOT touch Shell — they
+ * render *into* the sidebar / main slots via the Sidebar / Welcome / Conversation
+ * components. If a Phase 2 agent thinks Shell needs to change, they must stop
+ * and escalate.
+ *
+ * Responsibilities (none of which Phase 2 should rebuild):
+ *   • register a runner-host on first login (write host.json + spawn daemon)
+ *   • own list-of-threads + active-thread state
+ *   • mount Sidebar in the sidebar slot, Welcome or Conversation in the main slot
+ *   • route 401 errors back to Login
+ */
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ThreadSummary } from "@cogni/contract";
 import { api, ApiError } from "./api.js";
 import { Sidebar } from "./Sidebar.js";
-import { Conversation } from "./Conversation.js"; // created in Task 22
+import { Conversation } from "./Conversation.js";
+import { Welcome } from "./Welcome.js";
 
 export function Shell({ token, onLogout }: { token: string; onLogout: () => void }) {
   const [mode, setMode] = useState<"chat" | "project">("chat");
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
 
-  // A 401 means the token expired — drop the user back to Login. Other errors
-  // are logged so they're never silently swallowed (and `threads` stays an array).
+  // 401 → token expired → drop back to Login. Other errors are logged so they
+  // don't get swallowed (and `threads` keeps being an array).
   const handleApiError = (e: unknown) => {
     if (e instanceof ApiError && e.status === 401) onLogout();
     else console.error("cloud request failed", e);
   };
 
   const refreshThreads = () => api.listThreads(token).then(setThreads).catch(handleApiError);
-  useEffect(() => {
-    refreshThreads();
-  }, [token]);
+  useEffect(() => { refreshThreads(); }, [token]);
 
-  // On login, make sure the user has a runner-host registered with the cloud and
-  // that its local daemon is running. First login on a fresh machine registers a
-  // host, writes ~/.cogni/host.json, then spawns the bundled runner-host sidecar;
-  // later launches see a live pid and don't double-spawn. Once the daemon
-  // connects, the conversation view's "本地运行环境未连接" banner clears.
+  // First login on a fresh machine → register a runner-host, write
+  // ~/.cogni/host.json, spawn the bundled sidecar. We register fresh in any
+  // of three cases:
+  //   1. The cloud has no host for this user.
+  //   2. There's no local host.json at all.
+  //   3. The local host.json's hostId is NOT in this user's host list —
+  //      i.e. it was written for a different account (common during dogfood:
+  //      sign out of Google, sign in as dev user, host.json still points at
+  //      the old Google-owned host → daemon registers under the wrong user
+  //      → cloud broadcasts host-status to that user's clients (none) →
+  //      this user's webview thinks host is offline forever).
   useEffect(() => {
     (async () => {
       const hosts = await api.listHosts(token);
-      if (hosts.length === 0) {
+      const localHostId = await invoke<string | null>("read_host_id");
+      const localHostBelongsToUser =
+        localHostId !== null && hosts.some((h) => h.id === localHostId);
+      if (hosts.length === 0 || !localHostBelongsToUser) {
         const reg = await api.createHost(token, "My Computer");
         await invoke("write_host_config", {
           hostId: reg.hostId,
@@ -42,33 +64,51 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
     })().catch(handleApiError);
   }, [token]);
 
-  const newChat = async () => {
+  // Create a thread and (optionally) immediately enter it.
+  const newChat = async (): Promise<string | null> => {
     try {
       const t = await api.createThread(token);
       await refreshThreads();
       setActiveThreadId(t.id);
+      return t.id;
     } catch (e) {
       handleApiError(e);
+      return null;
     }
   };
 
+  // Welcome composer hands a first message → create a thread, then the
+  // Conversation that mounts will pick up the streaming when it sees the id.
+  // (Sending the message itself is Track B's job inside Conversation — for now
+  // we just hand the draft over via initialDraft.)
+  const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(null);
+  const startFromWelcome = async (firstMessage: string) => {
+    setPendingFirstMessage(firstMessage);
+    await newChat();
+  };
+
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div className="layout">
       <Sidebar
         mode={mode}
         onMode={setMode}
         threads={threads}
         activeThreadId={activeThreadId}
         onSelect={setActiveThreadId}
-        onNewChat={newChat}
+        onNewChat={() => { void newChat(); }}
+        onLogout={onLogout}
       />
-      <div style={{ flex: 1 }}>
+      <div className="main">
         {activeThreadId ? (
-          <Conversation token={token} threadId={activeThreadId} onTitleMaybeChanged={refreshThreads} />
+          <Conversation
+            token={token}
+            threadId={activeThreadId}
+            initialDraft={pendingFirstMessage ?? undefined}
+            onConsumeInitialDraft={() => setPendingFirstMessage(null)}
+            onTitleMaybeChanged={refreshThreads}
+          />
         ) : (
-          <div style={{ display: "grid", placeItems: "center", height: "100%" }}>
-            <button onClick={newChat}>开始一个新对话</button>
-          </div>
+          <Welcome onStartChat={startFromWelcome} />
         )}
       </div>
     </div>

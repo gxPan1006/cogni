@@ -1,0 +1,155 @@
+/* ------------------------------------------------------------------------ *
+ * Design tokens — the single source of truth for color / radius / spacing /
+ * type / motion in the desktop UI.
+ *
+ * Components must consume these via var(--token), not hardcode numbers/colors.
+ * Reviewers reject PRs with hardcoded literals where a token exists.
+ *
+ * Palette: aligned with ai-cognit webchat (Anthropic-orange accent on a warm
+ * dark base). `:root` is the dark theme (default); `[data-theme="light"]`
+ * overrides for the future light mode. SP-1 ships dark only; no UI toggle
+ * yet, but the token layer reserves the switch.
+ * ------------------------------------------------------------------------ */
+
+:root {
+  color-scheme: dark;
+
+  /* — color: surface — */
+  --bg-app:          #262624; /* main canvas (chat surface, login background)  */
+  --bg-sidebar:      #1f1e1c; /* slightly darker than canvas for depth         */
+  --bg-elevated:     #2e2d2a; /* composer input, dropdowns, toasts             */
+  --bg-strong:       #3a3937; /* hover-up of elevated; emphasis surfaces       */
+  --bg-code:         #1a1916; /* fenced-code block background                  */
+
+  /* — color: foreground — */
+  --fg:              #f0eee6; /* primary text                                  */
+  --fg-dim:          #9a9891; /* secondary text (timestamps, captions)         */
+  --fg-mute:         #6b6a63; /* tertiary (placeholder, disabled)              */
+
+  /* — color: brand accent (Anthropic orange) — */
+  --accent:          #d97757;
+  --accent-soft:     rgba(217, 119, 87, 0.12);
+  --accent-strong:   #e88e6f;
+
+  /* — color: state — */
+  --danger-bg:       rgba(255, 85, 85, 0.12);
+  --danger-fg:       #ff8a8a;
+  --success-bg:      rgba(88, 200, 140, 0.10);
+  --success-fg:      #7dd0a0;
+  --warning-bg:      rgba(229, 175, 90, 0.14);
+  --warning-fg:      #e8c07d;
+
+  /* — color: lines & overlays — */
+  --border:          rgba(255, 255, 255, 0.06);
+  --border-strong:   rgba(255, 255, 255, 0.12);
+  --hover:           rgba(255, 255, 255, 0.04);
+  --hover-strong:    rgba(255, 255, 255, 0.08);
+  --scroll-thumb:    rgba(255, 255, 255, 0.08);
+  --overlay:         rgba(0, 0, 0, 0.55);
+  --shadow-color:    rgba(0, 0, 0, 0.28);
+  --inline-code-bg:  rgba(255, 255, 255, 0.08);
+
+  /* — radius — */
+  --radius-xs:    4px;
+  --radius-sm:    6px;
+  --radius-md:    8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-pill: 999px;
+
+  /* — shadow (uses --shadow-color so light theme can swap) — */
+  --shadow-sm: 0 1px 2px var(--shadow-color);
+  --shadow-md: 0 4px 12px var(--shadow-color);
+  --shadow-lg: 0 12px 32px var(--shadow-color);
+
+  /* — spacing (multiples of 4px) — */
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 56px;
+  --space-10: 80px;
+
+  /* — typography — */
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+               "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+
+  --text-xs:   11px;
+  --text-sm:   12px;
+  --text-base: 14px;  /* body default */
+  --text-md:   15px;
+  --text-lg:   16px;
+  --text-xl:   20px;
+  --text-2xl:  28px;
+  --text-3xl:  40px;  /* welcome greeting */
+
+  --leading-tight:  1.25;
+  --leading-snug:   1.4;
+  --leading-normal: 1.55;
+  --leading-loose:  1.7;
+
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+
+  /* — layout — */
+  --sidebar-width:        260px;
+  --composer-max-width:   760px; /* chat column max width for readability */
+  --message-max-width:    760px;
+
+  /* — motion — */
+  --duration-instant: 80ms;
+  --duration-fast:    140ms;
+  --duration-normal:  220ms;
+  --duration-slow:    320ms;
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* — z-index — */
+  --z-banner:   10;
+  --z-dropdown: 30;
+  --z-modal:    50;
+  --z-toast:    60;
+}
+
+/* Light theme — reserved; SP-1 ships dark only, but tokens swap correctly
+   if [data-theme="light"] is ever set on <html>. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-app:         #f7f8fa;
+  --bg-sidebar:     #eef1f4;
+  --bg-elevated:    #ffffff;
+  --bg-strong:      #e6e9ee;
+  --bg-code:        #eef1f4;
+
+  --fg:             #191c21;
+  --fg-dim:         #5f6672;
+  --fg-mute:        #8b929c;
+
+  --accent:         #c65f3d;
+  --accent-soft:    rgba(198, 95, 61, 0.12);
+  --accent-strong:  #b65332;
+
+  --danger-bg:      rgba(184, 55, 55, 0.10);
+  --danger-fg:      #a33a3a;
+  --success-bg:     rgba(34, 128, 78, 0.10);
+  --success-fg:     #247a50;
+  --warning-bg:     rgba(180, 130, 40, 0.10);
+  --warning-fg:     #8a6217;
+
+  --border:         rgba(24, 31, 41, 0.10);
+  --border-strong:  rgba(24, 31, 41, 0.18);
+  --hover:          rgba(24, 31, 41, 0.05);
+  --hover-strong:   rgba(24, 31, 41, 0.09);
+  --scroll-thumb:   rgba(24, 31, 41, 0.18);
+  --overlay:        rgba(24, 31, 41, 0.30);
+  --shadow-color:   rgba(24, 31, 41, 0.14);
+  --inline-code-bg: rgba(24, 31, 41, 0.07);
+}

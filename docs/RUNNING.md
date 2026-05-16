@@ -178,3 +178,19 @@ pnpm --filter desktop build              # tsc + vite build of the desktop UI
   exactly `http://localhost:8787/auth/google/callback`.
 - **Reset local host state** — delete `~/.cogni/` and log in again to
   re-register the host from scratch.
+- **Google OAuth unreachable / stuck on `accounts.google.com`** — the OAuth
+  redirect itself goes through Google's SPA, which pulls assets from
+  `gstatic.com` and friends; flaky networks can stall it. While you're sorting
+  the network out, you can bypass login locally by signing a JWT directly:
+
+  ```sh
+  cd packages/cloud
+  COGNI_DEV_TOKEN_ACK=yes pnpm exec tsx --env-file=.env src/scripts/mint-dev-token.ts
+  ```
+
+  This creates/finds a stand-in user (`oauthSub=dev|manual`,
+  `email=dev-manual@local.test`) in Neon, then prints a 30-day JWT for them.
+  In the Tauri webview's Safari Web Inspector (Develop → Cogni → Console), paste
+  `localStorage.setItem('cogni_token', '<the JWT>'); location.reload();` to
+  drop into the chat shell. The script refuses to run with `NODE_ENV=production`
+  and requires `COGNI_DEV_TOKEN_ACK=yes` — it is never meant for real users.
