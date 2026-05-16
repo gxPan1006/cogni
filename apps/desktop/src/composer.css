@@ -1,0 +1,28 @@
+/* Composer — owned by Track B. Track B replaces the stub rules below. */
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  max-width: var(--composer-max-width);
+  margin: 0 auto var(--space-5);
+  width: 100%;
+}
+
+.composer__input {
+  width: 100%;
+  resize: none;
+  font-size: var(--text-md);
+  line-height: var(--leading-snug);
+  color: var(--fg);
+}
+
+.composer__bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
