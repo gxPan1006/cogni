@@ -2,7 +2,8 @@ import { describe, it, expect, afterEach } from "vitest";
 import { loadEnv } from "./env.js";
 
 const REQUIRED = ["DATABASE_URL", "JWT_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"];
-const ALL = [...REQUIRED, "PUBLIC_URL", "PORT", "EMAIL_TRANSPORT", "RESEND_API_KEY", "EMAIL_FROM", "MAGIC_LINK_TTL_MIN"];
+const ALL = [...REQUIRED, "PUBLIC_URL", "PORT", "EMAIL_TRANSPORT", "RESEND_API_KEY", "EMAIL_FROM", "MAGIC_LINK_TTL_MIN",
+  "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_SECURE"];
 const saved: Record<string, string | undefined> = {};
 for (const k of ALL) saved[k] = process.env[k];
 
@@ -65,5 +66,71 @@ describe("loadEnv", () => {
     setRequired();
     process.env.MAGIC_LINK_TTL_MIN = "120";
     expect(() => loadEnv()).toThrow(/MAGIC_LINK_TTL_MIN/);
+  });
+
+  it("requires SMTP_HOST/PORT/USER/PASSWORD when EMAIL_TRANSPORT=smtp", () => {
+    setRequired();
+    process.env.EMAIL_TRANSPORT = "smtp";
+    delete process.env.SMTP_HOST;
+    delete process.env.SMTP_PORT;
+    delete process.env.SMTP_USER;
+    delete process.env.SMTP_PASSWORD;
+    expect(() => loadEnv()).toThrow(/SMTP_HOST.*SMTP_PORT.*SMTP_USER.*SMTP_PASSWORD/);
+  });
+
+  it("parses an SMTP config with default secure=true on port 465", () => {
+    setRequired();
+    process.env.EMAIL_TRANSPORT = "smtp";
+    process.env.SMTP_HOST = "mail.example.com";
+    process.env.SMTP_PORT = "465";
+    process.env.SMTP_USER = "u@example.com";
+    process.env.SMTP_PASSWORD = "secret";
+    delete process.env.SMTP_SECURE;
+    const env = loadEnv();
+    expect(env.emailTransport).toBe("smtp");
+    expect(env.smtp).toEqual({
+      host: "mail.example.com",
+      port: 465,
+      secure: true,
+      user: "u@example.com",
+      pass: "secret",
+      tlsServername: null,
+    });
+  });
+
+  it("picks up SMTP_TLS_SERVERNAME when present (SSH-tunnel pattern)", () => {
+    setRequired();
+    process.env.EMAIL_TRANSPORT = "smtp";
+    process.env.SMTP_HOST = "127.0.0.1";
+    process.env.SMTP_PORT = "1465";
+    process.env.SMTP_USER = "u@example.com";
+    process.env.SMTP_PASSWORD = "secret";
+    process.env.SMTP_TLS_SERVERNAME = "mail.example.com";
+    const env = loadEnv();
+    expect(env.smtp?.tlsServername).toBe("mail.example.com");
+  });
+
+  it("parses an SMTP config with default secure=false on port 587 (STARTTLS)", () => {
+    setRequired();
+    process.env.EMAIL_TRANSPORT = "smtp";
+    process.env.SMTP_HOST = "mail.example.com";
+    process.env.SMTP_PORT = "587";
+    process.env.SMTP_USER = "u@example.com";
+    process.env.SMTP_PASSWORD = "secret";
+    delete process.env.SMTP_SECURE;
+    const env = loadEnv();
+    expect(env.smtp?.secure).toBe(false);
+  });
+
+  it("SMTP_SECURE=true overrides the port-based default", () => {
+    setRequired();
+    process.env.EMAIL_TRANSPORT = "smtp";
+    process.env.SMTP_HOST = "mail.example.com";
+    process.env.SMTP_PORT = "587";
+    process.env.SMTP_USER = "u@example.com";
+    process.env.SMTP_PASSWORD = "secret";
+    process.env.SMTP_SECURE = "true";
+    const env = loadEnv();
+    expect(env.smtp?.secure).toBe(true);
   });
 });

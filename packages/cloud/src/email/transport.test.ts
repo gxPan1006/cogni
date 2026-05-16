@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { FakeTransport, ConsoleTransport, ResendTransport } from "./transport.js";
+import { FakeTransport, ConsoleTransport, ResendTransport, SmtpTransport } from "./transport.js";
+import type { Transporter } from "nodemailer";
 
 describe("FakeTransport", () => {
   it("records sent magic links instead of sending them", async () => {
@@ -56,5 +57,41 @@ describe("ResendTransport", () => {
     const fetchMock = vi.fn(async () => new Response("rate limit", { status: 429 }));
     const t = new ResendTransport({ apiKey: "k", from: "f", fetchImpl: fetchMock });
     await expect(t.sendMagicLink(baseArgs)).rejects.toThrow(/429/);
+  });
+});
+
+describe("SmtpTransport", () => {
+  const baseArgs = { to: "a@x.com", magicUrl: "cogni://auth?magic=tok", expiresInMinutes: 15 };
+
+  it("calls transporter.sendMail with from/to/subject/text (text contains the URL)", async () => {
+    const sendMail = vi.fn(async () => ({ accepted: ["a@x.com"], messageId: "<m1>" }));
+    const fakeTransporter = { sendMail } as unknown as Transporter;
+    const t = new SmtpTransport({
+      host: "mail.example.com", port: 465, secure: true,
+      user: "u", pass: "p",
+      from: "Cogni <login@example.com>",
+      transporter: fakeTransporter,
+    });
+
+    await t.sendMagicLink(baseArgs);
+
+    expect(sendMail).toHaveBeenCalledOnce();
+    const sent = sendMail.mock.calls[0]![0];
+    expect(sent.from).toBe("Cogni <login@example.com>");
+    expect(sent.to).toBe("a@x.com");
+    expect(sent.subject).toMatch(/Sign in to Cogni/);
+    expect(sent.text).toContain("cogni://auth?magic=tok");
+    expect(sent.text).toContain("15");
+  });
+
+  it("propagates SMTP errors so the caller's catch block logs them", async () => {
+    const sendMail = vi.fn(async () => { throw new Error("550 mailbox unavailable"); });
+    const fakeTransporter = { sendMail } as unknown as Transporter;
+    const t = new SmtpTransport({
+      host: "x", port: 465, secure: true,
+      user: "u", pass: "p", from: "f",
+      transporter: fakeTransporter,
+    });
+    await expect(t.sendMagicLink(baseArgs)).rejects.toThrow(/550/);
   });
 });

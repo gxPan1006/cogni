@@ -97,7 +97,13 @@ instead of sending an email — copy it from Terminal 1 and run
 `open 'cogni://auth?magic=…'` from a shell to deliver the deep link to the
 desktop app.
 
-**Production / staging (real emails via Resend):**
+**Production / staging — two real-email paths:**
+
+You can pick either Resend (REST API) or classic SMTP. Both give the same
+end-user behaviour (real email arrives in the inbox); SMTP is faster to wire
+when you already have a mailbox (e.g. spacemail / postmark / aws-ses-smtp).
+
+**Option A — Resend:**
 
 1. Create a [Resend](https://resend.com) account (free tier covers 3k
    emails/mo — plenty for SP-1).
@@ -105,7 +111,7 @@ desktop app.
    (DNS records: SPF + DKIM). Verification usually takes 5-15 min once
    records are propagated.
 3. Create an API key (Domains → API Keys → Create).
-4. Fill the new vars in `packages/cloud/.env`:
+4. Fill `packages/cloud/.env`:
 
    ```
    EMAIL_TRANSPORT=resend
@@ -114,7 +120,24 @@ desktop app.
    MAGIC_LINK_TTL_MIN=15
    ```
 
-5. Restart `pnpm --filter @cogni/cloud dev`.
+**Option B — SMTP (nodemailer):**
+
+1. Have an SMTP mailbox handy (any provider — Spacemail, Postmark, AWS SES
+   SMTP, Gmail with an app password, etc.).
+2. Fill `packages/cloud/.env`:
+
+   ```
+   EMAIL_TRANSPORT=smtp
+   SMTP_HOST=mail.yourprovider.com
+   SMTP_PORT=465                        # 465 = implicit SSL; 587 = STARTTLS
+   SMTP_USER=login@yourdomain.com
+   SMTP_PASSWORD=...
+   EMAIL_FROM=Cogni <login@yourdomain.com>
+   # SMTP_SECURE=true                   # optional, defaults from SMTP_PORT
+   MAGIC_LINK_TTL_MIN=15
+   ```
+
+Then **restart** `pnpm --filter @cogni/cloud dev` (either option).
 
 Rate limits enforced server-side: 1 send/min + 5/hour per email, 3 sends/min +
 20/hour per IP. The desktop Login page automatically shows both CTAs (email +
