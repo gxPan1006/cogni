@@ -1,3 +1,169 @@
-/* Sidebar — owned by Track A. Stub: just inherits .layout > .sidebar from
-   layout.css. Track A adds .sidebar__tabs, .sidebar__nav, .sidebar__scroll,
-   .sidebar__section, .recent-item, .sidebar__footer, etc. */
+/* ------------------------------------------------------------------------ *
+ * Sidebar — owned by Track A.
+ *
+ * The outer .layout > .sidebar (width / background / border / flex column /
+ * overflow) is owned by layout.css. This file styles only the *inside*:
+ *   .sidebar__tabs       — top row: Chat/项目 tabs + toggle/search icon-btns
+ *   .sidebar__nav        — New chat + Projects / Artifacts / Customize
+ *   .sidebar__scroll     — scrollable middle area
+ *   .sidebar__section    — Pinned / Recents groups
+ *   .sidebar__empty      — empty-state row inside a section
+ *   .sidebar__recents    — list wrapper
+ *   .sidebar__recent     — single thread row
+ *   .sidebar__footer     — avatar + user name + icon-btn cluster
+ *
+ * Visual target: ai-cognit webchat sidebar. All numbers route through design
+ * tokens (var(--…)). Hardcoded literals are only allowed for SVG geometry.
+ * ------------------------------------------------------------------------ */
+
+/* ─── top: tabs row ─────────────────────────────────────── */
+.sidebar__tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-3);
+}
+
+/* Chat / 项目 tabs — pill-ish, icon + label, active = strong wash. */
+.sidebar__tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+.sidebar__tab:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
+.sidebar__tab.is-active            { background: var(--hover-strong); color: var(--fg); }
+.sidebar__tab:disabled             { opacity: 0.5; cursor: not-allowed; }
+.sidebar__tab svg                  { width: 14px; height: 14px; }
+
+/* Push the sidebar-toggle (and the search icon after it) to the right edge. */
+.sidebar__toggle { margin-left: auto; }
+
+/* ─── main nav ──────────────────────────────────────────── */
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+}
+.sidebar__nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-size: var(--text-base);
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.sidebar__nav-item:hover:not(:disabled) { background: var(--hover); }
+.sidebar__nav-item:disabled              { color: var(--fg-mute); cursor: not-allowed; }
+.sidebar__nav-item:disabled svg          { color: var(--fg-mute); }
+.sidebar__nav-item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+}
+/* New chat: brighter glyph to match ai-cognit (it's the primary CTA). */
+.sidebar__nav-item--new svg { color: var(--fg); }
+
+/* ─── scrollable middle: sections + lists ───────────────── */
+.sidebar__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: var(--space-2);
+}
+.sidebar__scroll::-webkit-scrollbar       { width: 8px; }
+.sidebar__scroll::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: var(--radius-xs);
+}
+.sidebar__scroll::-webkit-scrollbar-track { background: transparent; }
+
+.sidebar__section {
+  margin-top: var(--space-5);
+  padding: 0 var(--space-5);
+}
+.sidebar__section-title {
+  font-size: var(--text-sm);
+  color: var(--fg-mute);
+  margin-bottom: var(--space-2);
+  padding: 0 var(--space-1);
+}
+
+/* Empty-state row (e.g. Pinned/"Drag to pin"). */
+.sidebar__empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--fg-mute);
+}
+.sidebar__empty svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+/* ─── recents list ──────────────────────────────────────── */
+.sidebar__recents {
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--space-2);
+}
+.sidebar__recent {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+.sidebar__recent:hover                { background: var(--hover); }
+.sidebar__recent.is-active            { background: var(--hover-strong); color: var(--fg); }
+.sidebar__recent.is-active:hover      { background: var(--hover-strong); }
+.sidebar__recent-title {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── footer ────────────────────────────────────────────── */
+.sidebar__footer {
+  border-top: 1px solid var(--border);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.sidebar__avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-pill);
+  background: var(--hover-strong);
+  display: grid;
+  place-items: center;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+}
+.sidebar__avatar svg { width: 14px; height: 14px; }
+.sidebar__user-name {
+  flex: 1;
+  font-size: var(--text-sm);
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Slightly dimmer icon-btns inside footer to match ai-cognit's quieter look. */
+.sidebar__footer .icon-btn { color: var(--fg-mute); }
