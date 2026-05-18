@@ -12,6 +12,9 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerEmailRoutes } from "./routes/email.js";
 import { registerHostWs } from "./routes/host-ws.js";
 import { registerClientRoutes } from "./routes/client.js";
+import { registerIdentitiesRoutes } from "./routes/identities.js";
+import { registerDevicesRoutes } from "./routes/devices.js";
+import { registerHostsRoutes } from "./routes/hosts.js";
 
 declare module "hono" {
   interface ContextVariableMap {
@@ -58,7 +61,12 @@ export function createServer(deps: ServerDeps) {
   registerAuthRoutes(app, deps);                   // Google OAuth + dev-token
   registerEmailRoutes(app, deps);                  // Magic-link send/callback
   registerHostWs(app, upgradeWebSocket, deps);
-  registerClientRoutes(app, upgradeWebSocket, deps);
+  registerClientRoutes(app, upgradeWebSocket, deps); // also mounts the /api/* Bearer middleware
+  // SP-2 settings routes — must come AFTER registerClientRoutes so they share
+  // its `/api/*` Bearer + auth_session revocation middleware.
+  registerIdentitiesRoutes(app, deps);
+  registerDevicesRoutes(app, deps);
+  registerHostsRoutes(app, deps);
 
   return { app, injectWebSocket };
 }
