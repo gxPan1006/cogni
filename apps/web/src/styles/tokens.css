@@ -1,0 +1,91 @@
+/* Cogni — Design tokens
+ * Warm humanist · paper-feel · slow rhythm
+ * Type: Instrument Sans (body) + Instrument Serif (display) + JetBrains Mono
+ * Color: warm cream → sand → clay, with terracotta accent (tweakable)
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+
+:root {
+  /* === Light theme (default) ============================= */
+  --bg:           oklch(98.2% 0.006 78);          /* cream paper */
+  --bg-sunk:     oklch(96.0% 0.010 76);          /* slightly recessed surface */
+  --surface:     oklch(99.5% 0.004 80);          /* card / raised */
+  --surface-2:  oklch(94.5% 0.012 74);          /* sidebar, sand */
+  --surface-3:  oklch(91.5% 0.014 72);          /* code-block, chip */
+  --ink:        oklch(22% 0.020 60);              /* warm near-black */
+  --ink-2:     oklch(38% 0.018 58);
+  --muted:    oklch(54% 0.012 56);
+  --muted-2: oklch(70% 0.012 60);
+  --line:    oklch(89% 0.014 70);
+  --line-soft: oklch(93% 0.010 72);
+
+  /* Accent — warm terracotta clay. Tweakable. */
+  --accent:    oklch(60% 0.135 48);
+  --accent-2:  oklch(64% 0.135 48);
+  --accent-soft: oklch(92% 0.040 50);
+  --accent-ink:  oklch(38% 0.135 45);
+
+  /* Status */
+  --good:    oklch(58% 0.10 158);     /* sage */
+  --good-soft: oklch(92% 0.04 158);
+  --warn:    oklch(70% 0.12 78);      /* honey */
+  --warn-soft: oklch(94% 0.045 78);
+  --bad:     oklch(56% 0.16 28);      /* red clay */
+  --bad-soft: oklch(93% 0.045 28);
+
+  /* Type — clean, neutral, modern */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  --font-serif: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Radii */
+  --r-1: 4px;
+  --r-2: 8px;
+  --r-3: 12px;
+  --r-4: 16px;
+  --r-5: 22px;
+  --r-full: 9999px;
+
+  /* Shadow — soft, paper-feel, not glassy */
+  --shadow-1: 0 1px 0 oklch(0% 0 0 / 0.03), 0 1px 2px oklch(0% 0 0 / 0.04);
+  --shadow-2: 0 1px 0 oklch(0% 0 0 / 0.02), 0 4px 14px oklch(0% 0 0 / 0.06);
+  --shadow-3: 0 1px 0 oklch(0% 0 0 / 0.02), 0 12px 36px oklch(0% 0 0 / 0.10);
+  --shadow-inset: inset 0 0 0 1px oklch(0% 0 0 / 0.04);
+
+  /* Spacing scale (multiples of 4) */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 40px;
+  --s-9: 48px; --s-10: 64px; --s-11: 80px; --s-12: 120px;
+}
+
+[data-theme="dark"] {
+  --bg:        oklch(20% 0.010 60);
+  --bg-sunk:   oklch(17% 0.010 60);
+  --surface:   oklch(24% 0.012 60);
+  --surface-2: oklch(22% 0.010 58);
+  --surface-3: oklch(28% 0.014 58);
+  --ink:       oklch(94% 0.008 78);
+  --ink-2:     oklch(82% 0.010 72);
+  --muted:     oklch(64% 0.012 64);
+  --muted-2:   oklch(48% 0.012 60);
+  --line:      oklch(32% 0.012 58);
+  --line-soft: oklch(28% 0.012 60);
+
+  --accent:      oklch(72% 0.135 50);
+  --accent-2:    oklch(76% 0.135 50);
+  --accent-soft: oklch(32% 0.080 50);
+  --accent-ink:  oklch(86% 0.110 50);
+
+  --good:        oklch(72% 0.10 158);
+  --good-soft:   oklch(30% 0.040 158);
+  --warn:        oklch(80% 0.12 78);
+  --warn-soft:   oklch(32% 0.045 78);
+  --bad:         oklch(72% 0.14 28);
+  --bad-soft:    oklch(32% 0.045 28);
+
+  --shadow-1: 0 1px 0 oklch(0% 0 0 / 0.20), 0 1px 2px oklch(0% 0 0 / 0.30);
+  --shadow-2: 0 2px 0 oklch(0% 0 0 / 0.20), 0 8px 22px oklch(0% 0 0 / 0.40);
+  --shadow-3: 0 2px 0 oklch(0% 0 0 / 0.20), 0 18px 44px oklch(0% 0 0 / 0.45);
+  --shadow-inset: inset 0 0 0 1px oklch(100% 0 0 / 0.04);
+}

@@ -1,0 +1,160 @@
+/* Cogni — Base · resets, typography defaults, type scale */
+
+*,*::before,*::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'ss01', 'cv11';
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ── Type scale ──────────────────────────────── */
+.t-display { font-size: 48px; line-height: 1.05; letter-spacing: -0.022em; font-weight: 600; }
+.t-title-1 { font-size: 30px; line-height: 1.12; letter-spacing: -0.018em; font-weight: 600; }
+.t-title-2 { font-size: 22px; line-height: 1.2; letter-spacing: -0.012em; font-weight: 600; }
+.t-h1      { font-size: 18px; line-height: 1.3; letter-spacing: -0.008em; font-weight: 600; }
+.t-h2      { font-size: 15px; line-height: 1.35; letter-spacing: -0.004em; font-weight: 600; }
+.t-h3      { font-size: 11.5px; line-height: 1.35; letter-spacing: 0.06em; font-weight: 600; text-transform: uppercase; color: var(--muted); }
+.t-body    { font-size: 14px; line-height: 1.55; }
+.t-body-lg { font-size: 15.5px; line-height: 1.6; }
+.t-small   { font-size: 13px; line-height: 1.45; }
+.t-tiny    { font-size: 11px; line-height: 1.3; letter-spacing: 0.03em; }
+.t-mono    { font-family: var(--font-mono); font-size: 12px; letter-spacing: -0.005em; }
+.t-serif   { font-family: var(--font-sans); }
+
+.t-muted { color: var(--muted); }
+.t-ink-2 { color: var(--ink-2); }
+.t-accent { color: var(--accent-ink); }
+
+/* ── Frame primitives ────────────────────────── */
+.frame {
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-1);
+}
+
+.divider {
+  height: 1px;
+  background: var(--line);
+  width: 100%;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  background: var(--surface-3);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  display: inline-block;
+}
+.dot-online { background: var(--good); box-shadow: 0 0 0 3px var(--good-soft); }
+.dot-offline { background: var(--muted-2); }
+.dot-warn { background: var(--warn); }
+.dot-bad { background: var(--bad); }
+.dot-accent { background: var(--accent); }
+
+/* ── Buttons ─────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--r-2);
+  font-size: 13px; font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+.btn:hover { background: var(--bg-sunk); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.btn-primary:hover { background: var(--ink-2); }
+.btn-accent {
+  background: var(--accent);
+  color: oklch(98% 0.01 80);
+  border-color: var(--accent);
+}
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--bg-sunk); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+/* ── Inputs ──────────────────────────────────── */
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input:focus { border-color: var(--ink-2); box-shadow: 0 0 0 3px var(--surface-3); }
+.input::placeholder { color: var(--muted-2); }
+
+/* Scrollbar fade */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--muted-2); }
+
+/* Paper texture (subtle noise) */
+.paper {
+  background-image:
+    radial-gradient(oklch(0% 0 0 / 0.012) 1px, transparent 1px),
+    radial-gradient(oklch(0% 0 0 / 0.008) 1px, transparent 1px);
+  background-size: 7px 7px, 13px 13px;
+  background-position: 0 0, 3px 4px;
+}
+
+/* ── Top-level Shell layout ───────────────────
+   Shell.tsx renders <div class="layout">[Sidebar][<div class="main">…</div>]</div>.
+   Sidebar widths live in sidebar.css; here we only own the outer flex axis. */
+html, body, #root { height: 100%; }
+.layout {
+  display: flex;
+  height: 100vh;
+  background: var(--bg);
+  overflow: hidden;
+}
+.layout > .main {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
