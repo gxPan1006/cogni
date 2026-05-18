@@ -83,13 +83,16 @@ export const cloudToClientSchema = z.discriminatedUnion("t", [
     status: z.enum(["online", "offline"]),
     lastSeen: z.string().nullable(),
   }),
-  // SP-2 dispatch responses
+  // SP-2 dispatch responses. `threadId` is carried so the client (which now
+  // multiplexes many threads onto one WS) can route the response to the right
+  // per-thread state without relying on send-order correlation.
   z.object({
     t: z.literal("host-fallback-prompt"),
+    threadId: z.string(),
     pendingMessageId: z.string(),
     preferred: z.object({ id: z.string(), name: z.string(), lastSeenAgoMs: z.number() }),
     alternatives: z.array(z.object({ id: z.string(), name: z.string(), lastSeenAgoMs: z.number() })),
   }),
-  z.object({ t: z.literal("no-host-online"), pendingMessageId: z.string() }),
+  z.object({ t: z.literal("no-host-online"), threadId: z.string(), pendingMessageId: z.string() }),
 ]);
 export type CloudToClient = z.infer<typeof cloudToClientSchema>;

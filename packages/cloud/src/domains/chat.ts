@@ -64,7 +64,7 @@ export class ChatDomain {
     const onlineHosts = this.hosts.getOnlineHostsForUser(userId);
 
     if (onlineHosts.length === 0) {
-      this.clients.sendToConn(sourceClientId, { t: "no-host-online", pendingMessageId });
+      this.clients.sendToConn(sourceClientId, { t: "no-host-online", threadId, pendingMessageId });
       return;
     }
 
@@ -89,6 +89,7 @@ export class ChatDomain {
     const preferredDesc = await this.describeHostById(userId, preferredHostId);
     this.clients.sendToConn(sourceClientId, {
       t: "host-fallback-prompt",
+      threadId,
       pendingMessageId,
       preferred: preferredDesc,
       alternatives,
@@ -117,7 +118,7 @@ export class ChatDomain {
     const targetConn = this.hosts.getHostByIdForUser(input.userId, input.targetHostId);
     if (!targetConn) {
       this.clients.sendToConn(input.sourceClientId, {
-        t: "no-host-online", pendingMessageId: input.pendingMessageId,
+        t: "no-host-online", threadId: pending.threadId, pendingMessageId: input.pendingMessageId,
       });
       return;
     }

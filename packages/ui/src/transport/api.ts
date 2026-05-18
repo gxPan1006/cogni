@@ -1,4 +1,5 @@
 import type { ThreadSummary, ThreadDetail, HostRegistration } from "@cogni/contract";
+import { createWsClient, type WsClient } from "./ws-client.js";
 
 /**
  * Thrown by `ApiClient.*` methods on a non-2xx cloud response. `status` lets
@@ -59,6 +60,20 @@ export class ApiClient {
   wsTokenQuery(): string {
     const t = this.cfg.getToken();
     return t ? `?token=${encodeURIComponent(t)}` : "";
+  }
+
+  /**
+   * Long-lived multiplexed WS connection shared by all hooks attached to this
+   * client. Lazy: not opened until the first `subscribeThread()`. The hook
+   * layer is responsible for adding subscriptions, not for managing the
+   * underlying socket — switching threads must NOT close the connection.
+   */
+  private _wsClient: WsClient | null = null;
+  get wsClient(): WsClient {
+    if (!this._wsClient) {
+      this._wsClient = createWsClient(() => `${this.wsUrl}/api/ws${this.wsTokenQuery()}`);
+    }
+    return this._wsClient;
   }
 
   private authHeaders(extra?: Record<string, string>): HeadersInit {

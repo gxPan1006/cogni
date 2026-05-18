@@ -162,6 +162,7 @@ describe("SP-2 CloudToClient variants", () => {
   it("parses host-fallback-prompt", () => {
     const r = cloudToClientSchema.safeParse({
       t: "host-fallback-prompt",
+      threadId: "t1",
       pendingMessageId: "p1",
       preferred: { id: "h1", name: "Home", lastSeenAgoMs: 7200000 },
       alternatives: [{ id: "h2", name: "Work", lastSeenAgoMs: 1000 }],
@@ -169,7 +170,7 @@ describe("SP-2 CloudToClient variants", () => {
     expect(r.success).toBe(true);
   });
   it("parses no-host-online", () => {
-    const r = cloudToClientSchema.safeParse({ t: "no-host-online", pendingMessageId: "p1" });
+    const r = cloudToClientSchema.safeParse({ t: "no-host-online", threadId: "t1", pendingMessageId: "p1" });
     expect(r.success).toBe(true);
   });
   it("parses catchup-too-long", () => {
