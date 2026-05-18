@@ -67,3 +67,40 @@
   0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
   40%           { opacity: 1;   transform: scale(1); }
 }
+
+/* Host-fallback prompt — inline card shown above the composer when the
+   preferred host is offline but other devices are available. */
+.fallback-card {
+  border: 1px solid #d6a800;
+  background: #fff8db;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+}
+.fallback-card__title { font-weight: 500; margin-bottom: 8px; }
+.fallback-card__body { font-size: 14px; }
+.fallback-card__options { list-style: none; padding: 0; margin: 8px 0; }
+.fallback-card__options li { margin: 4px 0; }
+.fallback-card__options label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.fallback-card__sub { color: #666; font-size: 12px; }
+.fallback-card__note { color: #666; font-size: 13px; margin-top: 8px; }
+.fallback-card__actions { margin-top: 12px; display: flex; gap: 8px; }
+.fallback-card__primary {
+  background: #d6a800; color: white; border: 0;
+  padding: 6px 12px; border-radius: 4px; cursor: pointer;
+}
+.fallback-card__primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.fallback-card__secondary {
+  background: transparent; border: 1px solid #ccc;
+  padding: 6px 12px; border-radius: 4px; cursor: pointer;
+}
+
+/* No-host banner — red strip when the user has zero online runner hosts. */
+.no-host-banner {
+  background: #fdecea;
+  color: #a3261b;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin: 8px 0;
+  font-size: 14px;
+}
