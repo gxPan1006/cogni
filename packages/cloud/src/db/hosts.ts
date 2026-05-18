@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, isNull, and } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { hosts } from "./schema.js";
 import type { AnyDb } from "./users.js";
@@ -17,7 +17,11 @@ export async function createHost(
 }
 
 export async function findHostByToken(db: AnyDb, token: string) {
-  const rows = await db.select().from(hosts).where(eq(hosts.registrationToken, token)).limit(1);
+  const rows = await db
+    .select()
+    .from(hosts)
+    .where(and(eq(hosts.registrationToken, token), isNull(hosts.removedAt)))
+    .limit(1);
   return rows[0] ?? null;
 }
 
@@ -34,4 +38,31 @@ export async function setHostStatus(
 
 export async function getUserHosts(db: AnyDb, userId: string) {
   return db.select().from(hosts).where(eq(hosts.userId, userId));
+}
+
+export async function renameHost(db: AnyDb, hostId: string, name: string): Promise<void> {
+  await db.update(hosts).set({ name }).where(eq(hosts.id, hostId));
+}
+
+export async function softRemoveHost(db: AnyDb, hostId: string): Promise<void> {
+  await db
+    .update(hosts)
+    .set({ removedAt: new Date(), status: "offline" })
+    .where(eq(hosts.id, hostId));
+}
+
+export async function isHostRemoved(db: AnyDb, hostId: string): Promise<boolean> {
+  const rows = await db
+    .select({ removedAt: hosts.removedAt })
+    .from(hosts)
+    .where(eq(hosts.id, hostId))
+    .limit(1);
+  return rows[0] ? rows[0].removedAt !== null : false;
+}
+
+export async function getActiveHostsForUser(db: AnyDb, userId: string) {
+  return db
+    .select()
+    .from(hosts)
+    .where(and(eq(hosts.userId, userId), isNull(hosts.removedAt)));
 }
