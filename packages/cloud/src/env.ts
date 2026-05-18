@@ -17,6 +17,7 @@ export interface Env {
   googleClientId: string;
   googleClientSecret: string;
   publicUrl: string;
+  webUrl: string;
   port: number;
   emailTransport: EmailTransportKind;
   resendApiKey: string | null;       // required when emailTransport === "resend"
@@ -85,6 +86,7 @@ export function loadEnv(): Env {
     googleClientId: get("GOOGLE_CLIENT_ID"),
     googleClientSecret: get("GOOGLE_CLIENT_SECRET"),
     publicUrl: process.env.PUBLIC_URL ?? "http://localhost:8787",
+    webUrl: process.env.WEB_URL ?? "https://chat.ai-cognit.com",
     port,
     emailTransport,
     resendApiKey,

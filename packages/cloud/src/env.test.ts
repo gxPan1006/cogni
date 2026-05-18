@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { loadEnv } from "./env.js";
 
 const REQUIRED = ["DATABASE_URL", "JWT_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"];
-const ALL = [...REQUIRED, "PUBLIC_URL", "PORT", "EMAIL_TRANSPORT", "RESEND_API_KEY", "EMAIL_FROM", "MAGIC_LINK_TTL_MIN",
+const ALL = [...REQUIRED, "PUBLIC_URL", "WEB_URL", "PORT", "EMAIL_TRANSPORT", "RESEND_API_KEY", "EMAIL_FROM", "MAGIC_LINK_TTL_MIN",
   "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_SECURE"];
 const saved: Record<string, string | undefined> = {};
 for (const k of ALL) saved[k] = process.env[k];
@@ -29,6 +29,13 @@ describe("loadEnv", () => {
     const env = loadEnv();
     expect(env.publicUrl).toBe("http://localhost:8787");
     expect(env.port).toBe(8787);
+  });
+  it("reads WEB_URL when set, else falls back to https://chat.ai-cognit.com", () => {
+    setRequired();
+    process.env.WEB_URL = "https://chat.example.com";
+    expect(loadEnv().webUrl).toBe("https://chat.example.com");
+    delete process.env.WEB_URL;
+    expect(loadEnv().webUrl).toBe("https://chat.ai-cognit.com");
   });
   it("throws on a non-numeric PORT", () => {
     setRequired();
