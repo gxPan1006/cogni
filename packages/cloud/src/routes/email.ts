@@ -5,12 +5,13 @@ import { RateLimiter } from "../rate-limit.js";
 import { findOrLinkUser } from "../auth/find-or-link.js";
 import { createAuthSession } from "../db/auth-sessions.js";
 import { deriveDeviceName } from "../auth/device-name.js";
+import { InMemoryTokenStore, type TokenStore } from "../auth/token-store.js";
 import { logger } from "@cogni/shared";
 import type { ServerDeps } from "../server.js";
 
 type Origin = "desktop" | "web";
 
-interface PendingMagic { email: string; origin: Origin; createdAt: number }
+interface PendingMagic { email: string; origin: Origin }
 
 const emailSchema = z.object({
   email: z.string().email(),
@@ -26,8 +27,8 @@ const magicSchema = z.object({ magic: z.string().min(20).max(128) });
  *   POST /auth/email/send {email}
  *     - validates the email shape (zod)
  *     - rate-limits per email (1/min + 5/hour) and per IP (3/min + 20/hour)
- *     - generates a 32-byte base64url token, stores it in an in-process Map
- *       with the magicLinkTtlMinutes TTL, hands the magic URL to deps.emailTransport
+ *     - generates a 32-byte base64url token, stashes it in a TokenStore with
+ *       the magicLinkTtlMinutes TTL, hands the magic URL to deps.emailTransport
  *     - always returns {ok:true} on accept (anti-enumeration — the client
  *       cannot tell whether the email is known or not)
  *
@@ -36,17 +37,21 @@ const magicSchema = z.object({ magic: z.string().min(20).max(128) });
  *     - on hit: deletes the token (single-use), finds-or-creates the user by
  *       email, upserts an "email" identity, and returns a 30-day JWT
  *
- * In-process state means SP-1 must run as a single cloud node; SP-2 will
- * move pending tokens to a shared store (Redis / pg).
+ * Pending tokens live behind a TokenStore<PendingMagic>. The current binding
+ * is InMemoryTokenStore (single-node SP-2); SP-2+1 swaps in a Redis-backed
+ * impl so a token issued on node A can be redeemed on node B.
  */
 export function registerEmailRoutes(app: Hono, deps: ServerDeps): void {
-  const pending = new Map<string, PendingMagic>();
   const ttlMs = deps.magicLinkTtlMinutes * 60_000;
+  // SP-2+1: swap InMemoryTokenStore for a Redis-backed impl so a token issued
+  // on node A can be redeemed on node B. The interface is identical.
+  const pending: TokenStore<PendingMagic> = new InMemoryTokenStore<PendingMagic>({ ttlMs });
 
-  // sweep every 5min so stale tokens don't pile up
+  // Belt-and-braces sweep so expired tokens never holds memory for long, even
+  // if nobody ever calls `get` for them. InMemoryTokenStore.get already evicts
+  // on access; this catches the tokens that were just never followed up.
   setInterval(() => {
-    const cutoff = Date.now() - ttlMs;
-    for (const [tok, v] of pending) if (v.createdAt < cutoff) pending.delete(tok);
+    void pending.sweep();
   }, 5 * 60_000).unref();
 
   const perEmail = new RateLimiter([
@@ -73,7 +78,7 @@ export function registerEmailRoutes(app: Hono, deps: ServerDeps): void {
     }
 
     const token = randomBytes(32).toString("base64url");
-    pending.set(token, { email, origin, createdAt: Date.now() });
+    await pending.set(token, { email, origin });
 
     // The link the user clicks in their inbox depends on which client opened
     // the send. Desktop gets a cogni:// deep link that the Tauri app intercepts;
@@ -99,12 +104,14 @@ export function registerEmailRoutes(app: Hono, deps: ServerDeps): void {
     const parsed = magicSchema.safeParse(raw);
     if (!parsed.success) return c.json({ error: "invalid" }, 400);
 
-    const entry = pending.get(parsed.data.magic);
-    if (!entry || Date.now() - entry.createdAt > ttlMs) {
-      pending.delete(parsed.data.magic);
+    // TokenStore.get handles expiration internally — null means "unknown or
+    // expired", which we surface as the same `expired` error so the client
+    // can't tell the difference (no token-existence oracle).
+    const entry = await pending.get(parsed.data.magic);
+    if (!entry) {
       return c.json({ error: "expired" }, 400);
     }
-    pending.delete(parsed.data.magic);
+    await pending.delete(parsed.data.magic);
 
     // SP-2: findOrLinkUser auto-merges by verified email if the user already
     // exists under another provider (Google / dev-token). For magic-link the
