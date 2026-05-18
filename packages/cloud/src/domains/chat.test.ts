@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { makeTestDb } from "../db/test-db.js";
-import { findOrCreateUser } from "../db/users.js";
+import { findOrCreateUserByEmail } from "../db/users.js";
 import { createThread } from "../db/threads.js";
 import { getThreadDetail } from "../db/threads.js";
 import { HostRouter } from "../host-router.js";
@@ -10,7 +10,7 @@ import { ChatDomain } from "./chat.js";
 describe("ChatDomain", () => {
   it("notifies host-status:false when no host is online", async () => {
     const { db, close } = await makeTestDb();
-    const u = await findOrCreateUser(db, { oauthSub: "g|1", email: "a@x.com" });
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
     const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
     const hub = new ClientHub();
     const send = vi.fn();
@@ -29,7 +29,7 @@ describe("ChatDomain", () => {
 
   it("dispatches to the host and walks a full turn back to a persisted assistant message", async () => {
     const { db, close } = await makeTestDb();
-    const u = await findOrCreateUser(db, { oauthSub: "g|1", email: "a@x.com" });
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
     const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
     const hub = new ClientHub();
     const clientSend = vi.fn();
@@ -67,7 +67,7 @@ describe("ChatDomain", () => {
 
   it("marks the session failed and notifies clients when host.send throws", async () => {
     const { db, close } = await makeTestDb();
-    const u = await findOrCreateUser(db, { oauthSub: "g|1", email: "a@x.com" });
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
     const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
     const hub = new ClientHub();
     const clientSend = vi.fn();
@@ -85,7 +85,7 @@ describe("ChatDomain", () => {
 
   it("handleSessionUpdate persists the session status", async () => {
     const { db, close } = await makeTestDb();
-    const u = await findOrCreateUser(db, { oauthSub: "g|1", email: "a@x.com" });
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
     const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
     const chat = new ChatDomain(db, new HostRouter(), new ClientHub());
     // create the session by sending once (no host -> still creates the runner session)

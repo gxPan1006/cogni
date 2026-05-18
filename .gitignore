@@ -10,3 +10,5 @@ build/
 .claude/
 .superpowers/
 *.tsbuildinfo
+# Per-commit work logs kept locally only (per ~/.claude/CLAUDE.md convention)
+changelog/

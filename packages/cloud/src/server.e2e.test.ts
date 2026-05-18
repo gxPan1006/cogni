@@ -2,12 +2,13 @@ import { describe, it, expect, afterEach } from "vitest";
 import { serve } from "@hono/node-server";
 import { WebSocket } from "ws";
 import { makeTestDb } from "./db/test-db.js";
-import { findOrCreateUser } from "./db/users.js";
+import { findOrCreateUserByEmail } from "./db/users.js";
 import { createThread, getThreadDetail } from "./db/threads.js";
 import { createHost } from "./db/hosts.js";
 import { HostRouter } from "./host-router.js";
 import { ClientHub } from "./client-hub.js";
 import { ChatDomain } from "./domains/chat.js";
+import { FakeTransport } from "./email/transport.js";
 import { makeAuth } from "./auth.js";
 import { createServer } from "./server.js";
 
@@ -44,7 +45,7 @@ afterEach(async () => {
 describe("cloud server e2e (headless spine)", () => {
   it("client send → host dispatch → events back → persisted assistant message", async () => {
     const { db, close } = await makeTestDb();
-    const user = await findOrCreateUser(db, { oauthSub: "g|1", email: "a@x.com" });
+    const user = await findOrCreateUserByEmail(db, "a@x.com");
     const thread = await createThread(db, { userId: user.id, tenantId: user.tenantId });
     const hostReg = await createHost(db, { userId: user.id, tenantId: user.tenantId, name: "Mac" });
     const auth = makeAuth({
@@ -62,6 +63,8 @@ describe("cloud server e2e (headless spine)", () => {
       hosts,
       clients,
       chat,
+      emailTransport: new FakeTransport(),
+      magicLinkTtlMinutes: 15,
       publicUrl: "http://localhost",
     });
     const server = serve({ fetch: app.fetch, port: 0 });

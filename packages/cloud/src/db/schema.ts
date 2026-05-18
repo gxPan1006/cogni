@@ -10,9 +10,23 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
   email: text("email").notNull().unique(),
-  oauthSub: text("oauth_sub").notNull().unique(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// Auth identities for a user. A user can have multiple identities — e.g.
+// Google sign-in AND magic-link sign-in, both pointing at the same user row.
+// kind ∈ {'google', 'email', 'dev'}. sub is the issuer-specific subject:
+//   google → google `sub` claim
+//   email  → lowercased email (1:1 with users.email today; SP-2 may allow secondaries)
+//   dev    → 'manual' (only `dev|manual` exists today, written by mint-dev-token)
+export const userIdentities = pgTable("user_identities", {
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  sub: text("sub").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  pk: unique("user_identities_pk").on(t.kind, t.sub),
+}));
 
 export const hosts = pgTable("hosts", {
   id: uuid("id").primaryKey().defaultRandom(),
