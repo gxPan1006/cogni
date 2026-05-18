@@ -32,6 +32,7 @@ export function Conversation({
   threadId,
   initialDraft,
   onConsumeInitialDraft,
+  hostName,
 }: {
   token: string;
   threadId: string;
@@ -39,6 +40,8 @@ export function Conversation({
   initialDraft?: string;
   onConsumeInitialDraft?: () => void;
   onTitleMaybeChanged?: () => void;
+  /** Name of the host this thread is routed to. Shown above the composer. */
+  hostName?: string;
 }) {
   const { messages, streaming, hostOnline, connected, send } = useThreadStream(token, threadId);
   const [draft, setDraft] = useState("");
@@ -143,6 +146,7 @@ export function Conversation({
         setDraft={setDraft}
         onSubmit={submit}
         disabled={!connected}
+        hostName={hostName}
       />
     </div>
   );
