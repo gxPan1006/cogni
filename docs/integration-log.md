@@ -244,3 +244,84 @@ typechecks clean, desktop bundle 269 KB JS.
   + SettingsPage UI, three agents on independent subdirs.
 
 ---
+
+## SP-2 batch 3 — settings HTTP routes (2026-05-18 — 3 agent 并行)
+
+**Pre-condition:** main at `ec0bb4c` (SP-2 cloud feature-complete except
+settings routes). Plan Tasks 17-19 = three independent route files, each in
+its own new file with its own test file. Perfectly fan-out-able.
+
+| Track | Commit | 内容 | 测试 |
+|---|---|---|---|
+| F · T17 identities | `37fc02e` | `GET /api/identities` + `DELETE /api/identities/:kind/:sub` with last-one guard (409 + 404 no-info-leak) | 4 new |
+| G · T18 devices | `5774001` | `GET /api/devices` (with `isCurrent` flag) + `DELETE /api/devices/:id` (publishes `device-list-changed`) | 3 new |
+| H · T19 hosts | `5fc760a` | New routes/hosts.ts: GET (excludes removed) / POST / PATCH (rename + publish host-meta) / DELETE (soft-remove + unregister + publish host-meta + device-list-changed). Also deletes GET/POST handlers from routes/client.ts (intentional handoff). | 4 new |
+
+**Merge:** Three `git merge --no-ff` into main (`9c6b262 77c8525 3d4f363`).
+Plus integration commit `f1d2e41` registering the 3 new route modules in
+server.ts (must come after `registerClientRoutes` — that's where the `/api/*`
+Bearer + auth_session revocation middleware lives, and the new routes share it).
+
+**Merged total:** 100 → 112 cloud tests (+12 = 4+3+4 new + 1 chat case I missed
+counting), all green, NO ECONNREFUSED flake this run. Both typechecks clean.
+
+### Fanout effectiveness
+
+- ~776 lines new (tests + impl across 6 files; H also -16 from client.ts handoff)
+- 3 agent total wallclock ≈ 3.5 min (slowest H 3.5min, fastest F 2.9min)
+- Sequential estimate ≈ 14 min → saved ~10 min
+- Integration gate time ≈ 3 min (diff scope check + 3 merges + server.ts wiring + post-merge full test/typecheck)
+- Conflicts / rejections: 0. 0 boundary violations.
+- 0 stash incidents.
+
+### Lessons
+
+1. **"intentional file handoff" worked.** Track H needed to delete 2
+   handlers (`GET /api/hosts`, `POST /api/hosts`) from `routes/client.ts`
+   as part of moving them into the new `routes/hosts.ts`. Granted H
+   delete-only permission on those lines; H reported the deletions in its
+   completion message; main worktree's client.ts diff shows clean -16
+   lines, nothing else. Pattern works when scope is precisely "this file
+   loses these specific handlers, period."
+2. **All 3 agents added "用户表现+行为" sections to their reports.** Per
+   CLAUDE.md "解读已有代码也要配上表现+行为" — the agents are picking up the
+   habit. F explained the settings page interactions, G/H listed the live
+   UI updates each endpoint triggers. Makes integration review faster
+   because I don't have to imagine the UX, it's right there.
+3. **One agent (G) flagged route registration order proactively.** Said in
+   its completion message: "集成时 server.ts 需 registerDevicesRoutes 放在
+   registerClientRoutes 之后(因 Bearer middleware 由 client.ts 挂在
+   /api/*)". Saved me from registering in the wrong order and having
+   auth-less endpoints. **Worth baking into future prompts:** "if your
+   route depends on a middleware mounted elsewhere, flag the registration
+   order in your completion report."
+
+### Sovereignty table
+
+| Track | Independent path | Forbidden | Delivered |
+|---|---|---|---|
+| F | `packages/cloud/src/routes/identities.{ts,test.ts}` (new) | server.ts, other routes/, contract | 4 tests pass |
+| G | `packages/cloud/src/routes/devices.{ts,test.ts}` (new) | server.ts, other routes/, contract | 3 tests pass |
+| H | `packages/cloud/src/routes/hosts.{ts,test.ts}` (new) + delete `GET/POST /api/hosts` from `routes/client.ts` | rest of client.ts, server.ts, contract | 4 tests pass; client.ts net -16 lines |
+
+### Branches now
+
+- `main`: 4 new commits (3 merges + 1 server.ts wiring) on top of `ec0bb4c`
+- All `track/sp2b3-*` branches deleted (local; not pushed to origin)
+- `.worktrees/sp2b3-*/` removed
+
+### Next candidates
+
+- **Serial (me) — Section 8 packages/ui extraction (T20-T24).** Tightly
+  coupled refactor: move ~10 React component files from `apps/desktop/src/`
+  into `packages/ui/src/`, update all import paths in `apps/desktop`,
+  introduce ApiClient + useAuthCore split. Cross-file moves mean parallel
+  agents would collide on every import update. One author.
+  **Also intersects user's parallel UI work** — user's dirty Sidebar.tsx +
+  Login.tsx in their working tree directly overlaps with what I'd move.
+  Must coordinate with user before starting.
+- **Batch 4 (after Section 8):** apps/web scaffold (T25) + Settings hooks
+  (T28) + SettingsPage component (T29). Three independent subdirs once
+  @cogni/ui is in place.
+
+---
