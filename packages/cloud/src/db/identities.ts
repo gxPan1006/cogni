@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { userIdentities } from "./schema.js";
 import type { AnyDb } from "./client.js";
 
@@ -27,4 +27,23 @@ export async function listIdentitiesForUser(
 ): Promise<UserIdentity[]> {
   const rows = await db.select().from(userIdentities).where(eq(userIdentities.userId, userId));
   return rows.map((r) => ({ userId: r.userId, kind: r.kind, sub: r.sub }));
+}
+
+export async function countIdentities(db: AnyDb, userId: string): Promise<number> {
+  const rows = await db
+    .select({ n: count() })
+    .from(userIdentities)
+    .where(eq(userIdentities.userId, userId));
+  return Number(rows[0]?.n ?? 0);
+}
+
+export async function deleteIdentity(
+  db: AnyDb, userId: string, kind: string, sub: string,
+): Promise<void> {
+  await db.delete(userIdentities)
+    .where(and(
+      eq(userIdentities.userId, userId),
+      eq(userIdentities.kind, kind),
+      eq(userIdentities.sub, sub),
+    ));
 }
