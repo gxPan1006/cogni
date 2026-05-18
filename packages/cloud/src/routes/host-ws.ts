@@ -1,8 +1,10 @@
 import type { Hono } from "hono";
 import type { UpgradeWebSocket } from "hono/ws";
+import { eq } from "drizzle-orm";
 import { hostToCloudSchema } from "@cogni/contract";
 import type { CloudToHost } from "@cogni/contract";
 import { findHostByToken, setHostStatus } from "../db/hosts.js";
+import { hosts as hostsTable } from "../db/schema.js";
 import { logger } from "@cogni/shared";
 import type { ServerDeps } from "../server.js";
 
@@ -49,7 +51,15 @@ export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, de
                   send: (m: CloudToHost) => ws.send(JSON.stringify(m)),
                 });
                 ws.send(JSON.stringify({ t: "registered" } satisfies CloudToHost));
+                // SP-1 broadcast kept for desktop clients pre-upgrade; SP-2
+                // host-meta is the precise per-host event new clients prefer.
                 deps.clients.sendToUser(host.userId, { t: "host-status", online: true });
+                deps.clients.publishHostMeta(host.userId, {
+                  hostId: host.id,
+                  name: host.name,
+                  status: "online",
+                  lastSeen: new Date().toISOString(),
+                });
                 logger.info({ hostId, userId }, "runner host registered");
                 return;
               }
@@ -77,13 +87,20 @@ export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, de
             if (hostId) {
               deps.hosts.unregister(hostId);
               await setHostStatus(deps.db, hostId, "offline");
-              if (userId) deps.clients.sendToUser(userId, { t: "host-status", online: false });
-              // SP-1: in-flight `running` runner_sessions for this host are NOT
-              // force-failed here — SP-1 does not record `host_id` on
-              // `runner_sessions` (the column exists but is unwritten), so there's
-              // no host→session mapping yet; and SP-1's chat domain does not gate
-              // dispatch on status, so a reconnect self-heals. Proper in-flight-session
-              // cleanup (and populating `host_id`) is an SP-2 concern.
+              if (userId) {
+                deps.clients.sendToUser(userId, { t: "host-status", online: false });
+                // SP-2: publish a precise per-host offline event so settings UIs
+                // and Conversation's fallback card recompute live. Re-fetch the
+                // name in case it was renamed mid-connection.
+                const row = await deps.db.select({ name: hostsTable.name })
+                  .from(hostsTable).where(eq(hostsTable.id, hostId)).limit(1);
+                deps.clients.publishHostMeta(userId, {
+                  hostId,
+                  name: row[0]?.name ?? "Unknown",
+                  status: "offline",
+                  lastSeen: new Date().toISOString(),
+                });
+              }
               logger.info({ hostId }, "runner host disconnected");
             }
           } catch (err) {
