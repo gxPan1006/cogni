@@ -18,3 +18,4 @@ build/
 changelog/
 # Playwright MCP screenshots / snapshots from local UI verification
 .playwright-mcp/
+.claude-supervisor/
