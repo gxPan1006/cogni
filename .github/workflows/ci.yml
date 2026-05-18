@@ -1,0 +1,75 @@
+# Cogni CI — build + typecheck + vitest on every push to main and every PR.
+#
+# Scope: mirrors what `pnpm run ci` runs locally (see root package.json), so a
+# green local run ≈ a green CI run. DB-backed tests use in-memory pglite (WASM
+# Postgres), no external services needed.
+#
+# Run order is significant:
+#   1. build packages/* first — Vitest aliases @cogni/contract / @cogni/shared
+#      to TS source, but tsc-built dist/ is what apps/* consume during their
+#      own typecheck step, and any future test that imports a built artifact
+#      stays consistent with prod.
+#   2. typecheck across all 7 packages + apps (catches type drift apps).
+#   3. vitest with --no-file-parallelism to avoid a teardown race in the
+#      cloud server e2e (multiple parallel pglite + ws servers occasionally
+#      throw an uncaught ECONNREFUSED post-teardown). Serial-file run is
+#      stable; single-file parallelism still applies within each file.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel in-progress runs for the same ref when a new commit lands.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-typecheck:
+    name: build + typecheck + vitest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Pin pnpm via corepack so CI matches the local pnpm 10.33.0 we develop
+      # against. The repo root package.json doesn't yet have a packageManager
+      # field; when it gets added, corepack will honour that instead.
+      - name: Enable corepack + pin pnpm 10.33.0
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          pnpm --version
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm -r --filter "./packages/*" build
+
+      - name: Typecheck (all packages + apps)
+        run: pnpm -r typecheck
+
+      - name: Vitest (packages/cloud + packages/contract)
+        run: pnpm vitest run packages/cloud packages/contract --no-file-parallelism --reporter=verbose

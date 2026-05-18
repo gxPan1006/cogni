@@ -1,0 +1,37 @@
+# Weekly Dependabot sweeps for the two ecosystems we actually own here.
+# pnpm workspace deps are covered by the single root manifest scan ("npm"
+# ecosystem — Dependabot reads pnpm-lock.yaml). GitHub Actions versions
+# get their own scan so the CI workflow stays patched.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    groups:
+      types:
+        patterns:
+          - "@types/*"
+      eslint:
+        patterns:
+          - "eslint*"
+          - "@typescript-eslint/*"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(ci)"
+      include: scope
