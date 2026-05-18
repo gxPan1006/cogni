@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { makeTestDb } from "./test-db.js";
-import { findOrCreateUser } from "./users.js";
+import { findOrCreateUserByEmail } from "./users.js";
 import { createThread } from "./threads.js";
 import {
   getOrCreateRunnerSession, getRunnerSessionById, setRunnerSessionId, setRunnerSessionStatus,
@@ -10,7 +10,7 @@ import {
 describe("session + event repository", () => {
   it("reuses one runner_session per thread", async () => {
     const { db, close } = await makeTestDb();
-    const u = await findOrCreateUser(db, { oauthSub: "g|1", email: "a@x.com" });
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
     const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
     const s1 = await getOrCreateRunnerSession(db, thread.id, "claude-code");
     const s2 = await getOrCreateRunnerSession(db, thread.id, "claude-code");
@@ -20,7 +20,7 @@ describe("session + event repository", () => {
 
   it("assigns monotonic per-thread seq and lists events since N", async () => {
     const { db, close } = await makeTestDb();
-    const u = await findOrCreateUser(db, { oauthSub: "g|1", email: "a@x.com" });
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
     const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
     const s = await getOrCreateRunnerSession(db, thread.id, "claude-code");
     const e1 = await appendEvent(db, { threadId: thread.id, sessionId: s.id, event: { type: "text", text: "a" } });
@@ -40,7 +40,7 @@ describe("session + event repository", () => {
 
   it("tracks runnerSessionId and status", async () => {
     const { db, close } = await makeTestDb();
-    const u = await findOrCreateUser(db, { oauthSub: "g|1", email: "a@x.com" });
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
     const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
     const s = await getOrCreateRunnerSession(db, thread.id, "claude-code");
     await setRunnerSessionId(db, s.id, "claude-xyz");

@@ -1,0 +1,57 @@
+/* Welcome — main-slot empty state when no thread is active. */
+
+.welcome {
+  flex: 1; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+}
+.welcome__inner {
+  width: 100%;
+  max-width: 720px;
+}
+
+.welcome__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.welcome__greeting {
+  font-family: var(--font-sans);
+  font-size: 44px;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+  line-height: 1.08;
+  color: var(--ink);
+  margin: 0 0 14px;
+}
+
+.welcome__subtitle {
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--muted);
+  margin-bottom: 32px;
+}
+.welcome__subtitle strong { color: var(--ink); font-weight: 500; }
+
+.welcome__composer-block { /* host the composer + chip row */ }
+
+.welcome__chips {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-top: 24px;
+}
+.welcome__chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  cursor: pointer; font: inherit; font-size: 13px;
+  color: var(--ink-2);
+  transition: background .12s, color .12s;
+}
+.welcome__chip:hover { background: var(--bg-sunk); color: var(--ink); }
+.welcome__chip-icon { display: inline-flex; color: var(--muted); }

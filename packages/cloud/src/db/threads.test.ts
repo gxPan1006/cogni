@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { makeTestDb } from "./test-db.js";
-import { findOrCreateUser } from "./users.js";
+import { findOrCreateUserByEmail } from "./users.js";
 import { createThread, listThreads, getThreadDetail, appendMessage, touchThread, threadBelongsToUser } from "./threads.js";
 
 describe("thread repository", () => {
   it("creates, lists, appends messages, and reads back detail", async () => {
     const { db, close } = await makeTestDb();
-    const user = await findOrCreateUser(db, { oauthSub: "g|1", email: "a@x.com" });
+    const user = await findOrCreateUserByEmail(db, "a@x.com");
     const thread = await createThread(db, { userId: user.id, tenantId: user.tenantId });
     expect(thread.title).toBe("New chat");
 
@@ -24,7 +24,7 @@ describe("thread repository", () => {
 
   it("touchThread bumps updatedAt for ordering", async () => {
     const { db, close } = await makeTestDb();
-    const user = await findOrCreateUser(db, { oauthSub: "g|2", email: "b@x.com" });
+    const user = await findOrCreateUserByEmail(db, "b@x.com");
     const t1 = await createThread(db, { userId: user.id, tenantId: user.tenantId });
     await createThread(db, { userId: user.id, tenantId: user.tenantId });
     await new Promise((r) => setTimeout(r, 2)); // ensure t1's updatedAt is strictly later than t2's
@@ -43,8 +43,8 @@ describe("thread repository", () => {
 
   it("threadBelongsToUser is true only for the owner", async () => {
     const { db, close } = await makeTestDb();
-    const owner = await findOrCreateUser(db, { oauthSub: "g|owner", email: "owner@x.com" });
-    const other = await findOrCreateUser(db, { oauthSub: "g|other", email: "other@x.com" });
+    const owner = await findOrCreateUserByEmail(db, "owner@x.com");
+    const other = await findOrCreateUserByEmail(db, "other@x.com");
     const thread = await createThread(db, { userId: owner.id, tenantId: owner.tenantId });
     expect(await threadBelongsToUser(db, thread.id, owner.id)).toBe(true);
     expect(await threadBelongsToUser(db, thread.id, other.id)).toBe(false);

@@ -1,0 +1,78 @@
+/* Composer — input region beneath the conversation scroll. */
+
+.composer-region {
+  padding: 0 32px 22px;
+  background: var(--bg);
+}
+
+.composer-host {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 10px;
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+  margin: 0 0 8px;
+}
+.composer-host__label { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); letter-spacing: 0.05em; }
+.composer-host__name  { font-size: 13px; font-weight: 500; }
+
+.composer {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-2);
+  transition: border-color .15s, box-shadow .15s;
+}
+.composer:focus-within {
+  border-color: var(--ink-2);
+  box-shadow: var(--shadow-2), 0 0 0 3px var(--surface-3);
+}
+.composer-region--disabled .composer { opacity: 0.8; }
+
+.composer__input {
+  width: 100%;
+  resize: none;
+  border: 0; outline: none; background: transparent;
+  padding: 14px 16px 8px;
+  font: inherit;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  min-height: 24px;
+}
+.composer__input::placeholder { color: var(--muted-2); }
+
+.composer__bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 10px 8px;
+}
+.composer__spacer { flex: 1; }
+
+.composer__icon-btn {
+  width: 28px; height: 28px;
+  border-radius: var(--r-2);
+  border: 0; background: transparent;
+  cursor: pointer; color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.composer__icon-btn:hover:not(:disabled) { background: var(--bg-sunk); color: var(--ink); }
+.composer__icon-btn:disabled { color: var(--muted-2); cursor: not-allowed; }
+
+.composer__model {
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--muted); letter-spacing: 0.02em;
+}
+
+.composer__send {
+  width: 32px; height: 32px;
+  border-radius: var(--r-2);
+  border: 0;
+  background: var(--ink); color: var(--bg);
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .12s;
+}
+.composer__send:hover:not(:disabled) { background: var(--ink-2); }
+.composer__send:disabled {
+  background: var(--line); color: var(--muted-2); cursor: not-allowed;
+}

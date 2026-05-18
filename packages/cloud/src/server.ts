@@ -7,7 +7,9 @@ import type { Auth, SessionClaims } from "./auth.js";
 import type { HostRouter } from "./host-router.js";
 import type { ClientHub } from "./client-hub.js";
 import type { ChatDomain } from "./domains/chat.js";
+import type { EmailTransport } from "./email/transport.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerEmailRoutes } from "./routes/email.js";
 import { registerHostWs } from "./routes/host-ws.js";
 import { registerClientRoutes } from "./routes/client.js";
 
@@ -23,6 +25,8 @@ export interface ServerDeps {
   hosts: HostRouter;
   clients: ClientHub;
   chat: ChatDomain;
+  emailTransport: EmailTransport;
+  magicLinkTtlMinutes: number;
   publicUrl: string;
 }
 
@@ -30,14 +34,16 @@ export function createServer(deps: ServerDeps) {
   const app = new Hono();
   const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
 
-  app.use(
-    "/api/*",
-    cors({
-      origin: ["tauri://localhost", "http://localhost:1420"],
-      allowHeaders: ["Authorization", "Content-Type"],
-      allowMethods: ["GET", "POST", "OPTIONS"],
-    }),
-  );
+  const corsMiddleware = cors({
+    origin: ["tauri://localhost", "http://localhost:1420"],
+    allowHeaders: ["Authorization", "Content-Type"],
+    allowMethods: ["GET", "POST", "OPTIONS"],
+  });
+  app.use("/api/*", corsMiddleware);
+  // /auth/dev-token is an XHR from the desktop dev fallback (see useAuth.ts);
+  // the rest of /auth/* are browser-redirect endpoints and CORS is a no-op for
+  // them. Cheap to enable across the whole prefix.
+  app.use("/auth/*", corsMiddleware);
 
   app.get("/health", (c) => c.json({ ok: true }));
 
@@ -46,9 +52,10 @@ export function createServer(deps: ServerDeps) {
     return c.json({ error: "internal" }, 500);
   });
 
-  registerAuthRoutes(app, deps);                   // Task 11
-  registerHostWs(app, upgradeWebSocket, deps);     // Task 12
-  registerClientRoutes(app, upgradeWebSocket, deps); // Task 13
+  registerAuthRoutes(app, deps);                   // Google OAuth + dev-token
+  registerEmailRoutes(app, deps);                  // Magic-link send/callback
+  registerHostWs(app, upgradeWebSocket, deps);
+  registerClientRoutes(app, upgradeWebSocket, deps);
 
   return { app, injectWebSocket };
 }

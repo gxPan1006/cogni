@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { generateState, generateCodeVerifier, decodeIdToken } from "arctic";
-import { findOrCreateUser } from "../db/users.js";
+import { findOrCreateUserByEmail } from "../db/users.js";
+import { upsertIdentity } from "../db/identities.js";
 import { logger } from "@cogni/shared";
 import type { ServerDeps } from "../server.js";
 
@@ -31,6 +32,24 @@ export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
     for (const [k, v] of pending) if (now - v.createdAt > TTL_MS) pending.delete(k);
   };
 
+  // Dev-only: signs a JWT for a stand-in user, bypassing Google OAuth.
+  // Refuses to register in production. Used by the desktop dev fallback in
+  // apps/desktop/src/useAuth.ts when the user has no localStorage token —
+  // makes dogfood instant on networks where Google OAuth is unreachable
+  // (e.g. flaky GFW). Mirrors the standalone packages/cloud/src/scripts/
+  // mint-dev-token.ts but over HTTP so the desktop can self-serve.
+  if (process.env.NODE_ENV !== "production") {
+    app.post("/auth/dev-token", async (c) => {
+      const user = await findOrCreateUserByEmail(deps.db, "dev-manual@local.test");
+      await upsertIdentity(deps.db, user.id, "dev", "manual");
+      const token = await deps.auth.issueToken({
+        userId: user.id,
+        tenantId: user.tenantId,
+      });
+      return c.json({ token });
+    });
+  }
+
   // Desktop app opens this in the system browser with ?redirect=cogni://auth
   app.get("/auth/google/start", (c) => {
     sweep();
@@ -59,7 +78,8 @@ export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
       if (typeof claims.email !== "string") {
         logger.warn({ sub }, "google id token had no email claim; using fallback");
       }
-      const user = await findOrCreateUser(deps.db, { oauthSub: `google|${sub}`, email });
+      const user = await findOrCreateUserByEmail(deps.db, email);
+      await upsertIdentity(deps.db, user.id, "google", sub);
       const token = await deps.auth.issueToken({ userId: user.id, tenantId: user.tenantId });
       const target = new URL(entry.redirect);
       target.searchParams.set("token", token);

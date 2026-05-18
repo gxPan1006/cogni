@@ -48,4 +48,29 @@ export const api = {
       body: JSON.stringify({ name }),
     });
   },
+  /**
+   * Magic-link login: cloud generates a one-time token, mails it to the user.
+   * UI feedback: Login page transitions to "已发送…" state with a 60s resend
+   * cooldown. Returns ok:true regardless of whether the email is known
+   * (anti-enumeration); errors only come from network/4xx (rate limit, malformed).
+   */
+  sendMagicLink(email: string): Promise<{ ok: true }> {
+    return request(`${CLOUD_URL}/auth/email/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+  },
+  /**
+   * Exchange a magic token (delivered via `cogni://auth?magic=…` deep link)
+   * for a 30-day JWT. Called by useAuth automatically when the deep link
+   * arrives — the user doesn't see this step, they just land on Welcome.
+   */
+  redeemMagic(magic: string): Promise<{ token: string }> {
+    return request(`${CLOUD_URL}/auth/email/callback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ magic }),
+    });
+  },
 };
