@@ -12,16 +12,16 @@
  *   - error events render inline
  *   - permission-request → PermissionPrompt (SP-3 will wire onAllow/onDeny to API)
  *
- * Banners:
- *   - WS dropped     → red "正在重连…"
- *   - host offline   → soft "本地运行环境未连接" warning
- *   - all hosts offline (SP-2) → NoHostBanner above composer
+ * Connection / host state: surfaced through the composer's status pill —
+ * there is no top-of-conversation banner anymore. We compute a
+ * `ComposerStatus` from `connected` + `hostOnline` + the optional
+ * `hostName` and hand it to <Composer status={…} />.
  */
 import { useEffect, useRef, useState } from "react";
 import type { MessageView } from "@cogni/contract";
 import type { ApiClient } from "../transport/api.js";
 import { useThreadStream } from "../hooks/useThreadStream.js";
-import { Composer } from "./Composer.js";
+import { Composer, type ComposerStatus } from "./Composer.js";
 import {
   UserMessage, AssistantText, ToolCallBlock, PermissionPrompt,
   aggregateEvents,
@@ -79,17 +79,19 @@ export function Conversation({
     messages.length > 0 &&
     messages[messages.length - 1]?.role === "user";
 
+  const status: ComposerStatus | undefined =
+    !connected
+      ? { kind: "danger", text: "与服务器的连接已断开,正在重连…" }
+      : !hostOnline
+        ? hostName
+          ? { kind: "warn", hostName, text: "离线 · 等待上线" }
+          : { kind: "danger", text: "没有在线的 Cogni 桌面端" }
+        : hostName
+          ? { kind: "ok", hostName }
+          : undefined;
+
   return (
     <div className="conversation">
-      {!connected && (
-        <div className="banner banner--danger">与服务器的连接已断开,正在重连…</div>
-      )}
-      {connected && !hostOnline && (
-        <div className="banner banner--warning">
-          本地运行环境未连接 —— 启动你电脑上的 Cogni 才能跑任务
-        </div>
-      )}
-
       <div className="conversation__scroll" ref={scrollRef}>
         <div className="conversation__list">
           {isEmpty && (
@@ -139,15 +141,12 @@ export function Conversation({
         </div>
       </div>
 
-      {/* SP-2: if no hosts are online at all, lift the NoHostBanner up here. */}
-      {/* {noHostsAtAll && <NoHostBanner onOpenSettings={onOpenSettings} />} */}
-
       <Composer
         draft={draft}
         setDraft={setDraft}
         onSubmit={submit}
         disabled={!connected}
-        hostName={hostName}
+        status={status}
       />
     </div>
   );

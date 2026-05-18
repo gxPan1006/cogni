@@ -1,10 +1,12 @@
 /**
  * Composer — chat input bar with autosize textarea + toolbar row.
  *
- * Props shape is the Phase 1 contract — do not change without telling Shell.
+ * Status pill above the textarea is the single source of truth for
+ * connection / host state (the top-of-conversation banner is gone). The
+ * caller computes a `ComposerStatus` from its hooks and passes it in;
+ * undefined means "render no pill" (e.g. Welcome before a thread exists).
  *
- * Visual changes vs SP-1 spike:
- *   - host-online chip floats above the input
+ * Other visual notes:
  *   - send button is a small square accent button (Enter still primary)
  *   - attach / model picker stay disabled placeholders for now
  */
@@ -14,19 +16,30 @@ import "./composer.css";
 
 const TEXTAREA_MAX_HEIGHT_PX = 200;
 
+/**
+ * Connection / host state to surface in the composer status pill.
+ *   - `ok`     neutral chip with green halo dot + "RUNNING ON <hostName>"
+ *   - `warn`   amber chip + "<hostName> <text>" (e.g. "离线 · 等待上线")
+ *   - `danger` red chip with pulsing dot + free-form text
+ */
+export type ComposerStatus =
+  | { kind: "ok"; hostName: string }
+  | { kind: "warn"; hostName: string; text: string }
+  | { kind: "danger"; text: string };
+
 export function Composer({
   draft,
   setDraft,
   onSubmit,
   disabled,
-  hostName,
+  status,
 }: {
   draft: string;
   setDraft: (v: string) => void;
   onSubmit: () => void;
   disabled?: boolean;
-  /** Optional host chip — pass the name of the host this thread will run on. */
-  hostName?: string;
+  /** Pill above the textarea. Omit to hide the pill entirely. */
+  status?: ComposerStatus;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -43,13 +56,7 @@ export function Composer({
 
   return (
     <div className={"composer-region" + (disabled ? " composer-region--disabled" : "")}>
-      {hostName && (
-        <div className="composer-host">
-          <span className="dot dot-online" />
-          <span className="composer-host__label">RUNNING ON</span>
-          <span className="composer-host__name">{hostName}</span>
-        </div>
-      )}
+      {status && <StatusPill status={status} />}
 
       <form
         className={"composer" + (hasText ? " composer--has-text" : "")}
@@ -100,6 +107,33 @@ export function Composer({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: ComposerStatus }) {
+  if (status.kind === "ok") {
+    return (
+      <div className="status-pill status-pill--ok" role="status">
+        <span className="status-pill__dot" aria-hidden="true" />
+        <span className="status-pill__label">RUNNING ON</span>
+        <span className="status-pill__name">{status.hostName}</span>
+      </div>
+    );
+  }
+  if (status.kind === "warn") {
+    return (
+      <div className="status-pill status-pill--warn" role="status">
+        <span className="status-pill__dot" aria-hidden="true" />
+        <span className="status-pill__name">{status.hostName}</span>
+        <span className="status-pill__text">{status.text}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="status-pill status-pill--danger" role="status">
+      <span className="status-pill__dot status-pill__dot--pulse" aria-hidden="true" />
+      <span className="status-pill__text">{status.text}</span>
     </div>
   );
 }

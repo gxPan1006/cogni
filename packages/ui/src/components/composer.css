@@ -15,6 +15,62 @@
 .composer-host__label { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); letter-spacing: 0.05em; }
 .composer-host__name  { font-size: 13px; font-weight: 500; }
 
+/* Status pill — the single connection / host indicator (replaces the
+   top-of-conversation banner). One of three variants is chosen by the
+   `ComposerStatus.kind` passed in via props. */
+.status-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 12px 4px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-full);
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.status-pill--warn {
+  background: var(--warn-soft);
+  border-color: oklch(85% 0.05 78);
+}
+.status-pill--danger {
+  background: var(--bad-soft);
+  border-color: oklch(85% 0.045 28);
+  color: var(--ink);
+}
+
+.status-pill__dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--good);
+  box-shadow: 0 0 0 3px var(--good-soft);
+  flex-shrink: 0;
+}
+.status-pill--warn .status-pill__dot {
+  background: var(--warn);
+  box-shadow: 0 0 0 3px oklch(94% 0.045 78);
+}
+.status-pill--danger .status-pill__dot {
+  background: var(--bad);
+  box-shadow: 0 0 0 3px oklch(93% 0.045 28);
+}
+.status-pill__dot--pulse {
+  animation: status-pill-pulse 1.4s ease-in-out infinite;
+}
+@keyframes status-pill-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.75); }
+}
+
+.status-pill__label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.status-pill__name { font-size: 13px; font-weight: 500; color: var(--ink); }
+.status-pill__text { font-size: 13px; color: inherit; }
+.status-pill--danger .status-pill__text { font-weight: 500; }
+
 .composer {
   background: var(--surface);
   border: 1px solid var(--line);

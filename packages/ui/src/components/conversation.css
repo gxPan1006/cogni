@@ -6,15 +6,8 @@
   background: var(--bg);
 }
 
-/* Banners stack at the top of the conversation, above the scroll. */
-.banner {
-  padding: 9px 16px;
-  font-size: 13px;
-  line-height: 1.4;
-  border-bottom: 1px solid var(--line-soft);
-}
-.banner--warning { background: var(--warn-soft); color: var(--ink-2); }
-.banner--danger  { background: var(--bad-soft);  color: var(--ink); }
+/* Connection / host state lives in the Composer's status pill — there
+   is no banner at the top of the conversation. */
 
 .conversation__scroll {
   flex: 1; min-height: 0;

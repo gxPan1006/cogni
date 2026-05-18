@@ -70,7 +70,7 @@ export function Welcome({
               onStartChat(draft);
               setDraft("");
             }}
-            hostName={hostName}
+            status={hostName ? { kind: "ok", hostName } : undefined}
           />
 
           <div className="welcome__chips" role="list">
