@@ -1,0 +1,29 @@
+# /etc/nginx/sites-enabled/chat.ai-cognit.com
+# SP-2: serves the apps/web Vite build out of /var/www/chat/.
+# The SPA's JS makes XHR/WS calls back to cloud.ai-cognit.com (different vhost).
+# CORS allowlist is in packages/cloud/src/server.ts.
+
+server {
+  listen 80;
+  listen 443 ssl http2;
+  server_name chat.ai-cognit.com;
+
+  ssl_certificate     /etc/letsencrypt/live/chat.ai-cognit.com/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/chat.ai-cognit.com/privkey.pem;
+  include /etc/letsencrypt/options-ssl-nginx.conf;
+  ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+  root /var/www/chat;
+  index index.html;
+
+  # ACME http-01 challenge — keep cleartext for cert renewal.
+  # Don't enable CF "Always Use HTTPS" zone-wide or this breaks.
+  location /.well-known/acme-challenge/ {
+    root /var/www/cert-challenge;
+  }
+
+  # SPA fallback: any non-file path serves /index.html so react-router can take over.
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+}

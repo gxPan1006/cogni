@@ -7,22 +7,27 @@ Production cloud lives at `https://cloud.ai-cognit.com`, served by **prod-cognit
 ## Current production topology
 
 ```
-┌────────── Mac (desktop dogfood) ─────────┐
-│  apps/desktop, VITE_CLOUD_URL =          │
-│  https://cloud.ai-cognit.com             │ POST / WS over HTTPS
-└──────────────────────┬───────────────────┘
-                       │
-              ┌────────▼────────┐
-              │ Cloudflare      │  TLS termination, DDoS, anycast.
-              │ ai-cognit.com   │  `cloud.*` is *Proxied* (orange cloud).
-              │ zone            │
-              └────────┬────────┘
-                       │  HTTPS to origin (Full SSL, letsencrypt cert)
-              ┌────────▼────────────────────────────┐
-              │ prod-cognit nginx                   │ /etc/nginx/sites-enabled/cloud.ai-cognit.com
-              │ vhost cloud.ai-cognit.com           │ listens 80 + 443 (TLS), proxies to localhost:8787,
-              │                                     │ WebSocket upgrade supported (Hono node-ws).
-              └────────┬────────────────────────────┘
+┌────────── Mac (desktop dogfood) ─────────┐    ┌─── any browser (web) ───┐
+│  apps/desktop, VITE_CLOUD_URL =          │    │ https://chat.ai-cognit  │
+│  https://cloud.ai-cognit.com             │    │ .com (apps/web SPA)     │
+└──────────────────────┬───────────────────┘    └────────────┬────────────┘
+                       │                                     │ XHR/WS to cloud.*
+                       │  POST / WS over HTTPS               │ (CORS allows it)
+              ┌────────▼─────────────────────────────────────▼────┐
+              │ Cloudflare ai-cognit.com zone                     │  TLS termination
+              │   cloud.*  Proxied (orange)                       │  + DDoS / anycast
+              │   chat.*   Proxied (orange)                       │
+              └────────┬───────────────────────────┬──────────────┘
+                       │ HTTPS to origin           │ HTTPS to origin
+              ┌────────▼────────────────┐ ┌────────▼─────────────────────┐
+              │ prod-cognit nginx       │ │ prod-cognit nginx            │
+              │ vhost cloud.ai-cognit   │ │ vhost chat.ai-cognit         │
+              │ /etc/nginx/sites-       │ │ /etc/nginx/sites-            │
+              │ enabled/cloud.ai-...    │ │ enabled/chat.ai-...          │
+              │ → proxies localhost:8787│ │ → serves static /var/www/chat│
+              │   WS upgrade supported  │ │   (apps/web vite build)      │
+              │                         │ │   SPA fallback to index.html │
+              └────────┬────────────────┘ └──────────────────────────────┘
                        │  HTTP loopback
               ┌────────▼────────────────────────────┐
               │ cogni-cloud systemd service         │ /etc/systemd/system/cogni-cloud.service
@@ -43,6 +48,12 @@ Production cloud lives at `https://cloud.ai-cognit.com`, served by **prod-cognit
             │ TLS 443              │
             └──────────────────────┘
 ```
+
+**Two domains, one cloud, one VPS.** `cloud.ai-cognit.com` proxies API + WS
+to the Node service on `:8787`. `chat.ai-cognit.com` serves the static SPA
+build out of `/var/www/chat/`; the SPA's JS calls back to `cloud.*` via
+CORS (allowlist in `packages/cloud/src/server.ts`). Desktop app talks
+directly to `cloud.*` over WS and never touches `chat.*`.
 
 ---
 
@@ -66,19 +77,43 @@ ssh prod-cognit 'sudo systemctl status cogni-cloud --no-pager'
 
 `cogni` user holds the checkout at `/opt/cogni`. Read-only GitHub deploy key (id_ed25519 in `~cogni/.ssh/`).
 
+Two things deploy together: the cloud Node service (restart) and the web SPA
+static build (rsync to nginx-served path). They share the same git pull.
+
 ```bash
 ssh prod-cognit '
   sudo -u cogni bash -c "
     cd /opt/cogni \
       && git pull --ff-only \
       && pnpm install --frozen-lockfile \
-      && pnpm -r --filter \"@cogni/*\" build
+      && pnpm -r --filter \"@cogni/*\" build \
+      && pnpm --filter web build
   "
+  # cloud (restart picks up new dist + applies any new JWT signing logic,
+  # which means every active JWT is rejected and users get bounced to login)
   sudo systemctl restart cogni-cloud
   sleep 2
   sudo systemctl status cogni-cloud --no-pager | head -10
+  # web (static SPA — rsync atomic-ish replace into nginx-served root)
+  sudo rsync -a --delete /opt/cogni/apps/web/dist/ /var/www/chat/
+  sudo chown -R www-data:www-data /var/www/chat
 '
 ```
+
+### Run a schema migration
+
+Migrations live under `packages/cloud/src/scripts/migrate-*.ts`. Each is
+idempotent so re-running is safe. Run on prod with the cogni user (which has
+the right `.env`):
+
+```bash
+ssh prod-cognit 'sudo -u cogni bash -c "cd /opt/cogni/packages/cloud && pnpm exec tsx --env-file=.env src/scripts/migrate-YYYY-MM-DD-NAME.ts"'
+```
+
+SP-2 added one: `migrate-2026-05-18-sp2-deltas.ts` (drops `runner_sessions`
+thread_id uniqueness + adds `closed_at`, creates `auth_sessions` table, adds
+`hosts.removed_at`). Run it **once** before restarting cogni-cloud with the
+SP-2 code.
 
 ### Rotate JWT_SECRET
 
@@ -102,17 +137,47 @@ ssh prod-cognit 'sudo certbot renew --dry-run'   # test
 
 ---
 
+## chat.ai-cognit.com (web SPA) provisioning
+
+The web vhost is separate from cloud.ai-cognit.com so we can iterate on the
+SPA without touching the running API. The full hand-off-friendly recipe lives
+at [`SP-2-OPS-MANUAL.md`](SP-2-OPS-MANUAL.md) (DNS / cert / nginx / GCP
+OAuth, with verification commands at each step). The condensed version:
+
+1. **CF DNS**: A record `chat.ai-cognit.com → 107.174.60.18`, Proxied.
+2. **TLS**: `sudo certbot certonly --webroot -w /var/www/cert-challenge -d chat.ai-cognit.com --email YOU@gmail.com --agree-tos --no-eff-email --non-interactive`
+3. **nginx vhost**: copy [`docs/deploy/chat.ai-cognit.com.nginx`](deploy/chat.ai-cognit.com.nginx)
+   → `/etc/nginx/sites-enabled/chat.ai-cognit.com`. Make sure
+   `/var/www/chat/` exists and is `chown www-data:www-data`. Then
+   `sudo nginx -t && sudo systemctl reload nginx`.
+4. **GCP OAuth Console**: add `https://chat.ai-cognit.com/auth/google/callback`
+   to the same OAuth Client ID's *Authorized redirect URIs*. Keep the existing
+   `https://cloud.ai-cognit.com/auth/google/callback` (used by desktop's
+   cogni:// → cloud → desktop deep-link flow).
+5. **Verify**: `curl -sI https://chat.ai-cognit.com/` → `HTTP/2 200`.
+
+After provisioning, run the standard "Deploy a new version" recipe above — it
+rsyncs `apps/web/dist/` into `/var/www/chat/`.
+
+---
+
 ## From-scratch provisioning recipe
 
 This documents what was done on 2026-05-18. Reference it if you need to re-provision prod-cognit or set up another VPS.
 
 ### Prerequisites you must do manually
 
-1. **Cloudflare DNS**: add A record `cloud.ai-cognit.com → 107.174.60.18`, set Proxy = orange cloud (Proxied) for CF DDoS + TLS, *or* gray cloud (DNS only) for plain origin TLS. Either works — current setup is orange.
+1. **Cloudflare DNS**: add A records for **both** subdomains pointing at the
+   VPS IP. Proxy = orange (Proxied) for CF TLS + DDoS:
+   - `cloud.ai-cognit.com → 107.174.60.18`
+   - `chat.ai-cognit.com → 107.174.60.18`
 
 2. **GitHub deploy key**: a read-only SSH key from prod-cognit's `cogni` user must be added to the repo's deploy keys (created automatically by the script below, but the public key needs to land in github via `gh repo deploy-key add` or the UI).
 
-3. **Google OAuth**: in [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → your OAuth 2.0 Client ID, add `https://cloud.ai-cognit.com/auth/google/callback` to *Authorized redirect URIs*. (Skip if you only need magic-link login.)
+3. **Google OAuth**: in [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → your OAuth 2.0 Client ID, add **both** redirect URIs to *Authorized redirect URIs*:
+   - `https://cloud.ai-cognit.com/auth/google/callback` (desktop flow — `cogni://` deep link reaches it via the cloud)
+   - `https://chat.ai-cognit.com/auth/google/callback` (web flow — browser lands here, SPA reads the token from the URL fragment)
+   (Skip if you only need magic-link login.)
 
 ### Network quirk: RESIDENTIAL_PROXY chain
 
@@ -205,6 +270,9 @@ ssh prod-cognit '
 NODE_ENV=production
 PORT=8787
 PUBLIC_URL=https://cloud.ai-cognit.com
+# SP-2: where the web SPA lives. Cloud uses it to build the Google
+# redirect_uri and the magic-link URL when the user came from web.
+WEB_URL=https://chat.ai-cognit.com
 
 DATABASE_URL=postgresql://...neon...?sslmode=require
 JWT_SECRET=<32-byte hex>
@@ -223,11 +291,16 @@ MAGIC_LINK_TTL_MIN=15
 
 No `SMTP_TLS_SERVERNAME` — that's only for the dev-via-tunnel scenario.
 
+`WEB_URL` defaults to `https://chat.ai-cognit.com` if unset, so this var is
+only strictly required when serving a non-default web origin (staging, etc).
+
 ---
 
 ## Known issues / future work
 
-- **No HTTPS health endpoint**: cogni-cloud doesn't expose `/healthz` yet. CF (or any monitor) can only tell "is 443 open" via a generic root probe (which returns 404 from Hono — that's still "alive"). Add an explicit health route when we wire up alerting.
-- **Cogni-cloud writes nothing to disk** (DB is Neon). One copy of cloud is fine for SP-1; SP-2 horizontal scale will need the in-process `pending` token Map + RateLimiter moved into Redis or pg.
-- **Cert renewal across CF Proxied**: certbot's HTTP-01 challenge currently relies on CF passing `/.well-known/acme-challenge/*` through cleartext. If you flip Cloudflare zone-wide to "Always Use HTTPS", the renewal will start failing — switch to DNS-01 with a CF API token at that point.
-- **No CI/CD**: deploys are manual via the `git pull && pnpm build && systemctl restart` recipe above. SP-2 should add a GitHub Action that does this on push to main.
+- **`/health` exists but very thin** — `GET /health` returns `{"ok":true}` if the Node process is up. It does NOT exercise the DB, the host registry, or the email transport. Real health/alerting (DB ping + auth_sessions select + transport last-success time) is a follow-up.
+- **Single-node assumption** — cogni-cloud's in-memory `ClientHub` + `HostRouter` + magic-link `pending` Map + `RateLimiter` + `pendingFallbacks` (chat domain) all hold transient state in the Node process. Horizontal scale needs these moved to Redis pub/sub or pg LISTEN/NOTIFY. SP-2 is fine on one node; revisit when concurrent active users > ~50.
+- **Cert renewal across CF Proxied**: certbot's HTTP-01 challenge relies on CF passing `/.well-known/acme-challenge/*` through cleartext. If you flip Cloudflare zone-wide to "Always Use HTTPS", renewal will start failing — switch to DNS-01 with a CF API token at that point. (Applies to both `cloud.*` and `chat.*`.)
+- **No CI/CD**: deploys are manual via the recipe above. Future: GitHub Action that on push-to-main does `pnpm build` + ssh-deploy + rsync web. SP-2 explicitly punted this.
+- **JWT migration impact on deploy** — every SP-2 cloud restart that introduces the `sessionId` claim (i.e. the first one) makes every existing SP-1 JWT invalid (no sessionId → `verifyToken` returns null → 401). Users get bounced to login. Expected one-time cost; communicate before the deploy window if it matters. (Re-running an already-SP-2 cloud is a no-op for JWTs.)
+- **server.e2e.test.ts intermittent ECONNREFUSED** under concurrent `pnpm vitest run packages/cloud` — port-reuse race between worktrees. Passes 1/1 in isolation. Documented in `docs/integration-log.md` SP-2 batch 2 lessons. Not blocking deploy; fix is to teach the e2e to pick a random free port or sequentialize via `--pool=forks --poolOptions.forks.singleFork`.
