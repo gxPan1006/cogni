@@ -40,10 +40,21 @@ export function createServer(deps: ServerDeps) {
   const app = new Hono();
   const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
 
+  // SP-2: web SPA at chat.ai-cognit.com calls these endpoints from browser
+  // JS. localhost:5173 covers `pnpm --filter web dev`. tauri://localhost +
+  // localhost:1420 cover desktop (Tauri prod / vite dev). Settings page needs
+  // PATCH (rename host) + DELETE (revoke device, soft-remove host, disconnect
+  // identity), hence the wider methods list.
+  const allowedOrigins = new Set([
+    "tauri://localhost",
+    "http://localhost:1420",
+    "http://localhost:5173",
+    deps.webUrl,
+  ]);
   const corsMiddleware = cors({
-    origin: ["tauri://localhost", "http://localhost:1420"],
+    origin: (origin) => (allowedOrigins.has(origin) ? origin : null),
     allowHeaders: ["Authorization", "Content-Type"],
-    allowMethods: ["GET", "POST", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
   app.use("/api/*", corsMiddleware);
   // /auth/dev-token is an XHR from the desktop dev fallback (see useAuth.ts);
