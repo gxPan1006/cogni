@@ -325,3 +325,100 @@ counting), all green, NO ECONNREFUSED flake this run. Both typechecks clean.
   @cogni/ui is in place.
 
 ---
+
+## SP-2 batch 4 — apps/web + settings hooks + multi-host UX (2026-05-18 — 3 agent 并行)
+
+**Pre-condition:** main at `fe48c9e` (after Section 8 extraction — @cogni/ui
+has ApiClient, useAuthCore, useThreadStream, all chat components). Three
+genuinely independent territories.
+
+| Track | Commit | 内容 |
+|---|---|---|
+| I · T25+T26+T27 apps/web | `c435a66` | Vite + React 19 + react-router 7 scaffold; api shim; useAuth-web (redirect-based, opposite of desktop's deep-link); GoogleAuthCallback / EmailAuthCallback; full route table (/login, /chat, /chat/:id, /settings, /auth/google/callback, /auth/email/callback); WebShell mirroring desktop layout; copied tokens.css + base.css for design parity |
+| J · T28 settings hooks | `79bc8b3` | useDevices / useIdentities / useHosts — auto-refresh on mount, expose refresh() for after-mutation |
+| L · T31+T32 multi-host UX + catchup | `adde8a2` | HostFallbackCard + NoHostBanner components; useThreadStream extended with `lastSeqRef` (catchup), `pendingFallback` / `pendingNoHost` state, `resolveFallback` / `dismissNoHost` actions; subscribe-thread + catchup-too-long handling |
+
+**Merge:** Three `git merge --no-ff` (`2ca4586 87a604e ba3...`) + barrel
+update `5f75959` exporting batch-4 additions.
+
+**Integration drama:** User had 5 uncommitted UI files (Composer.tsx /
+Conversation.tsx / Welcome.tsx / composer.css / conversation.css) dirty
+during the fanout window. Track L's append to conversation.css collided.
+Resolution: `git stash` the user's WIP → merge Track L → `git stash pop`
+auto-merged cleanly (user's banner-removal + Track L's new fallback-card
+styles ended up in different parts of the file). User's dirty changes
+preserved end-to-end. **Lesson:** the "stash → merge → pop" recipe is the
+right tool when fanout collides with user-in-flight WIP.
+
+**Merged total:** cloud unchanged (no cloud surface in this batch);
+@cogni/ui gained 5 new exports + extended hook surface; new apps/web
+package added to monorepo. All builds + typechecks green (desktop, web,
+cloud, ui, contract).
+
+### Fanout effectiveness
+
+- ~1118 lines new (apps/web 775 + settings hooks 118 + multi-host UX 225)
+- 3 agent total wallclock ≈ 4 min (slowest I ~3.9min on apps/web; fastest J 1.4min)
+- Sequential estimate ≈ 25 min → saved ~21 min
+- Integration gate time ≈ 6 min (scope check + 3 merges + stash dance for
+  Track L vs user's WIP + barrel update + full build/test)
+- Conflicts / rejections: 0 true track conflicts; 1 user-WIP overlap
+  resolved via stash pop. 0 boundary violations.
+
+### Lessons
+
+1. **Stash-pop dance for user-WIP collision works.** When the user is
+   actively iterating on files that an agent also touches, the integration
+   lead can: (a) stash user's WIP with a labeled message, (b) merge the
+   agent's branch, (c) pop the stash and let git auto-merge. Git's 3-way
+   merge handles append-only changes (Track L appending to bottom of
+   conversation.css) cleanly even when the user rewrote unrelated
+   sections higher in the file. Conflict markers only appear if both sides
+   touch the same lines.
+2. **Pre-creating downstream consumer with stub for not-yet-merged
+   upstream worked.** Track I's WebShell referenced a `<SettingsStub>`
+   placeholder for a SettingsPage that will only exist after Track J +
+   integrator-rework lands. TODO comment with clear pointer ("swap this
+   for `<SettingsPage api={api} onClose={...} />` after T29 lands")
+   makes the integration step obvious. Same pattern as Track D's
+   `as unknown as CloudToClient` casts in batch 2 — temp scaffolding
+   with a clear sunset path.
+3. **3 agents on truly independent territories ≈ 4-min wallclock.** This
+   was the cleanest batch yet (no stash drama between agents — only the
+   1 user-WIP collision at integration). The cost is in the prompt prep:
+   each prompt was 80-130 lines because territories were heterogeneous
+   (web vs hooks vs hook-plus-components). Worth it.
+
+### Sovereignty table
+
+| Track | Independent path | Forbidden | Delivered |
+|---|---|---|---|
+| I | `apps/web/**` (entire new dir) + .gitignore exception + pnpm-lock additive | packages/ui internals, desktop, contract | 16 files new, 775 LOC, web build green |
+| J | `packages/ui/src/hooks/{useDevices,useIdentities,useHosts}.ts` (new) | barrel, ApiClient, anything else | 3 hooks, 118 LOC, typecheck green |
+| L | `packages/ui/src/components/{HostFallbackCard,NoHostBanner}.tsx` (new) + conversation.css (append) + useThreadStream.ts (modify) | barrel, Conversation.tsx, contract, cloud | 4 files, 225 LOC, typecheck green |
+
+### Branches now
+
+- `main`: 5 new commits (3 merges + 1 barrel + this log) on top of `fe48c9e`
+- All `track/sp2b4-*` branches deleted; `.worktrees/sp2b4-*/` removed
+- User's 5 dirty UI files in main worktree preserved (Composer/Conv/Welcome + 2 css)
+
+### Next candidates
+
+- **Serial (me) — T29 SettingsPage extraction + wiring:** git mv user's
+  apps/desktop/src/Settings.tsx into packages/ui/src/components/SettingsPage.tsx,
+  wire its hardcoded MOCK_DEVICES/MOCK_HOSTS to the new useDevices/useHosts
+  hooks (Track J), accept `api: ApiClient` prop, update Shell.tsx + apps/web
+  App.tsx to import from @cogni/ui. Touches user's hand-crafted file — single
+  author. Also: swap web's `<SettingsStub />` placeholder.
+- **Serial (me) — Conversation.tsx wires up multi-host UX:** integrate
+  HostFallbackCard + NoHostBanner into Conversation.tsx render tree using
+  pendingFallback / pendingNoHost from extended useThreadStream. User has
+  dirty Conversation.tsx so I'll fold this into a single commit after
+  pulling their changes.
+- **Serial (me) — Section 12 deploy ops:** nginx vhost for chat.ai-cognit.com,
+  letsencrypt cert, register web's `/auth/google/callback` redirect URI in
+  Google Cloud Console, first web rsync.
+- **Final — Section 13 E2E:** run all 9 dogfood scenarios from spec §8.
+
+---
