@@ -66,6 +66,7 @@ describe("cloud server e2e (headless spine)", () => {
       emailTransport: new FakeTransport(),
       magicLinkTtlMinutes: 15,
       publicUrl: "http://localhost",
+      webUrl: "https://chat.ai-cognit.com",
     });
     const server = serve({ fetch: app.fetch, port: 0 });
     injectWebSocket(server);

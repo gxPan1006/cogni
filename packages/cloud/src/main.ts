@@ -43,6 +43,7 @@ const { app, injectWebSocket } = createServer({
   emailTransport,
   magicLinkTtlMinutes: env.magicLinkTtlMinutes,
   publicUrl: env.publicUrl,
+  webUrl: env.webUrl,
 });
 
 const server = serve({ fetch: app.fetch, port: env.port }, (info) =>

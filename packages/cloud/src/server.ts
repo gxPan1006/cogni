@@ -28,6 +28,9 @@ export interface ServerDeps {
   emailTransport: EmailTransport;
   magicLinkTtlMinutes: number;
   publicUrl: string;
+  /** SP-2: where the web SPA lives (https://chat.ai-cognit.com). Used to build
+   * Google `redirect_uri` and magic-link URLs when the user came from web. */
+  webUrl: string;
 }
 
 export function createServer(deps: ServerDeps) {
