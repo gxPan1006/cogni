@@ -156,3 +156,91 @@ clean. `pnpm -r build` green.
   can't safely parallelize.
 
 ---
+
+## SP-2 batch 2 — isolated additions in Sections 2-6 (2026-05-18 — 5 agent 并行)
+
+**Pre-condition:** main at `7b597b5`. Looked at plan Sections 2-6 (T7-T16) and
+realized **5 of those tasks land in fully isolated files** even though the rest
+of the section is interdependent — same trick batch 1 used. Dispatched these 5
+in parallel before going serial on the dispatcher rework.
+
+| Track | Commit | 内容 | 测试 |
+|---|---|---|---|
+| A · T11 host-router | `0f17053` | `Map<userId, Set<hostId>>` + `getOnlineHostsForUser` + `getHostByIdForUser`; **kept** `getHostForUser` for backward-compat | 3 new (7 total) |
+| B · T8 device-name | `6884990` | New `auth/device-name.ts` — UA → "Chrome on macOS" label | 4 new |
+| C · T9 env webUrl | `c2df28d` | `Env.webUrl: string` + `WEB_URL` env default `chat.ai-cognit.com` | 1 new |
+| D · T13 ClientHub | `1dbfa8e` | 9 new methods (`subscribeList` / `unsubscribeThread` / `publishThreadMeta` / `publishThreadCreated` / `publishThreadDeleted` / `publishUserBroadcast` / `publishHostMeta` / `sendToConn` / `unsubscribeList`) + `listSubs` state | 4 new (8 total) |
+| E · T7 protocol | `c01eb30` | `clientToCloudSchema` + 4 SP-2 variants; `cloudToClientSchema` + 9 SP-2 variants; SP-1 variants preserved | 15 new (35 total in contract) |
+
+**Merge:** Five `git merge --no-ff` into main (`fee79af af98d58 dc27236 2b31b9b
+c088c1e`). Plus follow-up `142bb5f` removing Track D's 4 temp
+`as unknown as CloudToClient` casts now that Track E's protocol types exist.
+
+**Merged total:** 84 → 145 (+61, of which ~12 cloud-helper net new, +15 contract
+parse tests, +rebuilt cloud surface count). `pnpm -r build` green, both
+typechecks clean, desktop bundle 269 KB JS.
+
+### Fanout effectiveness
+
+- ~395 lines new (tests + impl across 10 files)
+- 5 agent total wallclock ≈ 7 min (slowest A 7.1min; fastest C 5.4min)
+- Sequential estimate ≈ 35 min → saved ~28 min
+- Integration gate time ≈ 4 min (diff/contract checks + 5 merges + cast cleanup + post-merge build/test/typecheck)
+- Conflicts / rejections: 0 true conflicts. 0 boundary violations.
+- 0 stash incidents (batch 1's lesson successfully baked into prompts)
+
+### Lessons
+
+1. **"Sections that look serial may have isolated tasks inside."** Plan
+   Sections 2-6 are mostly serial because of dispatcher/chat interdependencies,
+   but T7 / T8-device-name / T9-env / T11 / T13-methods are pure additions in
+   their own files. Same pattern as batch 1 (which split DB Section 1 into 5
+   parallel helpers). **Heuristic: scan the plan for "new file" tasks + "add
+   method to isolated class" tasks; those parallelize even inside otherwise-serial
+   sections.**
+2. **Temp `as unknown as` cast for cross-track contract gap** worked.
+   Track D needed a wire type that Track E was creating in parallel; rather
+   than serialize, we let D use casts with explicit "Track E will provide"
+   comments. Integration lead spent 2 min removing 4 cast lines post-merge.
+   Pattern is reusable for any future "type producer + type consumer"
+   parallel split.
+3. **Batch 1 stash lesson stuck.** Adding "**don't use `git stash`**" to
+   every prompt resulted in 0 stash incidents this batch. Per /fanout
+   playbook: lessons go into the next batch's prompts immediately.
+4. **3 agents independently noticed `server.e2e.test.ts` ECONNREFUSED flake
+   when running full `pnpm vitest run packages/cloud` in parallel.** Each
+   verified it disappeared on isolated re-run. This is a real port-reuse
+   issue under concurrent worktrees — not new with this batch but worth
+   filing for future work: either teach the e2e test to pick a random free
+   port, or sequentialize via `vitest --pool=forks --poolOptions.forks.singleFork`.
+
+### Sovereignty table
+
+| Track | Independent path | Forbidden | Delivered |
+|---|---|---|---|
+| A | `packages/cloud/src/host-router.{ts,test.ts}` | chat.ts, host-ws.ts, contract | 3 new tests pass + `getHostForUser` retained |
+| B | `packages/cloud/src/auth/device-name.{ts,test.ts}` (new) | other auth/, schema, routes | 4 new tests pass |
+| C | `packages/cloud/src/env.{ts,test.ts}` | server.ts, main.ts, routes | 1 new test pass |
+| D | `packages/cloud/src/client-hub.{ts,test.ts}` | routes/client.ts, contract | 4 new tests pass; 4 temp casts cleaned post-merge |
+| E | `packages/contract/src/protocol.{ts,test.ts}` | cloud, desktop | 15 new tests pass |
+
+### Branches now
+
+- `main`: 7 new commits (5 merges + 1 cast cleanup + this log) on top of `7b597b5`
+- All `track/sp2b2-*` branches deleted (local; not pushed to origin)
+- `.worktrees/sp2b2-*/` removed
+
+### Next candidates
+
+- **Serial (me) next:** T8 routes callback refactor + T9 routes plumbing
+  + T10 revoke check + T12 host-ws publishHostMeta + T13 routes wiring
+  + T14-T16 chat dispatcher state machine — these all collide on
+  `routes/client.ts` / `chat.ts` and need to flow as one author.
+- **Batch 3 (after serial run lands T16):** T17 / T18 / T19 = settings
+  routes (`/api/identities`, `/api/devices`, `/api/hosts` PATCH+DELETE),
+  three independent route files. Ready to fan-out as soon as serial work
+  ends.
+- **Batch 4 (after Section 8 extract):** apps/web scaffold + settings hooks
+  + SettingsPage UI, three agents on independent subdirs.
+
+---
