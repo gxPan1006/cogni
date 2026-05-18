@@ -47,6 +47,17 @@ const auth = makeAuth({
 
 const user = await findOrCreateUserByEmail(db, "dev-manual@local.test");
 await upsertIdentity(db, user.id, "dev", "manual");
-const token = await auth.issueToken({ userId: user.id, tenantId: user.tenantId });
+// SP-2: every JWT needs an auth_session row so WS handshake's revoke check has
+// something to look up. This dev-token script creates a fresh session each run.
+const { createAuthSession } = await import("../db/auth-sessions.js");
+const session = await createAuthSession(db, {
+  userId: user.id,
+  deviceName: "Desktop App (dev — mint-dev-token)",
+});
+const token = await auth.issueToken({
+  userId: user.id,
+  tenantId: user.tenantId,
+  sessionId: session.id,
+});
 console.log(token);
 process.exit(0);

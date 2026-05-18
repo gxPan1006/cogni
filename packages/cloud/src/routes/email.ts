@@ -2,12 +2,22 @@ import type { Hono } from "hono";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { RateLimiter } from "../rate-limit.js";
+import { findOrLinkUser } from "../auth/find-or-link.js";
+import { createAuthSession } from "../db/auth-sessions.js";
+import { deriveDeviceName } from "../auth/device-name.js";
 import { logger } from "@cogni/shared";
 import type { ServerDeps } from "../server.js";
 
-interface PendingMagic { email: string; createdAt: number; }
+type Origin = "desktop" | "web";
 
-const emailSchema = z.object({ email: z.string().email() });
+interface PendingMagic { email: string; origin: Origin; createdAt: number }
+
+const emailSchema = z.object({
+  email: z.string().email(),
+  // SP-2: web SPA at chat.ai-cognit.com calls with origin="web" so the link in
+  // the email points back to a https:// URL instead of a cogni:// deep link.
+  origin: z.enum(["desktop", "web"]).optional(),
+});
 const magicSchema = z.object({ magic: z.string().min(20).max(128) });
 
 /**
@@ -53,6 +63,7 @@ export function registerEmailRoutes(app: Hono, deps: ServerDeps): void {
     const parsed = emailSchema.safeParse(raw);
     if (!parsed.success) return c.json({ error: "invalid email" }, 400);
     const email = parsed.data.email.toLowerCase();
+    const origin: Origin = parsed.data.origin ?? "desktop";
 
     const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim()
       ?? c.req.header("x-real-ip")
@@ -62,9 +73,14 @@ export function registerEmailRoutes(app: Hono, deps: ServerDeps): void {
     }
 
     const token = randomBytes(32).toString("base64url");
-    pending.set(token, { email, createdAt: Date.now() });
+    pending.set(token, { email, origin, createdAt: Date.now() });
 
-    const magicUrl = `cogni://auth?magic=${token}`;
+    // The link the user clicks in their inbox depends on which client opened
+    // the send. Desktop gets a cogni:// deep link that the Tauri app intercepts;
+    // web gets a https:// URL that the SPA route handler picks up.
+    const magicUrl = origin === "web"
+      ? `${deps.webUrl}/auth/email/callback?token=${token}`
+      : `cogni://auth?magic=${token}`;
     try {
       await deps.emailTransport.sendMagicLink({
         to: email,
@@ -90,11 +106,25 @@ export function registerEmailRoutes(app: Hono, deps: ServerDeps): void {
     }
     pending.delete(parsed.data.magic);
 
-    const { findOrCreateUserByEmail } = await import("../db/users.js");
-    const { upsertIdentity } = await import("../db/identities.js");
-    const user = await findOrCreateUserByEmail(deps.db, entry.email);
-    await upsertIdentity(deps.db, user.id, "email", entry.email);
-    const token = await deps.auth.issueToken({ userId: user.id, tenantId: user.tenantId });
+    // SP-2: findOrLinkUser auto-merges by verified email if the user already
+    // exists under another provider (Google / dev-token). For magic-link the
+    // identity sub IS the lowercased email.
+    const user = await findOrLinkUser(deps.db, {
+      kind: "email", sub: entry.email, email: entry.email,
+    });
+    const userAgent = c.req.header("user-agent") ?? undefined;
+    const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
+    const session = await createAuthSession(deps.db, {
+      userId: user.userId,
+      deviceName: deriveDeviceName(userAgent, entry.origin),
+      ...(userAgent !== undefined ? { userAgent } : {}),
+      ...(ip ? { ip } : {}),
+    });
+    const token = await deps.auth.issueToken({
+      userId: user.userId,
+      tenantId: user.tenantId,
+      sessionId: session.id,
+    });
     return c.json({ token });
   });
 }

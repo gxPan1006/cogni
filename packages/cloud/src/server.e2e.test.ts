@@ -52,7 +52,15 @@ describe("cloud server e2e (headless spine)", () => {
       jwtSecret: "test-secret-test-secret-test-sec",
       google: { clientId: "x", clientSecret: "y", redirectUri: "http://x/cb" },
     });
-    const jwt = await auth.issueToken({ userId: user.id, tenantId: user.tenantId });
+    // SP-2: every JWT carries an auth_session id; create one for this test.
+    const { createAuthSession } = await import("./db/auth-sessions.js");
+    const session = await createAuthSession(db, {
+      userId: user.id,
+      deviceName: "test e2e",
+    });
+    const jwt = await auth.issueToken({
+      userId: user.id, tenantId: user.tenantId, sessionId: session.id,
+    });
 
     const hosts = new HostRouter();
     const clients = new ClientHub();

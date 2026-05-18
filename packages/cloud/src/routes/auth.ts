@@ -1,11 +1,25 @@
 import type { Hono } from "hono";
 import { generateState, generateCodeVerifier, decodeIdToken } from "arctic";
+import { findOrLinkUser } from "../auth/find-or-link.js";
 import { findOrCreateUserByEmail } from "../db/users.js";
 import { upsertIdentity } from "../db/identities.js";
+import { createAuthSession } from "../db/auth-sessions.js";
+import { deriveDeviceName } from "../auth/device-name.js";
 import { logger } from "@cogni/shared";
 import type { ServerDeps } from "../server.js";
 
-interface PendingLogin { codeVerifier: string; redirect: string; createdAt: number }
+type Origin = "desktop" | "web";
+
+interface PendingLogin {
+  codeVerifier: string;
+  /** Post-callback URL to send the user back to (with token attached). */
+  redirect: string;
+  /** Where the login attempt originated; controls callback redirect_uri + how the token is delivered. */
+  origin: Origin;
+  /** The exact redirect_uri Google was given in the auth request. Token exchange MUST repeat the same value. */
+  redirectUri: string;
+  createdAt: number;
+}
 
 const DEFAULT_REDIRECT = "cogni://auth";
 
@@ -23,6 +37,17 @@ export function safeRedirect(raw: string | undefined): string {
   }
 }
 
+function readOrigin(raw: string | undefined): Origin {
+  return raw === "web" ? "web" : "desktop";
+}
+
+/** Per-origin redirect_uri the cloud uses with Google. Must be pre-registered in GCP. */
+function callbackUriFor(deps: ServerDeps, origin: Origin): string {
+  return origin === "web"
+    ? `${deps.webUrl}/auth/google/callback`
+    : `${deps.publicUrl}/auth/google/callback`;
+}
+
 export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
   // SP-1: single-node in-memory state store. SP-2 moves this to a shared store.
   const pending = new Map<string, PendingLogin>();
@@ -34,30 +59,39 @@ export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
 
   // Dev-only: signs a JWT for a stand-in user, bypassing Google OAuth.
   // Refuses to register in production. Used by the desktop dev fallback in
-  // apps/desktop/src/useAuth.ts when the user has no localStorage token —
-  // makes dogfood instant on networks where Google OAuth is unreachable
-  // (e.g. flaky GFW). Mirrors the standalone packages/cloud/src/scripts/
-  // mint-dev-token.ts but over HTTP so the desktop can self-serve.
+  // apps/desktop/src/useAuth.ts. SP-2: also creates an auth_sessions row so
+  // the JWT carries a real sessionId and the WS handshake's revocation check
+  // can find it.
   if (process.env.NODE_ENV !== "production") {
     app.post("/auth/dev-token", async (c) => {
       const user = await findOrCreateUserByEmail(deps.db, "dev-manual@local.test");
       await upsertIdentity(deps.db, user.id, "dev", "manual");
+      const session = await createAuthSession(deps.db, {
+        userId: user.id,
+        deviceName: "Desktop App (dev)",
+      });
       const token = await deps.auth.issueToken({
         userId: user.id,
         tenantId: user.tenantId,
+        sessionId: session.id,
       });
       return c.json({ token });
     });
   }
 
-  // Desktop app opens this in the system browser with ?redirect=cogni://auth
+  // Two callers:
+  //   • desktop: opens this in the system browser with ?redirect=cogni://auth (and origin=desktop by default)
+  //   • web:    redirects user here with ?origin=web; cloud sends them to chat.ai-cognit.com/chat afterwards
   app.get("/auth/google/start", (c) => {
     sweep();
-    const redirect = safeRedirect(c.req.query("redirect"));
+    const origin = readOrigin(c.req.query("origin"));
+    const redirect = origin === "web" ? `${deps.webUrl}/chat` : safeRedirect(c.req.query("redirect"));
+    const redirectUri = callbackUriFor(deps, origin);
     const state = generateState();
     const codeVerifier = generateCodeVerifier();
-    pending.set(state, { codeVerifier, redirect, createdAt: Date.now() });
-    const url = deps.auth.google.createAuthorizationURL(state, codeVerifier, ["openid", "email"]);
+    pending.set(state, { codeVerifier, redirect, origin, redirectUri, createdAt: Date.now() });
+    const google = deps.auth.makeGoogle(redirectUri);
+    const url = google.createAuthorizationURL(state, codeVerifier, ["openid", "email"]);
     return c.redirect(url.toString());
   });
 
@@ -70,7 +104,8 @@ export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
     pending.delete(state);
 
     try {
-      const tokens = await deps.auth.google.validateAuthorizationCode(code, entry.codeVerifier);
+      const google = deps.auth.makeGoogle(entry.redirectUri);
+      const tokens = await google.validateAuthorizationCode(code, entry.codeVerifier);
       const claims = decodeIdToken(tokens.idToken()) as { sub?: unknown; email?: unknown };
       if (typeof claims.sub !== "string") return c.text("invalid id token", 400);
       const sub = claims.sub;
@@ -78,11 +113,27 @@ export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
       if (typeof claims.email !== "string") {
         logger.warn({ sub }, "google id token had no email claim; using fallback");
       }
-      const user = await findOrCreateUserByEmail(deps.db, email);
-      await upsertIdentity(deps.db, user.id, "google", sub);
-      const token = await deps.auth.issueToken({ userId: user.id, tenantId: user.tenantId });
+      // SP-2: auto-merge by verified email if the user already exists under
+      // another provider (e.g. magic-link).
+      const user = await findOrLinkUser(deps.db, { kind: "google", sub, email });
+      const userAgent = c.req.header("user-agent") ?? undefined;
+      const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
+      const session = await createAuthSession(deps.db, {
+        userId: user.userId,
+        deviceName: deriveDeviceName(userAgent, entry.origin),
+        ...(userAgent !== undefined ? { userAgent } : {}),
+        ...(ip ? { ip } : {}),
+      });
+      const token = await deps.auth.issueToken({
+        userId: user.userId,
+        tenantId: user.tenantId,
+        sessionId: session.id,
+      });
+      // Web origin: deliver token in URL fragment so it doesn't end up in
+      // nginx access logs. Desktop origin: query param into cogni:// deep link.
       const target = new URL(entry.redirect);
-      target.searchParams.set("token", token);
+      if (entry.origin === "web") target.hash = `token=${token}`;
+      else target.searchParams.set("token", token);
       return c.redirect(target.toString());
     } catch (err) {
       logger.warn({ err: String(err) }, "google oauth callback failed");
