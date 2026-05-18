@@ -1,168 +1,160 @@
-/* ------------------------------------------------------------------------ *
- * Base — reset + body + native-element defaults + reusable primitives.
- *
- * Loaded after tokens.css. All values reference tokens — no literals.
- * ------------------------------------------------------------------------ */
+/* Cogni — Base · resets, typography defaults, type scale */
 
-*, *::before, *::after { box-sizing: border-box; }
-
-html, body, #root { height: 100%; }
+*,*::before,*::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
 
 body {
-  margin: 0;
   font-family: var(--font-sans);
-  font-size: var(--text-base);
-  font-weight: var(--weight-regular);
-  line-height: var(--leading-normal);
-  color: var(--fg);
-  background: var(--bg-app);
-  overflow: hidden; /* desktop app — content scrolls inside panels, not page */
+  color: var(--ink);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-user-select: none;
-  user-select: none;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'ss01', 'cv11';
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-/* selectable in places we want it (chat text, code, inputs) */
-.selectable, input, textarea, pre, code {
-  -webkit-user-select: text;
-  user-select: text;
-}
+/* ── Type scale ──────────────────────────────── */
+.t-display { font-size: 48px; line-height: 1.05; letter-spacing: -0.022em; font-weight: 600; }
+.t-title-1 { font-size: 30px; line-height: 1.12; letter-spacing: -0.018em; font-weight: 600; }
+.t-title-2 { font-size: 22px; line-height: 1.2; letter-spacing: -0.012em; font-weight: 600; }
+.t-h1      { font-size: 18px; line-height: 1.3; letter-spacing: -0.008em; font-weight: 600; }
+.t-h2      { font-size: 15px; line-height: 1.35; letter-spacing: -0.004em; font-weight: 600; }
+.t-h3      { font-size: 11.5px; line-height: 1.35; letter-spacing: 0.06em; font-weight: 600; text-transform: uppercase; color: var(--muted); }
+.t-body    { font-size: 14px; line-height: 1.55; }
+.t-body-lg { font-size: 15.5px; line-height: 1.6; }
+.t-small   { font-size: 13px; line-height: 1.45; }
+.t-tiny    { font-size: 11px; line-height: 1.3; letter-spacing: 0.03em; }
+.t-mono    { font-family: var(--font-mono); font-size: 12px; letter-spacing: -0.005em; }
+.t-serif   { font-family: var(--font-sans); }
 
-button {
-  font: inherit;
-  color: inherit;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-}
+.t-muted { color: var(--muted); }
+.t-ink-2 { color: var(--ink-2); }
+.t-accent { color: var(--accent-ink); }
 
-input, textarea {
-  font: inherit;
-  color: inherit;
-  background: transparent;
-  border: 0;
-  outline: 0;
-}
-
-a {
-  color: var(--accent);
-  text-decoration: none;
-}
-a:hover { color: var(--accent-strong); }
-
-/* native scrollbar — slim, matches palette */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb {
-  background: var(--scroll-thumb);
-  border-radius: var(--radius-pill);
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-::-webkit-scrollbar-thumb:hover { background-color: var(--border-strong); background-clip: content-box; }
-::-webkit-scrollbar-track { background: transparent; }
-
-/* focus ring for keyboard users — only on interactive elements. A universal
-   :focus-visible was painting an orange outline around plain <div>s that
-   happened to be focused (browsers focus the closest scrollable ancestor on
-   wheel events, etc.) — visible in screenshots as a ring around the banner. */
-button:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible,
-a:focus-visible,
-[tabindex]:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
-
-/* ─── reusable primitives (used by ≥2 components) ──────────────────────── */
-
-/* Square icon button with hover wash. Sizes via modifier classes. */
-.icon-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  display: grid;
-  place-items: center;
-  color: var(--fg-dim);
-  transition: background var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out);
-}
-.icon-btn:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
-.icon-btn:active:not(:disabled) { background: var(--hover-strong); }
-.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.icon-btn svg { width: 16px; height: 16px; }
-
-.icon-btn--lg { width: 36px; height: 36px; }
-.icon-btn--lg svg { width: 20px; height: 20px; }
-
-/* Pill-shaped accent button (used in Login, Composer send, etc.) */
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-5);
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: #ffffff;
-  font-weight: var(--weight-medium);
-  font-size: var(--text-base);
-  transition: background var(--duration-fast) var(--ease-out),
-              transform var(--duration-fast) var(--ease-out);
-}
-.btn-primary:hover:not(:disabled) { background: var(--accent-strong); }
-.btn-primary:active:not(:disabled) { transform: translateY(1px); }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* Ghost / tertiary button — used in welcome chips, dropdown triggers */
-.btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--fg-dim);
-  font-size: var(--text-sm);
-  transition: background var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out);
-}
-.btn-ghost:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
-
-/* Inline pill (e.g. "Adaptive" badge next to model name) */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-/* Banner — full-width strip used for connection / host status. Variants
-   set background via --banner-bg / --banner-fg overrides. Display + width
-   are explicit because dogfood found webview edge cases where the banner
-   was collapsing to fit-content instead of stretching across the main slot. */
-.banner {
-  display: block;
+/* ── Frame primitives ────────────────────────── */
+.frame {
   width: 100%;
-  box-sizing: border-box;
-  padding: var(--space-2) var(--space-5);
-  font-size: var(--text-sm);
-  color: var(--banner-fg, var(--fg));
-  background: var(--banner-bg, var(--hover));
-  border-bottom: 1px solid var(--border);
-  z-index: var(--z-banner);
-  text-align: center;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-.banner--warning { --banner-bg: var(--warning-bg); --banner-fg: var(--warning-fg); }
-.banner--danger  { --banner-bg: var(--danger-bg);  --banner-fg: var(--danger-fg); }
-.banner--success { --banner-bg: var(--success-bg); --banner-fg: var(--success-fg); }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-1);
+}
+
+.divider {
+  height: 1px;
+  background: var(--line);
+  width: 100%;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  background: var(--surface-3);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  display: inline-block;
+}
+.dot-online { background: var(--good); box-shadow: 0 0 0 3px var(--good-soft); }
+.dot-offline { background: var(--muted-2); }
+.dot-warn { background: var(--warn); }
+.dot-bad { background: var(--bad); }
+.dot-accent { background: var(--accent); }
+
+/* ── Buttons ─────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--r-2);
+  font-size: 13px; font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+.btn:hover { background: var(--bg-sunk); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.btn-primary:hover { background: var(--ink-2); }
+.btn-accent {
+  background: var(--accent);
+  color: oklch(98% 0.01 80);
+  border-color: var(--accent);
+}
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--bg-sunk); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+/* ── Inputs ──────────────────────────────────── */
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input:focus { border-color: var(--ink-2); box-shadow: 0 0 0 3px var(--surface-3); }
+.input::placeholder { color: var(--muted-2); }
+
+/* Scrollbar fade */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--muted-2); }
+
+/* Paper texture (subtle noise) */
+.paper {
+  background-image:
+    radial-gradient(oklch(0% 0 0 / 0.012) 1px, transparent 1px),
+    radial-gradient(oklch(0% 0 0 / 0.008) 1px, transparent 1px);
+  background-size: 7px 7px, 13px 13px;
+  background-position: 0 0, 3px 4px;
+}
+
+/* ── Top-level Shell layout ───────────────────
+   Shell.tsx renders <div class="layout">[Sidebar][<div class="main">…</div>]</div>.
+   Sidebar widths live in sidebar.css; here we only own the outer flex axis. */
+html, body, #root { height: 100%; }
+.layout {
+  display: flex;
+  height: 100vh;
+  background: var(--bg);
+  overflow: hidden;
+}
+.layout > .main {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}

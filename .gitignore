@@ -15,3 +15,5 @@ build/
 *.tsbuildinfo
 # Per-commit work logs kept locally only (per ~/.claude/CLAUDE.md convention)
 changelog/
+# Playwright MCP screenshots / snapshots from local UI verification
+.playwright-mcp/
