@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { logger } from "@cogni/shared";
 import { listThreads, createThread, getThreadDetail, threadBelongsToUser } from "../db/threads.js";
 import { listEventsSince } from "../db/sessions.js";
-import { createHost, getUserHosts } from "../db/hosts.js";
+import { createHost, getActiveHostsForUser } from "../db/hosts.js";
 import type { ServerDeps } from "../server.js";
 
 /**
@@ -66,7 +66,8 @@ export function registerClientRoutes(
   });
   app.get("/api/hosts", async (c) => {
     const { userId } = c.get("claims");
-    const hosts = await getUserHosts(deps.db, userId);
+    // SP-2: excludes soft-removed hosts (filter on hosts.removed_at IS NULL).
+    const hosts = await getActiveHostsForUser(deps.db, userId);
     return c.json(hosts.map((h) => ({ id: h.id, name: h.name, status: h.status })));
   });
 
