@@ -76,13 +76,24 @@ describe("cloud server e2e (headless spine)", () => {
       publicUrl: "http://localhost",
       webUrl: "https://chat.ai-cognit.com",
     });
-    const server = serve({ fetch: app.fetch, port: 0 });
+    // `serve()` calls `server.listen()` and returns synchronously — the TCP
+    // socket isn't bound yet. Reading `server.address()` immediately can race
+    // against the actual listen, and under full-suite CPU pressure (other
+    // workers running pglite/WASM) the gap is wide enough that the WS connect
+    // below races to a not-yet-listening port → ECONNREFUSED 127.0.0.1:<port>.
+    // Wait on the listening callback to get the bound address, eliminating the
+    // race. Also pin to `127.0.0.1` so the WS client doesn't fall through the
+    // localhost dual-stack resolver (::1 + 127.0.0.1) which masks errors as
+    // ECONNRESET on the IPv6 leg.
+    const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
+      const s = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" }, () => resolve(s));
+    });
     injectWebSocket(server);
     stop = () => new Promise<void>((resolve) => server.close(() => resolve()));
     const port = (server.address() as { port: number }).port;
 
     // fake Runner Host connects + registers
-    const hostWs = new WebSocket(`ws://localhost:${port}/host/ws?token=${hostReg.registrationToken}`);
+    const hostWs = new WebSocket(`ws://127.0.0.1:${port}/host/ws?token=${hostReg.registrationToken}`);
     const host = reader(hostWs);
     await new Promise((r) => hostWs.once("open", r));
     hostWs.send(
@@ -97,7 +108,7 @@ describe("cloud server e2e (headless spine)", () => {
     expect((await host.next()).t).toBe("registered");
 
     // fake UI client connects + subscribes
-    const clientWs = new WebSocket(`ws://localhost:${port}/api/ws?token=${jwt}`);
+    const clientWs = new WebSocket(`ws://127.0.0.1:${port}/api/ws?token=${jwt}`);
     const client = reader(clientWs);
     await new Promise((r) => clientWs.once("open", r));
     clientWs.send(JSON.stringify({ t: "subscribe", threadId: thread.id }));
