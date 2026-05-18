@@ -15,6 +15,7 @@ import { registerClientRoutes } from "./routes/client.js";
 import { registerIdentitiesRoutes } from "./routes/identities.js";
 import { registerDevicesRoutes } from "./routes/devices.js";
 import { registerHostsRoutes } from "./routes/hosts.js";
+import { registerHealthRoutes } from "./routes/health.js";
 
 declare module "hono" {
   interface ContextVariableMap {
@@ -62,7 +63,9 @@ export function createServer(deps: ServerDeps) {
   // them. Cheap to enable across the whole prefix.
   app.use("/auth/*", corsMiddleware);
 
-  app.get("/health", (c) => c.json({ ok: true }));
+  // SP-2 followup: `/healthz` (canonical) + `/health` (legacy alias for CF
+  // probe) now exercise a real DB ping instead of returning a static ok.
+  registerHealthRoutes(app, deps);
 
   app.onError((err, c) => {
     logger.error({ err: String(err), path: c.req.path }, "unhandled request error");
