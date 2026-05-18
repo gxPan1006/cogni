@@ -285,12 +285,47 @@ Web 端:                                    Cloud:
 - **场景 D · 同 user 两 Mac 都在线:** 两 Mac + 一 Web,共三个 conn。某 thread T 的
   fan-out 触达三个 conn。
 
+### 客户端 WS 生命周期
+
+**一个 UI 会话 = 一条 WS。**`/api/ws` 是 per-user 的(handshake 时校 JWT),不是
+per-thread 的;切换正在看的 thread 只是在这条 WS 上发 `unsubscribe-thread` /
+`subscribe-thread` 帧,**不重建连接**。
+
+落到客户端代码:
+
+- WS 由 `packages/ui/src/transport/ws-client.ts` 持有(`api.wsClient` 单例),
+  生命周期跟 `ApiClient` 走。
+- `useThreadStream(api, threadId)` 在 mount / threadId change 时只调
+  `wsClient.subscribeThread({ threadId, getLastSeq, onFrame })`,cleanup 调返回的
+  `unsubscribe()`。
+- `connected` 状态来自 `wsClient.onConnectionChange`,只随**真实** `ws.onopen` /
+  `ws.onclose` 翻转 — 切线程不影响。"与服务器的连接已断开,正在重连…" 那条胶囊
+  只有 WS 真断时才出现。
+- 重连(`onclose` → 指数退避)后,`onopen` 会自动用每个订阅当前的 `lastSeq` 重发
+  `subscribe-thread`,catchup 透明完成。
+
+**帧路由(`ws-client.ts:dispatch`):**
+
+- 带 `threadId` 的帧(`event` / `message` / `catchup-complete` / `catchup-too-long`
+  / `host-fallback-prompt` / `no-host-online`)→ 路由给该 thread 的订阅者。
+- 用户级帧(`host-status` / `host-meta` / `error`)→ fan-out 给所有活跃订阅者。
+- list-channel 帧(`thread-meta` / `thread-created` / `thread-deleted` /
+  `device-list-changed`)目前不在 thread 订阅者通道上,等 list 消费者需要时再
+  挂自己的 listener。
+
+> 历史教训:SP-2 batch 4 落地时这层被合并进了 `useThreadStream`,WS 被
+> `useEffect([threadId])` 拥有,导致每次切 session 都关连接重开,UI 闪一下"重连中"。
+> 后续 follow-up 把 WS 提到 `ws-client.ts`(plan §"New files" 早就列了)真正落地。
+
 ### 实现细节
 
 - **订阅鉴权:** `subscribe-thread {threadId}` 校验 `threads.user_id === conn.userId`,
   否则关 WS 4003。
 - **大量历史追平:** `MAX_CATCHUP=10000`。超了发 `{type:"catchup-too-long"}`,
   客户端去 HTTP 拉最新 messages,然后从最新 seq 开始 live(等于跳过中间)。
+- **dispatch 响应路由:** `host-fallback-prompt` / `no-host-online` 帧带 `threadId`
+  (而不是只带 `pendingMessageId`),这样多路复用的 WS 上客户端能直接把响应路给
+  对应 hook,不依赖"最近一次 send 是哪个 thread"的本地关联。
 - **race / 并发发消息:** Web 和 Mac 同时点回车 → 各自落 `messages` 表(created_at
   排序天然有序)。dispatcher 串行送给 host 的同一 runner session(顺序处理)。V1
   不去重。

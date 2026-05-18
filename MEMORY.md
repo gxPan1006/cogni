@@ -1,0 +1,19 @@
+# cogni 项目记忆
+
+## 验证前必做：核对运行实例
+
+每次完成"新功能 / bug 修复"且需要用户人肉校验时，**先确认所有相关端跑的都是最新代码、且没有多个实例互相打架**，再让用户去试。否则用户在旧版本/旧进程上看到"没修好"，会绕一大圈才发现是进程问题。
+
+具体检查清单：
+
+1. **列进程**：`ps -ef | grep -i "tauri\|cargo\|vite\|node" | grep -v grep`
+   - 看是否有多份 `tauri dev` / `vite` / 旧 `Cogni.app` bundle 同时在跑
+   - 看是否有别的 worktree（`.worktrees/...`）里的 dev server 占着端口
+2. **确认 web 端**：本地起的 `pnpm --filter web dev`、或生产 `chat.ai-cognit.com`，搞清楚用户访问的是哪个、对应代码版本是不是我刚改的
+3. **确认 desktop 端**：用户启动的是 `pnpm --filter desktop tauri dev`（开发模式，跟随 vite HMR）还是已经 build 出来的 `Cogni.app`（旧产物，必须重新 build）
+4. **干净重启原则**：如果发现有混淆的多实例，**先 kill 旧的、再起新的**，避免用户对着旧 webview reload 然后觉得没修好
+5. **告诉用户具体怎么验**：哪个窗口、按什么键 reload（Tauri webview Cmd+R）、看哪个表现位
+
+### 为什么
+
+2026-05-18 修"切 session 闪重连"那次，我改完代码就让用户去试，结果用户机器上同时跑着中午 build 的 `Cogni.app`（旧）+ `pnpm tauri dev`（新），他看到的是旧 bundle，反馈"还是有红条"，往回查才发现是进程问题，浪费一轮。

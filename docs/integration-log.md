@@ -422,3 +422,41 @@ cloud, ui, contract).
 - **Final — Section 13 E2E:** run all 9 dogfood scenarios from spec §8.
 
 ---
+
+## SP-2 follow-up — multiplexed WS lifetime (2026-05-18, single-author)
+
+**User-visible symptom:** every sidebar click flashed the red 胶囊 "与服务器的
+连接已断开,正在重连…" and disabled the composer for a few hundred ms while a
+fresh WebSocket handshake completed.
+
+**Root cause:** `useThreadStream`'s `useEffect([api, threadId])` owned the
+WebSocket itself — every `threadId` change ran the cleanup
+(`ws.close()`) and re-entered `connect()`, even though the cloud's `/api/ws`
+is per-user and supports many `subscribe-thread` subscriptions on one socket.
+The SP-2 plan (line 27) had already prescribed a separate
+`packages/ui/src/transport/ws-client.ts`, but batch 4 collapsed everything
+into the hook. This follow-up actually lands `ws-client.ts`.
+
+**Changes:**
+
+| File | What |
+|---|---|
+| `packages/ui/src/transport/ws-client.ts` | new — `createWsClient(buildUrl)` returns long-lived multiplexed client; `subscribeThread()` returns an unsubscribe fn; per-thread frame routing + user-wide fan-out + onopen-driven resubscribe with latest `lastSeq`. |
+| `packages/ui/src/transport/api.ts` | `ApiClient.wsClient` lazy singleton (one WS per ApiClient). |
+| `packages/ui/src/hooks/useThreadStream.ts` | rewritten to consume `api.wsClient`. `connected` tracks the shared socket via `onConnectionChange`, no longer toggled by `threadId` change. |
+| `packages/contract/src/protocol.ts` | additive: `host-fallback-prompt` / `no-host-online` now carry `threadId` so the multiplexed client can route them. |
+| `packages/cloud/src/domains/chat.ts` | include `threadId` at the three emit sites. |
+| `packages/contract/src/protocol.test.ts` | updated parse fixtures. |
+| `packages/ui/src/transport/ws-client.test.ts` | new — 6 tests locking in the lifetime contract (switching subs ≠ reconnect, per-thread routing, user-wide fan-out, reconnect resubscribe with latest `lastSeq`, listener edges, `close()` stops reconnect loop). |
+| `docs/superpowers/specs/2026-05-18-cogni-sp2-accounts-sync-web-design.md` | new §"客户端 WS 生命周期" makes the contract explicit (one WS per UI session; thread switch = frame, not reconnect). |
+
+**User-visible behavior after:** clicking another chat in the sidebar leaves
+the composer status pill alone (still green / unchanged). The red 重连中
+胶囊 now only shows on a genuine socket drop.
+
+**Tests:** 177 → 183 (+6 ws-client). All green, full sweep ~32s.
+
+**Plan delta:** none — the plan already listed `ws-client.ts` as a new file;
+this follow-up finally aligns code with plan.
+
+---
