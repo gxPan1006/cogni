@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1040" role="img" aria-labelledby="title desc">
+  <title id="title">Cogni premium logo directions</title>
+  <desc id="desc">Four more polished logo directions for Cogni with wordmark and reverse samples.</desc>
+  <defs>
+    <linearGradient id="accent-p1" x1="106" y1="168" x2="188" y2="282" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#64d9c2"/>
+      <stop offset="1" stop-color="#2f9f8e"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#111827" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="1400" height="1040" fill="#f5f3ee"/>
+  <text x="64" y="72" fill="#101720" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="36" font-weight="720">Cogni logo directions</text>
+  <text x="64" y="106" fill="#667085" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="17">More designed, calmer, and closer to something you could actually ship. Pick P1-P4 or call out what to combine.</text>
+
+  <g transform="translate(64 150)" filter="url(#soft-shadow)">
+    <rect width="612" height="390" rx="28" fill="#ffffff"/>
+    <text x="34" y="48" fill="#667085" font-family="Geist Mono, ui-monospace, monospace" font-size="14" font-weight="650">P1</text>
+    <text x="34" y="76" fill="#101720" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="680">Aperture</text>
+    <text x="34" y="104" fill="#667085" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="14">A more premium C mark. Open, focused, less literal.</text>
+    <g transform="translate(34 142)">
+      <rect width="124" height="124" rx="34" fill="#11161f"/>
+      <path d="M78 38c-10.6-6.5-24.1-6.6-35.5-.5-20 10.7-27.4 35.6-16.7 55.5s35.6 27.4 55.5 16.7c10.7-5.8 17.5-15.7 19.5-26.6" fill="none" stroke="#f7f2e9" stroke-width="13" stroke-linecap="round"/>
+      <path d="M78 38 101 52 82 72" fill="none" stroke="url(#accent-p1)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="101" cy="52" r="7.5" fill="#64d9c2"/>
+    </g>
+    <text x="192" y="220" fill="#101720" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="54" font-weight="640">cogni</text>
+    <g transform="translate(34 304)">
+      <rect width="240" height="54" rx="16" fill="#11161f"/>
+      <path d="M43 17c-4.8-3-11.1-3.1-16.6-.2-9.1 4.9-12.5 16.2-7.6 25.2s16.2 12.5 25.2 7.6c4.9-2.6 8-7.2 8.9-12.2" fill="none" stroke="#f7f2e9" stroke-width="6" stroke-linecap="round"/>
+      <path d="M43 17 54 24 45 33" fill="none" stroke="#64d9c2" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="54" cy="24" r="3.5" fill="#64d9c2"/>
+      <text x="78" y="36" fill="#f7f2e9" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="26" font-weight="640">cogni</text>
+    </g>
+  </g>
+
+  <g transform="translate(724 150)" filter="url(#soft-shadow)">
+    <rect width="612" height="390" rx="28" fill="#ffffff"/>
+    <text x="34" y="48" fill="#667085" font-family="Geist Mono, ui-monospace, monospace" font-size="14" font-weight="650">P2</text>
+    <text x="34" y="76" fill="#101720" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="680">Thread</text>
+    <text x="34" y="104" fill="#667085" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="14">A continuous worker loop. More distinctive and kinetic.</text>
+    <g transform="translate(34 152)">
+      <path d="M0 67c0-35 28-63 63-63h27c26 0 47 21 47 47s-21 47-47 47H43c-17 0-31-14-31-31s14-31 31-31h54" fill="none" stroke="#101720" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M90 4c26 0 47 21 47 47 0 40-40 64-73 44" fill="none" stroke="#2fb7a2" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="43" cy="36" r="7" fill="#101720"/>
+      <circle cx="137" cy="51" r="7" fill="#2fb7a2"/>
+    </g>
+    <text x="192" y="220" fill="#101720" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="54" font-weight="640">cogni</text>
+    <g transform="translate(34 304)">
+      <rect width="240" height="54" rx="16" fill="#101720"/>
+      <path d="M20 33c0-13 10-23 23-23h10c10 0 17 7 17 17s-7 17-17 17H36c-6 0-11-5-11-11s5-11 11-11h20" fill="none" stroke="#f8fafc" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M53 10c10 0 17 7 17 17 0 15-15 24-27 17" fill="none" stroke="#2fb7a2" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="92" y="36" fill="#f8fafc" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="26" font-weight="640">cogni</text>
+    </g>
+  </g>
+
+  <g transform="translate(64 592)" filter="url(#soft-shadow)">
+    <rect width="612" height="390" rx="28" fill="#ffffff"/>
+    <text x="34" y="48" fill="#667085" font-family="Geist Mono, ui-monospace, monospace" font-size="14" font-weight="650">P3</text>
+    <text x="34" y="76" fill="#101720" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="680">Command</text>
+    <text x="34" y="104" fill="#667085" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="14">Best if Cogni should feel like a serious AI workbench.</text>
+    <g transform="translate(34 150)">
+      <rect width="132" height="120" rx="32" fill="#0c1220"/>
+      <path d="M35 34 63 60 35 86" fill="none" stroke="#f8fafc" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M78 86h31" fill="none" stroke="#46d3b7" stroke-width="11" stroke-linecap="round"/>
+      <path d="M83 34h18c11 0 20 9 20 20v4" fill="none" stroke="#46d3b7" stroke-width="7" stroke-linecap="round"/>
+      <circle cx="83" cy="34" r="7" fill="#46d3b7"/>
+    </g>
+    <text x="192" y="220" fill="#101720" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="54" font-weight="640">cogni</text>
+    <g transform="translate(34 304)">
+      <rect width="240" height="54" rx="16" fill="#0c1220"/>
+      <path d="M24 17 36 27 24 37" fill="none" stroke="#f8fafc" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M45 37h20" fill="none" stroke="#46d3b7" stroke-width="5.2" stroke-linecap="round"/>
+      <text x="92" y="36" fill="#f8fafc" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="26" font-weight="640">cogni</text>
+    </g>
+  </g>
+
+  <g transform="translate(724 592)" filter="url(#soft-shadow)">
+    <rect width="612" height="390" rx="28" fill="#ffffff"/>
+    <text x="34" y="48" fill="#667085" font-family="Geist Mono, ui-monospace, monospace" font-size="14" font-weight="650">P4</text>
+    <text x="34" y="76" fill="#101720" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="680">Index</text>
+    <text x="34" y="104" fill="#667085" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="14">Quiet, editorial, almost notebook-like. Less AI-cliche.</text>
+    <g transform="translate(40 154)">
+      <rect x="0" y="0" width="116" height="116" rx="32" fill="#f6f1e8"/>
+      <path d="M35 78V38h23c16 0 29 13 29 29v11" fill="none" stroke="#101720" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M35 38h46" fill="none" stroke="#101720" stroke-width="12" stroke-linecap="round"/>
+      <circle cx="84" cy="78" r="8" fill="#c06c45"/>
+    </g>
+    <text x="192" y="220" fill="#101720" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="54" font-weight="640">cogni</text>
+    <g transform="translate(34 304)">
+      <rect width="240" height="54" rx="16" fill="#101720"/>
+      <rect x="18" y="12" width="32" height="32" rx="10" fill="#f6f1e8"/>
+      <path d="M29 35V20h8c6 0 10 4 10 10v5" fill="none" stroke="#101720" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="47" cy="35" r="2.8" fill="#c06c45"/>
+      <text x="78" y="36" fill="#f8fafc" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="26" font-weight="640">cogni</text>
+    </g>
+  </g>
+</svg>

@@ -14,6 +14,7 @@
  */
 import type { ThreadSummary } from "@cogni/contract";
 import { Icon } from "./icons.js";
+import { LogoMark } from "./LogoMark.js";
 import "./sidebar.css";
 
 export function Sidebar(props: {
@@ -148,7 +149,7 @@ function ThreadButton({
 function Wordmark({ size = 22 }: { size?: number }) {
   return (
     <div className="sb__wordmark" style={{ fontSize: size }}>
-      <span className="sb__wordmark-c" style={{ width: size, height: size, fontSize: size * 0.56 }}>c</span>
+      <LogoMark className="sb__logo-mark" size={size} />
       <span className="sb__wordmark-text" style={{ fontSize: size * 0.78 }}>cogni</span>
     </div>
   );

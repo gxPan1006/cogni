@@ -14,6 +14,7 @@
  *   - Form card: Google button → divider → email input → submit
  */
 import { useEffect, useState } from "react";
+import { LogoMark } from "./LogoMark.js";
 import "./login.css";
 
 type State =
@@ -55,7 +56,7 @@ export function Login({
     <div className="login">
       <aside className="login__aside">
         <div className="login__brand">
-          <span className="login__wordmark-c">c</span>
+          <LogoMark className="login__logo-mark" size={26} />
           <span className="login__wordmark-text">cogni</span>
         </div>
         <div className="login__hero">

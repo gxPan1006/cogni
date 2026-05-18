@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 88" role="img" aria-labelledby="title desc">
+  <title id="title">Cogni logo option D</title>
+  <desc id="desc">A vertical spine mark connecting cloud, account, and local runner layers.</desc>
+  <g transform="translate(10 12)">
+    <rect width="64" height="64" rx="18" fill="#f8fafc"/>
+    <rect x="1" y="1" width="62" height="62" rx="17" fill="none" stroke="#d1d5db" stroke-width="2"/>
+    <path d="M32 16v32" fill="none" stroke="#111827" stroke-width="5" stroke-linecap="round"/>
+    <path d="M32 24c9 0 15 5 15 12 0 8-6 12-15 12-10 0-16-6-16-16 0-9 6-16 16-16" fill="none" stroke="#111827" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="32" cy="16" r="5" fill="#2563eb"/>
+    <circle cx="47" cy="36" r="5" fill="#f97316"/>
+    <circle cx="32" cy="48" r="5" fill="#10b981"/>
+  </g>
+  <text x="92" y="51" fill="#111827" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="30" font-weight="650">cogni</text>
+</svg>

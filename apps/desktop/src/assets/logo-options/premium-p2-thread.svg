@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 132" role="img" aria-labelledby="title desc">
+  <title id="title">Cogni premium logo P2 thread</title>
+  <desc id="desc">A thread-like continuous mark for AI work moving between cloud and device.</desc>
+  <path
+    d="M34 70c0-20 16-36 36-36h15c15 0 27 12 27 27s-12 27-27 27H59c-10 0-18-8-18-18s8-18 18-18h31"
+    fill="none"
+    stroke="#11161f"
+    stroke-width="10"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M85 34c15 0 27 12 27 27 0 23-23 37-42 25"
+    fill="none"
+    stroke="#2fb7a2"
+    stroke-width="10"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle cx="59" cy="52" r="5.5" fill="#11161f"/>
+  <circle cx="112" cy="61" r="5.5" fill="#2fb7a2"/>
+  <text x="146" y="80" fill="#11161f" font-family="Geist, Inter, ui-sans-serif, system-ui, sans-serif" font-size="44" font-weight="640" letter-spacing="0">cogni</text>
+</svg>
