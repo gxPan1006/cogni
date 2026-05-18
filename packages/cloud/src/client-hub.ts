@@ -72,15 +72,13 @@ export class ClientHub {
     status: "online" | "offline";
     lastSeen: string | null;
   }): void {
-    // SP-2 T7 contract types arriving in Track E — cast until protocol.ts gains host-meta.
-    const frame = { t: "host-meta", hostId: meta.hostId, name: meta.name, status: meta.status, lastSeen: meta.lastSeen } as unknown as CloudToClient;
+    const frame: CloudToClient = { t: "host-meta", hostId: meta.hostId, name: meta.name, status: meta.status, lastSeen: meta.lastSeen };
     this.sendToUser(userId, frame);
   }
 
   /** Fan-out a thread-meta update (title / lastMsgAt) to that user's list-subscribed clients only. */
   publishThreadMeta(userId: string, meta: { threadId: string; title: string; lastMsgAt: string }): void {
-    // SP-2 T7 contract types arriving in Track E — cast until protocol.ts gains thread-meta.
-    const frame = { t: "thread-meta", threadId: meta.threadId, title: meta.title, lastMsgAt: meta.lastMsgAt } as unknown as CloudToClient;
+    const frame: CloudToClient = { t: "thread-meta", threadId: meta.threadId, title: meta.title, lastMsgAt: meta.lastMsgAt };
     for (const id of this.listSubs) {
       const c = this.clients.get(id);
       if (c?.userId === userId) c.send(frame);
@@ -89,8 +87,7 @@ export class ClientHub {
 
   /** Fan-out a thread-created event to that user's list-subscribed clients only. */
   publishThreadCreated(userId: string, thread: { id: string; title: string; updatedAt: string }): void {
-    // SP-2 T7 contract types arriving in Track E — cast until protocol.ts gains thread-created.
-    const frame = { t: "thread-created", thread } as unknown as CloudToClient;
+    const frame: CloudToClient = { t: "thread-created", thread };
     for (const id of this.listSubs) {
       const c = this.clients.get(id);
       if (c?.userId === userId) c.send(frame);
@@ -99,8 +96,7 @@ export class ClientHub {
 
   /** Fan-out a thread-deleted event to that user's list-subscribed clients only. */
   publishThreadDeleted(userId: string, threadId: string): void {
-    // SP-2 T7 contract types arriving in Track E — cast until protocol.ts gains thread-deleted.
-    const frame = { t: "thread-deleted", threadId } as unknown as CloudToClient;
+    const frame: CloudToClient = { t: "thread-deleted", threadId };
     for (const id of this.listSubs) {
       const c = this.clients.get(id);
       if (c?.userId === userId) c.send(frame);
