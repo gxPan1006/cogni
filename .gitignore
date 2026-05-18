@@ -9,6 +9,7 @@ build/
 # Vite build-time env (no secrets — just public cloud URL). Tracked so CI / fresh
 # checkouts pick up production target without manual setup.
 !apps/desktop/.env.production
+!apps/web/.env.production
 .worktrees/
 .claude/
 .superpowers/
