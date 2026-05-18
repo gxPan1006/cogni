@@ -12,6 +12,9 @@ export type {
 // Hooks
 export { useThreadStream } from "./hooks/useThreadStream.js";
 export { useAuthCore } from "./hooks/useAuth-core.js";
+export { useDevices } from "./hooks/useDevices.js";
+export { useIdentities } from "./hooks/useIdentities.js";
+export { useHosts } from "./hooks/useHosts.js";
 
 // Components (chat core — used by desktop today, web in SP-2 batch 4)
 export { Sidebar } from "./components/Sidebar.js";
@@ -21,6 +24,8 @@ export { Welcome } from "./components/Welcome.js";
 export { Login } from "./components/Login.js";
 export { Icon } from "./components/icons.js";
 export { LogoMark } from "./components/LogoMark.js";
+export { HostFallbackCard } from "./components/HostFallbackCard.js";
+export { NoHostBanner } from "./components/NoHostBanner.js";
 
 // Lower-level chat building blocks (Conversation composes them; apps that
 // want to render messages outside of Conversation can use them directly)
