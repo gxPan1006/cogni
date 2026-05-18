@@ -11,6 +11,7 @@ export type {
 
 // Hooks
 export { useThreadStream } from "./hooks/useThreadStream.js";
+export { useAuthCore } from "./hooks/useAuth-core.js";
 
 // Components (chat core — used by desktop today, web in SP-2 batch 4)
 export { Sidebar } from "./components/Sidebar.js";

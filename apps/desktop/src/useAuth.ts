@@ -1,31 +1,32 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { useAuthCore } from "@cogni/ui";
 import { api } from "./api.js";
 
-const TOKEN_KEY = "cogni_token";
-
 /**
- * Holds the session JWT and routes incoming `cogni://auth?…` deep links to
- * the right auth flow.
+ * Desktop's Tauri shim around the platform-agnostic useAuthCore.
  *
- * Two URL shapes arrive at `cogni://auth`:
+ * Two URL shapes arrive via the `cogni://auth?…` deep link:
  *   ?token=<JWT>   — Google OAuth callback (cloud signs the JWT server-side,
- *                    hands it back in the redirect URL; we just store it)
- *   ?magic=<rand>  — Email magic link (we must POST it to
- *                    /auth/email/callback to exchange for a JWT)
+ *                    hands it back in the redirect URL; we just acceptToken)
+ *   ?magic=<rand>  — Email magic link (we POST to /auth/email/callback via
+ *                    acceptMagic to exchange for a JWT)
  *
  * Behaviour the user sees:
  *   - Click "用 Google 登录" → system browser opens, completes OAuth, macOS
- *     routes `cogni://auth?token=…` back to Cogni → app drops into Welcome.
+ *     routes `cogni://auth?token=…` back → app drops into Welcome.
  *   - Click "发送登录链接" → Login flips to "已发送…" → user clicks the link
  *     in their email client → macOS routes `cogni://auth?magic=…` back here
  *     → useAuth POSTs to /auth/email/callback → app drops into Welcome.
+ *   - In `vite dev` only: if no token yet, POST /auth/dev-token to bypass
+ *     Google entirely (dogfood on flaky-GFW networks).
  */
 export function useAuth() {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+  const { token, acceptToken, acceptMagic, logout } = useAuthCore(api);
 
+  // Tauri deep-link intake
   useEffect(() => {
     if (!isTauri()) return;
     let disposed = false;
@@ -34,36 +35,22 @@ export function useAuth() {
       for (const u of urls) {
         const parsed = tryParse(u);
         if (!parsed) continue;
-        if (parsed.kind === "token") {
-          localStorage.setItem(TOKEN_KEY, parsed.value);
-          setToken(parsed.value);
-        } else if (parsed.kind === "magic") {
-          try {
-            const { token: jwt } = await api.redeemMagic(parsed.value);
-            localStorage.setItem(TOKEN_KEY, jwt);
-            setToken(jwt);
-          } catch (e) {
-            console.warn("[useAuth] magic redeem failed", e);
-          }
+        if (parsed.kind === "token") acceptToken(parsed.value);
+        else if (parsed.kind === "magic") {
+          await acceptMagic(parsed.value).catch((e) => console.warn("[useAuth] magic redeem failed", e));
         }
       }
     };
-
     getCurrent().then(acceptUrls).catch((e) => console.warn("failed to read current deep link", e));
-    const unlisten = onOpenUrl((urls) => {
-      void acceptUrls(urls);
-    });
+    const unlisten = onOpenUrl((urls) => { void acceptUrls(urls); });
     return () => {
       disposed = true;
       unlisten.then((f) => f()).catch(() => undefined);
     };
-  }, []);
+  }, [acceptToken, acceptMagic]);
 
-  // Dev fallback: when running under `vite dev` (import.meta.env.DEV is true)
-  // and the user has no token, ask the cloud for one. This bypasses Google
-  // OAuth entirely so dogfood works on networks where Google is unreachable.
-  // `vite build` for production dead-code-eliminates the entire effect (the
-  // `import.meta.env.DEV` constant becomes `false` and the branch drops out).
+  // Dev fallback — only runs in `vite dev`; production build dead-code-eliminates
+  // the entire effect because `import.meta.env.DEV` becomes a literal `false`.
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     if (token) return;
@@ -71,16 +58,11 @@ export function useAuth() {
     fetch(`${api.cloudUrl}/auth/dev-token`, { method: "POST" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (alive && j && typeof j.token === "string") {
-          localStorage.setItem(TOKEN_KEY, j.token);
-          setToken(j.token);
-        }
+        if (alive && j && typeof j.token === "string") acceptToken(j.token);
       })
       .catch((e) => console.warn("[useAuth] dev-token fetch failed", e));
-    return () => {
-      alive = false;
-    };
-  }, [token]);
+    return () => { alive = false; };
+  }, [token, acceptToken]);
 
   const loginWithGoogle = () => {
     const url = `${api.cloudUrl}/auth/google/start?redirect=${encodeURIComponent("cogni://auth")}`;
@@ -93,11 +75,6 @@ export function useAuth() {
 
   const loginWithEmail = async (email: string): Promise<void> => {
     await api.sendMagicLink(email, "desktop");
-  };
-
-  const logout = () => {
-    localStorage.removeItem(TOKEN_KEY);
-    setToken(null);
   };
 
   return { token, loginWithGoogle, loginWithEmail, logout };
