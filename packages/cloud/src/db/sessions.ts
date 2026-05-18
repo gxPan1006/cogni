@@ -1,4 +1,4 @@
-import { eq, and, gt, asc, sql } from "drizzle-orm";
+import { eq, and, gt, asc, desc, isNull, sql } from "drizzle-orm";
 import { runnerSessions, events } from "./schema.js";
 import type { AnyDb } from "./users.js";
 import type { RunnerEvent, EventView, RunnerSessionStatus } from "@cogni/contract";
@@ -79,6 +79,73 @@ export async function listEventsSince(db: AnyDb, threadId: string, sinceSeq: num
     payload: r.payloadJson,
     createdAt: r.createdAt.toISOString(),
   }));
+}
+
+/**
+ * SP-2: open a new runner_session row for (thread, host, adapter).
+ * Unlike `getOrCreateRunnerSession`, this never reuses — a thread may have many
+ * historic sessions; the latest non-closed one is "current". Called when a
+ * thread is first picked up by a host, or when control switches to a new host.
+ */
+export async function openRunnerSession(
+  db: AnyDb,
+  input: { threadId: string; hostId: string; adapter: string },
+): Promise<RunnerSessionRow & { hostId: string }> {
+  const [row] = await db
+    .insert(runnerSessions)
+    .values({ threadId: input.threadId, hostId: input.hostId, adapter: input.adapter })
+    .returning();
+  return { ...toRow(row!), hostId: input.hostId };
+}
+
+/**
+ * SP-2: return the most recent non-closed session for a thread, or null if all
+ * sessions are closed (or none exist). This is the "who currently owns this
+ * thread" lookup used by the chat WS to decide whether to spawn a fresh
+ * session vs. resume.
+ */
+export async function getCurrentActiveSession(
+  db: AnyDb,
+  threadId: string,
+): Promise<(RunnerSessionRow & { hostId: string | null }) | null> {
+  const rows = await db
+    .select()
+    .from(runnerSessions)
+    .where(and(eq(runnerSessions.threadId, threadId), isNull(runnerSessions.closedAt)))
+    .orderBy(desc(runnerSessions.createdAt))
+    .limit(1);
+  if (!rows[0]) return null;
+  return { ...toRow(rows[0]), hostId: rows[0].hostId };
+}
+
+/**
+ * SP-2: mark a session closed (status='closed', closed_at=now). Called when
+ * control hands off to a new host, or when the host disconnects in a final
+ * state. The row stays for history; events keep referencing it.
+ */
+export async function closeRunnerSession(db: AnyDb, sessionId: string): Promise<void> {
+  await db
+    .update(runnerSessions)
+    .set({ status: "closed", closedAt: new Date() })
+    .where(eq(runnerSessions.id, sessionId));
+}
+
+/**
+ * SP-2: return the latest session for a thread, closed or not. Used when the
+ * UI needs to surface "last host that owned this thread" even after handoff.
+ */
+export async function getLatestSessionForThread(
+  db: AnyDb,
+  threadId: string,
+): Promise<(RunnerSessionRow & { hostId: string | null }) | null> {
+  const rows = await db
+    .select()
+    .from(runnerSessions)
+    .where(eq(runnerSessions.threadId, threadId))
+    .orderBy(desc(runnerSessions.createdAt))
+    .limit(1);
+  if (!rows[0]) return null;
+  return { ...toRow(rows[0]), hostId: rows[0].hostId };
 }
 
 function toRow(r: typeof runnerSessions.$inferSelect): RunnerSessionRow {
