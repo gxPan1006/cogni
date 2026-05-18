@@ -1,5 +1,5 @@
 import { useAuth } from "./useAuth.js";
-import { Login } from "./Login.js";
+import { Login } from "@cogni/ui";
 import { Shell } from "./Shell.js";
 
 export default function App() {

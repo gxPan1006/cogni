@@ -170,6 +170,9 @@ importers:
       '@cogni/contract':
         specifier: workspace:*
         version: link:../contract
+      marked:
+        specifier: ^18.0.3
+        version: 18.0.3
       react:
         specifier: ^19.1.0
         version: 19.2.6

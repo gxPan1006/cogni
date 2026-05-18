@@ -19,7 +19,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 import type { MessageView } from "@cogni/contract";
-import { useThreadStream } from "./useThreadStream.js";
+import type { ApiClient } from "../transport/api.js";
+import { useThreadStream } from "../hooks/useThreadStream.js";
 import { Composer } from "./Composer.js";
 import {
   UserMessage, AssistantText, ToolCallBlock, PermissionPrompt,
@@ -28,13 +29,13 @@ import {
 import "./conversation.css";
 
 export function Conversation({
-  token,
+  api,
   threadId,
   initialDraft,
   onConsumeInitialDraft,
   hostName,
 }: {
-  token: string;
+  api: ApiClient;
   threadId: string;
   /** First message handed in from Welcome — auto-sent once the WS connects. */
   initialDraft?: string;
@@ -43,7 +44,7 @@ export function Conversation({
   /** Name of the host this thread is routed to. Shown above the composer. */
   hostName?: string;
 }) {
-  const { messages, streaming, hostOnline, connected, send } = useThreadStream(token, threadId);
+  const { messages, streaming, hostOnline, connected, send } = useThreadStream(api, threadId);
   const [draft, setDraft] = useState("");
   const consumedInitial = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);

@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import type { MessageView, RunnerEvent, CloudToClient } from "@cogni/contract";
-import { api } from "./api.js";
+import type { ApiClient } from "../transport/api.js";
 
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 15_000;
 
-export function useThreadStream(token: string, threadId: string) {
+/**
+ * Subscribes to a thread's live event stream via WS. Caller passes an
+ * ApiClient — the hook uses it both for the initial HTTP `getThread()` and
+ * for `wsTokenQuery()` to attach the JWT to the WS URL.
+ */
+export function useThreadStream(api: ApiClient, threadId: string) {
   const [messages, setMessages] = useState<MessageView[]>([]);
   const [streaming, setStreaming] = useState<RunnerEvent[]>([]);
   const [hostOnline, setHostOnline] = useState(true);
@@ -28,7 +33,7 @@ export function useThreadStream(token: string, threadId: string) {
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
     const connect = () => {
-      const ws = new WebSocket(`${api.wsUrl}/api/ws?token=${encodeURIComponent(token)}`);
+      const ws = new WebSocket(`${api.wsUrl}/api/ws${api.wsTokenQuery()}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -93,7 +98,7 @@ export function useThreadStream(token: string, threadId: string) {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       wsRef.current?.close();
     };
-  }, [token, threadId]);
+  }, [api, threadId]);
 
   const send = (text: string) => {
     const ws = wsRef.current;

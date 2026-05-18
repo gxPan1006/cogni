@@ -262,9 +262,10 @@ export function aggregateEvents(events: RunnerEvent[]): Block[] {
       blocks.push({ kind: "tool", toolId: e.toolId, name: e.name, input: e.input, status: "running" });
     } else if (e.type === "tool-result") {
       const idx = findToolIdx(blocks, e.toolId);
-      if (idx >= 0 && blocks[idx].kind === "tool") {
-        (blocks[idx] as Extract<Block, { kind: "tool" }>).result = e.output;
-        (blocks[idx] as Extract<Block, { kind: "tool" }>).status = "done";
+      const target = idx >= 0 ? blocks[idx] : undefined;
+      if (target && target.kind === "tool") {
+        target.result = e.output;
+        target.status = "done";
       } else {
         // Orphan result — render as its own block so we never silently drop data.
         blocks.push({ kind: "tool", toolId: e.toolId, name: "unknown", input: undefined, result: e.output, status: "done" });
@@ -280,7 +281,8 @@ export function aggregateEvents(events: RunnerEvent[]): Block[] {
 
 function findToolIdx(blocks: Block[], toolId: string): number {
   for (let i = blocks.length - 1; i >= 0; i--) {
-    if (blocks[i].kind === "tool" && (blocks[i] as Extract<Block, { kind: "tool" }>).toolId === toolId) return i;
+    const b = blocks[i];
+    if (b && b.kind === "tool" && b.toolId === toolId) return i;
   }
   return -1;
 }

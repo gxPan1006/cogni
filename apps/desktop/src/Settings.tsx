@@ -12,7 +12,7 @@
  * Shell should pass it in once `/api/me` is implemented.
  */
 import { useState } from "react";
-import { Icon } from "./icons.js";
+import { Icon } from "@cogni/ui";
 import { MOCK_HOSTS, MOCK_DEVICES } from "./mock.js";
 import "./settings.css";
 

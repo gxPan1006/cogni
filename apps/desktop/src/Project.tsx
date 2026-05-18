@@ -10,7 +10,7 @@
  * subscribes to task events from the cloud (same `events` table as chat).
  */
 import { useState } from "react";
-import { Icon } from "./icons.js";
+import { Icon } from "@cogni/ui";
 import { MOCK_TASKS, MOCK_HOSTS, STATE_COLOR, STATE_LABEL, type DesignTask } from "./mock.js";
 import "./project.css";
 

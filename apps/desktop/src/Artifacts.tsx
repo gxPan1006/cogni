@@ -9,7 +9,7 @@
  * folder).
  */
 import { useState } from "react";
-import { Icon } from "./icons.js";
+import { Icon } from "@cogni/ui";
 import "./artifacts.css";
 
 type Kind = "patch" | "note" | "sql" | "screenshot" | "doc" | "shell";
