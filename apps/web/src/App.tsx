@@ -28,7 +28,7 @@ import { Routes, Route, Navigate, useParams, useNavigate } from "react-router-do
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { ThreadSummary } from "@cogni/contract";
-import { Login, Sidebar, Conversation, Welcome, type HostInfo } from "@cogni/ui";
+import { Login, Sidebar, Conversation, Welcome, SettingsPage, type HostInfo } from "@cogni/ui";
 import { api, ApiError } from "./api.js";
 import { useAuthWeb } from "./useAuth-web.js";
 import { GoogleAuthCallback, EmailAuthCallback } from "./AuthCallback.js";
@@ -182,11 +182,7 @@ function WebShell({ page }: { page: "chat" | "settings" }) {
       />
       <div className="main">
         {page === "settings" ? (
-          // TODO(SP-2 T29 integration): replace stub with <SettingsPage api={api}
-          // onClose={() => nav("/chat")} /> once @cogni/ui exports SettingsPage
-          // (Track J ships hooks, Track L ships UI; integrator wires them into
-          // packages/ui then swaps this div).
-          <SettingsStub onClose={() => nav("/chat")} />
+          <SettingsPage api={api} onClose={() => nav("/chat")} />
         ) : params.threadId ? (
           <Conversation
             api={api}
@@ -204,18 +200,3 @@ function WebShell({ page }: { page: "chat" | "settings" }) {
   );
 }
 
-/** Temporary placeholder for the not-yet-merged SettingsPage from @cogni/ui. */
-function SettingsStub({ onClose }: { onClose: () => void }) {
-  return (
-    <div style={{ padding: 32, maxWidth: 720, margin: "0 auto" }}>
-      <h1 style={{ marginTop: 0 }}>设置</h1>
-      <p style={{ color: "var(--text-muted, #888)" }}>
-        Settings 页面即将到位（plan Task 29 — Track J + L 集成后从{" "}
-        <code>@cogni/ui</code> 引入 <code>SettingsPage</code>）。
-      </p>
-      <button onClick={onClose} style={{ marginTop: 16 }}>
-        返回对话
-      </button>
-    </div>
-  );
-}

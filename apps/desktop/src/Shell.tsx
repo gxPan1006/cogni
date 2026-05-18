@@ -18,8 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ThreadSummary } from "@cogni/contract";
 import { api, ApiError, type HostInfo } from "./api.js";
-import { Sidebar, Conversation, Welcome } from "@cogni/ui";
-import { Settings } from "./Settings.js";
+import { Sidebar, Conversation, Welcome, SettingsPage } from "@cogni/ui";
 
 type Page = "chat" | "settings";
 
@@ -131,7 +130,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
       />
       <div className="main">
         {page === "settings" ? (
-          <Settings user={user} onClose={() => setPage("chat")} />
+          <SettingsPage api={api} user={user} onClose={() => setPage("chat")} />
         ) : activeThreadId ? (
           <Conversation
             api={api}

@@ -22,6 +22,8 @@ import type { MessageView } from "@cogni/contract";
 import type { ApiClient } from "../transport/api.js";
 import { useThreadStream } from "../hooks/useThreadStream.js";
 import { Composer, type ComposerStatus } from "./Composer.js";
+import { HostFallbackCard } from "./HostFallbackCard.js";
+import { NoHostBanner } from "./NoHostBanner.js";
 import {
   UserMessage, AssistantText, ToolCallBlock, PermissionPrompt,
   aggregateEvents,
@@ -44,7 +46,10 @@ export function Conversation({
   /** Name of the host this thread is routed to. Shown above the composer. */
   hostName?: string;
 }) {
-  const { messages, streaming, hostOnline, connected, send } = useThreadStream(api, threadId);
+  const {
+    messages, streaming, hostOnline, connected, send,
+    pendingFallback, pendingNoHost, resolveFallback,
+  } = useThreadStream(api, threadId);
   const [draft, setDraft] = useState("");
   const consumedInitial = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -141,11 +146,22 @@ export function Conversation({
         </div>
       </div>
 
+      {/* SP-2 multi-host UX. Either of these is showing → composer is also disabled. */}
+      {pendingFallback && (
+        <HostFallbackCard
+          preferred={pendingFallback.preferred}
+          alternatives={pendingFallback.alternatives}
+          onSwitch={(targetHostId) => resolveFallback("switch", targetHostId)}
+          onCancel={() => resolveFallback("cancel")}
+        />
+      )}
+      {pendingNoHost && <NoHostBanner />}
+
       <Composer
         draft={draft}
         setDraft={setDraft}
         onSubmit={submit}
-        disabled={!connected}
+        disabled={!connected || pendingFallback !== null || pendingNoHost !== null}
         status={status}
       />
     </div>

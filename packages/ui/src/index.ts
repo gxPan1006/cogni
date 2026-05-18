@@ -26,6 +26,7 @@ export { Icon } from "./components/icons.js";
 export { LogoMark } from "./components/LogoMark.js";
 export { HostFallbackCard } from "./components/HostFallbackCard.js";
 export { NoHostBanner } from "./components/NoHostBanner.js";
+export { SettingsPage } from "./components/SettingsPage.js";
 
 // Lower-level chat building blocks (Conversation composes them; apps that
 // want to render messages outside of Conversation can use them directly)
