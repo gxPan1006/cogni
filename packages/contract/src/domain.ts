@@ -1,5 +1,5 @@
 export type Role = "user" | "assistant" | "system";
-export type RunnerSessionStatus = "idle" | "running" | "completed" | "failed";
+export type RunnerSessionStatus = "idle" | "running" | "completed" | "failed" | "closed";
 export type HostConnState = "online" | "offline";
 
 /** GET /api/threads */

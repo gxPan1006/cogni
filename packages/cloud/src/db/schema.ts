@@ -37,7 +37,24 @@ export const hosts = pgTable("hosts", {
   registrationToken: text("registration_token").notNull().unique(),
   capabilitiesJson: jsonb("capabilities_json").notNull().default([]),
   lastSeen: timestamp("last_seen"),
+  // SP-2: soft delete. Filter `removedAt IS NULL` in user-visible lookups; keep
+  // the row so historic runner_sessions / events keep a valid host_id reference.
+  removedAt: timestamp("removed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// SP-2: revocable login sessions backing the settings "Logged-in devices" UI.
+// JWTs carry the session id; HTTP middleware + WS handshake look up the row
+// and refuse if revoked_at is set.
+export const authSessions = pgTable("auth_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  deviceName: text("device_name").notNull(),
+  userAgent: text("user_agent"),
+  ip: text("ip"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at"),
 });
 
 export const threads = pgTable("threads", {
@@ -64,10 +81,12 @@ export const runnerSessions = pgTable("runner_sessions", {
   adapter: text("adapter").notNull(),
   runnerSessionId: text("runner_session_id"),
   status: text("status").notNull().default("idle"),
+  // SP-2: when a host switch happens, the old session is marked status='closed'
+  // + closed_at=now. The unique-per-thread constraint is dropped — a thread now
+  // has many historic sessions, the latest non-closed one is "current".
+  closedAt: timestamp("closed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (t) => ({
-  threadUq: unique("runner_sessions_thread_uq").on(t.threadId),
-}));
+});
 
 export const events = pgTable("events", {
   id: uuid("id").primaryKey().defaultRandom(),
