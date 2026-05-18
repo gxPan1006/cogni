@@ -1,16 +1,18 @@
 /**
  * Shell — top-level authenticated layout.
  *
- * Owned by Phase 1 (this file). Phase 2 agents do NOT touch Shell — they
- * render *into* the sidebar / main slots via the Sidebar / Welcome / Conversation
- * components. If a Phase 2 agent thinks Shell needs to change, they must stop
- * and escalate.
+ * Owns: the local runner-host registration on first login, the active thread,
+ * the list of threads, and which page is visible in the main slot (chat /
+ * welcome / settings). Mounts Sidebar in the rail and the page in the slot.
  *
- * Responsibilities (none of which Phase 2 should rebuild):
- *   • register a runner-host on first login (write host.json + spawn daemon)
- *   • own list-of-threads + active-thread state
- *   • mount Sidebar in the sidebar slot, Welcome or Conversation in the main slot
- *   • route 401 errors back to Login
+ * Changes vs SP-1 spike:
+ *   - new `page` state for opening Settings without unmounting the shell
+ *   - Sidebar receives `onOpenSettings`
+ *   - Composer / Welcome already use the new components — no API change
+ *
+ * Phase 2 agents do NOT touch this file — render INTO the sidebar/main slots
+ * via Sidebar / Conversation / Welcome / Settings. Escalate if you think this
+ * file needs to change.
  */
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -19,14 +21,17 @@ import { api, ApiError } from "./api.js";
 import { Sidebar } from "./Sidebar.js";
 import { Conversation } from "./Conversation.js";
 import { Welcome } from "./Welcome.js";
+import { Settings } from "./Settings.js";
+
+type Page = "chat" | "settings";
 
 export function Shell({ token, onLogout }: { token: string; onLogout: () => void }) {
   const [mode, setMode] = useState<"chat" | "project">("chat");
+  const [page, setPage] = useState<Page>("chat");
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(null);
 
-  // 401 → token expired → drop back to Login. Other errors are logged so they
-  // don't get swallowed (and `threads` keeps being an array).
   const handleApiError = (e: unknown) => {
     if (e instanceof ApiError && e.status === 401) onLogout();
     else console.error("cloud request failed", e);
@@ -35,17 +40,9 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   const refreshThreads = () => api.listThreads(token).then(setThreads).catch(handleApiError);
   useEffect(() => { refreshThreads(); }, [token]);
 
-  // First login on a fresh machine → register a runner-host, write
-  // ~/.cogni/host.json, spawn the bundled sidecar. We register fresh in any
-  // of three cases:
-  //   1. The cloud has no host for this user.
-  //   2. There's no local host.json at all.
-  //   3. The local host.json's hostId is NOT in this user's host list —
-  //      i.e. it was written for a different account (common during dogfood:
-  //      sign out of Google, sign in as dev user, host.json still points at
-  //      the old Google-owned host → daemon registers under the wrong user
-  //      → cloud broadcasts host-status to that user's clients (none) →
-  //      this user's webview thinks host is offline forever).
+  // First login → register a runner-host + spawn the bundled sidecar.
+  // Same heuristic as before: register fresh if cloud has no host OR
+  // local host.json belongs to a different user (dogfood scenario).
   useEffect(() => {
     (async () => {
       const hosts = await api.listHosts(token);
@@ -64,12 +61,12 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
     })().catch(handleApiError);
   }, [token]);
 
-  // Create a thread and (optionally) immediately enter it.
   const newChat = async (): Promise<string | null> => {
     try {
       const t = await api.createThread(token);
       await refreshThreads();
       setActiveThreadId(t.id);
+      setPage("chat");
       return t.id;
     } catch (e) {
       handleApiError(e);
@@ -77,11 +74,6 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
     }
   };
 
-  // Welcome composer hands a first message → create a thread, then the
-  // Conversation that mounts will pick up the streaming when it sees the id.
-  // (Sending the message itself is Track B's job inside Conversation — for now
-  // we just hand the draft over via initialDraft.)
-  const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(null);
   const startFromWelcome = async (firstMessage: string) => {
     setPendingFirstMessage(firstMessage);
     await newChat();
@@ -94,12 +86,15 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
         onMode={setMode}
         threads={threads}
         activeThreadId={activeThreadId}
-        onSelect={setActiveThreadId}
+        onSelect={(id) => { setActiveThreadId(id); setPage("chat"); }}
         onNewChat={() => { void newChat(); }}
         onLogout={onLogout}
+        onOpenSettings={() => setPage("settings")}
       />
       <div className="main">
-        {activeThreadId ? (
+        {page === "settings" ? (
+          <Settings onClose={() => setPage("chat")} />
+        ) : activeThreadId ? (
           <Conversation
             token={token}
             threadId={activeThreadId}

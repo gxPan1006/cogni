@@ -1,31 +1,20 @@
 /**
- * Sidebar — left rail with tabs / nav / Pinned / Recents / footer.
+ * Sidebar — left rail with mode switcher / search / new / pinned / recents / host health / user menu.
  *
- * Owned by Track A. Props and the root className are settled by Phase 1 — Track A
- * fills in the markup and `sidebar.css`. The root <aside> already has the right
- * width / background via .layout > .sidebar (see layout.css), so Track A's CSS
- * is purely about *inside* the sidebar.
+ * Same prop contract as the SP-1 spike, plus one new optional callback:
+ *   - onOpenSettings — opens the Settings page in the main slot
  *
- * Visual target: ai-cognit webchat sidebar (see
- * /Users/guoxunpan/code/ai-cognit/backend/src/channels/webchat/static/index.html
- * lines 18-82 — tabs row, sbar-nav, sbar-scroll with Pinned/Recents, sbar-footer).
- * `mode` ("chat" | "project") replaces ai-cognit's "Projects" nav slot — the rest
- * of the visual layout is identical.
- *
- * SP-1 reality vs ai-cognit reference:
- *   • Agents / Code / Search / Sidebar-toggle / Projects / Artifacts / Customize /
- *     Updates → all visual placeholders, click logs a "coming soon" console line.
- *   • 项目 tab next to Chat tab is disabled (SP-3 ships projects).
- *   • Pinned section shows an empty state ("Drag to pin") — no drag wiring yet.
- *   • Footer user name is hardcoded "Cogni" — SP-2 fetches real name from /api/me.
+ * Visual rewrite:
+ *   - Mode switcher is a single pill at the top (chat ↔ project)
+ *   - Search field replaces the icon cluster
+ *   - "Pinned" surfaces threads with `pinned: true` (SP-2 adds a pin column);
+ *     for now everything goes under Recents
+ *   - Host health summary above the user menu — counts online/total hosts
+ *   - User menu doubles as the settings entry
  */
 import type { ThreadSummary } from "@cogni/contract";
+import { Icon } from "./icons.js";
 import "./sidebar.css";
-
-/** Visual-only placeholders log to console; real wiring lands in SP-2/SP-3. */
-function comingSoon(name: string) {
-  console.log("[sidebar] coming soon: " + name);
-}
 
 export function Sidebar(props: {
   mode: "chat" | "project";
@@ -34,168 +23,133 @@ export function Sidebar(props: {
   activeThreadId: string | null;
   onSelect: (id: string) => void;
   onNewChat: () => void;
-  /** Track A: wire this to the footer avatar menu / logout item. */
   onLogout: () => void;
+  /** Optional: opens Settings in the main slot. */
+  onOpenSettings?: () => void;
+  /** Optional: host health summary. SP-1 doesn't fetch this yet, leave undefined. */
+  hosts?: { online: number; total: number };
+  /** Optional: signed-in user — SP-2 will fetch via /api/me. */
+  user?: { name: string; email: string };
 }) {
-  return (
-    <aside className="sidebar">
-      {/* ─── top: chat/project tab + icon-btn cluster ─── */}
-      <div className="sidebar__tabs">
-        <button
-          className={
-            "sidebar__tab" + (props.mode === "chat" ? " is-active" : "")
-          }
-          onClick={() => props.onMode("chat")}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 11.5a8.4 8.4 0 0 1-1 4 8.5 8.5 0 0 1-7.6 4.5 8.4 8.4 0 0 1-4-1L3 20l1-5a8.4 8.4 0 0 1-1-4 8.5 8.5 0 0 1 4.5-7.6 8.4 8.4 0 0 1 4-1A8.5 8.5 0 0 1 21 11.5z" />
-          </svg>
-          Chat
-        </button>
-        <button
-          className="sidebar__tab"
-          disabled
-          title="SP-3 ships projects"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-9l-2-2H4a1 1 0 0 0-1 1z" />
-          </svg>
-          项目
-        </button>
+  const user = props.user ?? { name: "Cogni", email: "" };
+  const initial = user.name.slice(0, 1).toUpperCase();
 
-        <button
-          className="icon-btn sidebar__toggle"
-          title="Toggle sidebar"
-          onClick={() => comingSoon("toggle sidebar")}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="4" width="18" height="16" rx="2" />
-            <line x1="9" y1="4" x2="9" y2="20" />
-          </svg>
-        </button>
-        <button
-          className="icon-btn"
-          title="Search"
-          onClick={() => comingSoon("search")}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="7" />
-            <line x1="21" y1="21" x2="16.5" y2="16.5" />
-          </svg>
-        </button>
+  return (
+    <aside className="sb">
+      <div className="sb__head">
+        <Wordmark size={22} />
       </div>
 
-      {/* ─── main nav: New chat + Projects / Artifacts / Customize ─── */}
-      <nav className="sidebar__nav">
-        <button
-          className="sidebar__nav-item sidebar__nav-item--new"
-          onClick={props.onNewChat}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          New chat
-        </button>
-        <button
-          className="sidebar__nav-item"
-          disabled
-          title="SP-3 ships projects"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1h-9l-2-2H4a1 1 0 0 0-1 1z" />
-          </svg>
-          Projects
-        </button>
-        <button
-          className="sidebar__nav-item"
-          disabled
-          title="Artifacts coming soon"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.9 2.9M16.2 16.2l2.9 2.9M4.9 19.1l2.9-2.9M16.2 7.8l2.9-2.9" />
-          </svg>
-          Artifacts
-        </button>
-        <button
-          className="sidebar__nav-item"
-          disabled
-          title="Customize coming soon"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="7" width="18" height="13" rx="2" />
-            <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-          </svg>
-          Customize
-        </button>
-      </nav>
-
-      {/* ─── scroll: Pinned (empty) + Recents (live) ─── */}
-      <div className="sidebar__scroll">
-        <div className="sidebar__section">
-          <div className="sidebar__section-title">Pinned</div>
-          <div className="sidebar__empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 17v5M9 3h6v4a2 2 0 0 0 1 1.7l2 1.3v3H6v-3l2-1.3A2 2 0 0 0 9 7z" />
-            </svg>
-            Drag to pin
-          </div>
+      <div className="sb__modewrap">
+        <div className="sb-mode">
+          <button
+            className={"sb-mode__btn" + (props.mode === "chat" ? " is-on" : "")}
+            onClick={() => props.onMode("chat")}
+          >
+            {Icon.chat} Chat
+          </button>
+          <button
+            className={"sb-mode__btn" + (props.mode === "project" ? " is-on" : "")}
+            onClick={() => props.onMode("project")}
+            title="项目 — SP-3 即将上线"
+          >
+            {Icon.kanban} 项目
+          </button>
         </div>
+      </div>
 
-        <div className="sidebar__section">
-          <div className="sidebar__section-title">Recents</div>
-          <div className="sidebar__recents">
+      <div className="sb__search">
+        <span className="sb__search-icon">{Icon.search}</span>
+        <input className="sb__search-input" placeholder={props.mode === "chat" ? "搜索对话" : "搜索项目"} />
+        <span className="sb__search-kbd">⌘K</span>
+      </div>
+
+      <button className="sb__new" onClick={props.onNewChat}>
+        {Icon.plus}
+        <span>新 {props.mode === "chat" ? "对话" : "项目"}</span>
+        <span className="sb__new-kbd">⌘N</span>
+      </button>
+
+      <div className="sb__body">
+        <section className="sb__section">
+          <div className="sb__section-head">PINNED</div>
+          <div className="sb__section-body">
+            {props.threads.filter((t) => (t as ThreadSummary & { pinned?: boolean }).pinned).length === 0 ? (
+              <div className="sb__empty">Drag to pin</div>
+            ) : (
+              props.threads
+                .filter((t) => (t as ThreadSummary & { pinned?: boolean }).pinned)
+                .map((t) => (
+                  <ThreadButton
+                    key={t.id}
+                    thread={t}
+                    active={t.id === props.activeThreadId}
+                    onClick={() => props.onSelect(t.id)}
+                  />
+                ))
+            )}
+          </div>
+        </section>
+
+        <section className="sb__section">
+          <div className="sb__section-head">RECENTS</div>
+          <div className="sb__section-body">
             {props.threads.map((t) => (
-              <button
+              <ThreadButton
                 key={t.id}
-                className={
-                  "sidebar__recent" +
-                  (t.id === props.activeThreadId ? " is-active" : "")
-                }
+                thread={t}
+                active={t.id === props.activeThreadId}
                 onClick={() => props.onSelect(t.id)}
-                title={t.title}
-              >
-                <span className="sidebar__recent-title">{t.title}</span>
-              </button>
+              />
             ))}
           </div>
-        </div>
+        </section>
       </div>
 
-      {/* ─── footer: avatar + name + updates + logout ─── */}
-      <div className="sidebar__footer">
-        <div className="sidebar__avatar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="8" r="4" />
-            <path d="M4 21a8 8 0 0 1 16 0" />
-          </svg>
+      {props.hosts && (
+        <div className="sb__hosts">
+          <span className="sb__hosts-label">HOSTS</span>
+          <span className="sb__hosts-count">{props.hosts.online} / {props.hosts.total} online</span>
         </div>
-        {/* SP-2 fetch real name from /api/me */}
-        <div className="sidebar__user-name">Cogni</div>
-        <button
-          className="icon-btn"
-          disabled
-          title="Updates"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 3v12" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="5" y1="21" x2="19" y2="21" />
-          </svg>
-        </button>
-        <button
-          className="icon-btn"
-          title="退出登录"
-          onClick={props.onLogout}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-        </button>
-      </div>
+      )}
+
+      <button className="sb__user" onClick={() => props.onOpenSettings?.()}>
+        <span className="sb__avatar">{initial}</span>
+        <span className="sb__user-text">
+          <span className="sb__user-name">{user.name}</span>
+          {user.email && <span className="sb__user-email">{user.email}</span>}
+        </span>
+        <span className="sb__user-cog">{Icon.cog}</span>
+      </button>
     </aside>
+  );
+}
+
+function ThreadButton({
+  thread,
+  active,
+  onClick,
+}: {
+  thread: ThreadSummary;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={"sb-thread" + (active ? " is-active" : "")}
+      onClick={onClick}
+      title={thread.title}
+    >
+      <span className="sb-thread__title">{thread.title}</span>
+    </button>
+  );
+}
+
+function Wordmark({ size = 22 }: { size?: number }) {
+  return (
+    <div className="sb__wordmark" style={{ fontSize: size }}>
+      <span className="sb__wordmark-c" style={{ width: size, height: size, fontSize: size * 0.56 }}>c</span>
+      <span className="sb__wordmark-text" style={{ fontSize: size * 0.78 }}>cogni</span>
+    </div>
   );
 }

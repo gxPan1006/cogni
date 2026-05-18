@@ -1,226 +1,69 @@
-/* ------------------------------------------------------------------------ *
- * Conversation — owned by Track B. Visual target: ai-cognit webchat
- * (.stage / .messages-list / .msg-user / .msg-assistant / .tool-pill).
- *
- * Layout shape:
- *   .conversation                — vertical flex: [banners] [scroll] [composer]
- *     .banner                    — sticky, banner styling lives in base.css
- *     .conversation__scroll      — scroll container, occupies remaining height
- *       .conversation__list      — centered max-width column of messages
- *         .conversation__empty   — placeholder when there are no messages yet
- *         .message               — base row (user bubble vs assistant prose)
- *         .message--streaming    — the in-flight assistant turn
- *     <Composer />               — owns its own block-level layout
- * ------------------------------------------------------------------------ */
+/* Conversation — outer layout, scroll container, banner, empty state. */
 
 .conversation {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
+  display: flex; flex-direction: column;
+  height: 100%; min-height: 0;
+  background: var(--bg);
 }
 
-/* Banners sit at the very top, full-bleed; style in base.css. */
-.conversation > .banner {
-  flex: 0 0 auto;
+/* Banners stack at the top of the conversation, above the scroll. */
+.banner {
+  padding: 9px 16px;
+  font-size: 13px;
+  line-height: 1.4;
+  border-bottom: 1px solid var(--line-soft);
 }
+.banner--warning { background: var(--warn-soft); color: var(--ink-2); }
+.banner--danger  { background: var(--bad-soft);  color: var(--ink); }
 
-/* ─── scroll container ─────────────────────────────────────────────────── */
 .conversation__scroll {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1; min-height: 0;
   overflow-y: auto;
-  scroll-behavior: smooth;
+  padding: 28px 0 24px;
 }
-
-/* Centered column. Keep readable line length. */
 .conversation__list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  max-width: var(--message-max-width);
+  max-width: 760px;
   margin: 0 auto;
-  padding: var(--space-7) var(--space-4) var(--space-4);
-  width: 100%;
+  padding: 0 32px;
 }
 
-/* ─── empty state ──────────────────────────────────────────────────────── */
 .conversation__empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  padding: var(--space-9) var(--space-4);
-  color: var(--fg-mute);
-  font-size: var(--text-md);
-}
-.conversation__empty-star {
-  color: var(--accent);
-  font-size: var(--text-xl);
-  line-height: 1;
-}
-
-/* ─── message row ──────────────────────────────────────────────────────── */
-.message {
-  display: flex;
-  gap: var(--space-3);
-  align-items: flex-start;
-  width: 100%;
-}
-
-.message__col {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.message__avatar {
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  color: var(--accent);
-  font-size: var(--text-lg);
-  line-height: 1;
-  margin-top: 2px;
-}
-
-.message__role {
-  font-size: var(--text-xs);
-  color: var(--fg-dim);
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.message__body {
-  font-size: var(--text-md);
-  line-height: var(--leading-normal);
-  color: var(--fg);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* ─── user: right-aligned bubble ───────────────────────────────────────── */
-.message--user {
-  justify-content: flex-end;
-}
-.message--user .message__col {
-  align-items: flex-end;
-  max-width: 70%;
-}
-.message--user .message__role {
-  /* "你" tag sits above the bubble, right-aligned for symmetry. */
-  align-self: flex-end;
-}
-.message--user .message__body {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-lg);
-  border-bottom-right-radius: var(--radius-sm);
-}
-
-/* ─── assistant: left-aligned, no bubble, ✳ avatar ─────────────────────── */
-.message--assistant {
-  justify-content: flex-start;
-}
-.message--assistant .message__col {
-  flex: 1 1 auto;
-  max-width: var(--message-max-width);
-}
-
-/* ─── system: centered, muted ──────────────────────────────────────────── */
-.message--system {
-  justify-content: center;
-}
-.message--system .message__col {
-  align-items: center;
-  max-width: 80%;
-}
-.message--system .message__body {
-  background: var(--accent-soft);
-  color: var(--accent);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-style: italic;
+  padding: 80px 0;
   text-align: center;
+  color: var(--muted);
+  font-size: 14px;
 }
 
-/* ─── streaming indicator (typing dots) ────────────────────────────────── */
+.conversation__system {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.conversation__error {
+  padding: 10px 14px;
+  background: var(--bad-soft);
+  border: 1px solid oklch(85% 0.045 28);
+  border-radius: var(--r-2);
+  color: var(--ink);
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+/* Typing dots — three pulsing dots while the turn has started but no frames arrived */
 .typing-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: var(--space-1) 0;
-  vertical-align: middle;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 2px;
 }
 .typing-dots__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--fg-mute);
-  animation: typing-pulse var(--duration-slow) ease-in-out infinite;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--muted-2);
+  animation: typing-dots 1.2s ease-in-out infinite;
 }
-.typing-dots__dot:nth-child(2) { animation-delay: calc(var(--duration-fast) * 1); }
-.typing-dots__dot:nth-child(3) { animation-delay: calc(var(--duration-fast) * 2); }
-@keyframes typing-pulse {
-  0%, 70%, 100% { opacity: 0.3; transform: scale(0.85); }
-  35%           { opacity: 1;   transform: scale(1); }
-}
-
-/* ─── EventBlock primitives (rendered inside the streaming turn) ───────── */
-
-/* Tool call pill — compact, monospace, slightly stronger surface. */
-.tool-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: var(--space-1) 0;
-  padding: var(--space-1) var(--space-3);
-  background: var(--bg-strong);
-  color: var(--fg-dim);
-  border-radius: var(--radius-md);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-width: 100%;
-}
-.tool-pill__icon { color: var(--accent); }
-.tool-pill__name { color: var(--fg); font-weight: var(--weight-medium); }
-.tool-pill__args { color: var(--fg-mute); opacity: 0.9; }
-
-/* Tool result — slightly indented, lighter surface. */
-.tool-result {
-  display: flex;
-  gap: var(--space-2);
-  margin: var(--space-1) 0 var(--space-1) var(--space-4);
-  padding: var(--space-1) var(--space-3);
-  background: var(--bg-elevated);
-  color: var(--fg-dim);
-  border-radius: var(--radius-md);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-width: 100%;
-}
-.tool-result__arrow { color: var(--fg-mute); flex: 0 0 auto; }
-.tool-result__body { color: var(--fg-dim); min-width: 0; }
-
-/* Inline error from a runner frame. */
-.event-error {
-  display: block;
-  margin: var(--space-2) 0;
-  padding: var(--space-2) var(--space-3);
-  background: var(--danger-bg);
-  color: var(--danger-fg);
-  border-radius: var(--radius-md);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  white-space: pre-wrap;
-  word-break: break-word;
+.typing-dots__dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots__dot:nth-child(3) { animation-delay: 0.30s; }
+@keyframes typing-dots {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
+  40%           { opacity: 1;   transform: scale(1); }
 }

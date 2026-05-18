@@ -1,155 +1,91 @@
-/* ------------------------------------------------------------------------ *
- * Design tokens — the single source of truth for color / radius / spacing /
- * type / motion in the desktop UI.
- *
- * Components must consume these via var(--token), not hardcode numbers/colors.
- * Reviewers reject PRs with hardcoded literals where a token exists.
- *
- * Palette: aligned with ai-cognit webchat (Anthropic-orange accent on a warm
- * dark base). `:root` is the dark theme (default); `[data-theme="light"]`
- * overrides for the future light mode. SP-1 ships dark only; no UI toggle
- * yet, but the token layer reserves the switch.
- * ------------------------------------------------------------------------ */
+/* Cogni — Design tokens
+ * Warm humanist · paper-feel · slow rhythm
+ * Type: Instrument Sans (body) + Instrument Serif (display) + JetBrains Mono
+ * Color: warm cream → sand → clay, with terracotta accent (tweakable)
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
 
 :root {
-  color-scheme: dark;
+  /* === Light theme (default) ============================= */
+  --bg:           oklch(98.2% 0.006 78);          /* cream paper */
+  --bg-sunk:     oklch(96.0% 0.010 76);          /* slightly recessed surface */
+  --surface:     oklch(99.5% 0.004 80);          /* card / raised */
+  --surface-2:  oklch(94.5% 0.012 74);          /* sidebar, sand */
+  --surface-3:  oklch(91.5% 0.014 72);          /* code-block, chip */
+  --ink:        oklch(22% 0.020 60);              /* warm near-black */
+  --ink-2:     oklch(38% 0.018 58);
+  --muted:    oklch(54% 0.012 56);
+  --muted-2: oklch(70% 0.012 60);
+  --line:    oklch(89% 0.014 70);
+  --line-soft: oklch(93% 0.010 72);
 
-  /* — color: surface — */
-  --bg-app:          #262624; /* main canvas (chat surface, login background)  */
-  --bg-sidebar:      #1f1e1c; /* slightly darker than canvas for depth         */
-  --bg-elevated:     #2e2d2a; /* composer input, dropdowns, toasts             */
-  --bg-strong:       #3a3937; /* hover-up of elevated; emphasis surfaces       */
-  --bg-code:         #1a1916; /* fenced-code block background                  */
+  /* Accent — warm terracotta clay. Tweakable. */
+  --accent:    oklch(60% 0.135 48);
+  --accent-2:  oklch(64% 0.135 48);
+  --accent-soft: oklch(92% 0.040 50);
+  --accent-ink:  oklch(38% 0.135 45);
 
-  /* — color: foreground — */
-  --fg:              #f0eee6; /* primary text                                  */
-  --fg-dim:          #9a9891; /* secondary text (timestamps, captions)         */
-  --fg-mute:         #6b6a63; /* tertiary (placeholder, disabled)              */
+  /* Status */
+  --good:    oklch(58% 0.10 158);     /* sage */
+  --good-soft: oklch(92% 0.04 158);
+  --warn:    oklch(70% 0.12 78);      /* honey */
+  --warn-soft: oklch(94% 0.045 78);
+  --bad:     oklch(56% 0.16 28);      /* red clay */
+  --bad-soft: oklch(93% 0.045 28);
 
-  /* — color: brand accent (Anthropic orange) — */
-  --accent:          #d97757;
-  --accent-soft:     rgba(217, 119, 87, 0.12);
-  --accent-strong:   #e88e6f;
+  /* Type — clean, neutral, modern */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  --font-serif: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
-  /* — color: state — */
-  --danger-bg:       rgba(255, 85, 85, 0.12);
-  --danger-fg:       #ff8a8a;
-  --success-bg:      rgba(88, 200, 140, 0.10);
-  --success-fg:      #7dd0a0;
-  --warning-bg:      rgba(229, 175, 90, 0.14);
-  --warning-fg:      #e8c07d;
+  /* Radii */
+  --r-1: 4px;
+  --r-2: 8px;
+  --r-3: 12px;
+  --r-4: 16px;
+  --r-5: 22px;
+  --r-full: 9999px;
 
-  /* — color: lines & overlays — */
-  --border:          rgba(255, 255, 255, 0.06);
-  --border-strong:   rgba(255, 255, 255, 0.12);
-  --hover:           rgba(255, 255, 255, 0.04);
-  --hover-strong:    rgba(255, 255, 255, 0.08);
-  --scroll-thumb:    rgba(255, 255, 255, 0.08);
-  --overlay:         rgba(0, 0, 0, 0.55);
-  --shadow-color:    rgba(0, 0, 0, 0.28);
-  --inline-code-bg:  rgba(255, 255, 255, 0.08);
+  /* Shadow — soft, paper-feel, not glassy */
+  --shadow-1: 0 1px 0 oklch(0% 0 0 / 0.03), 0 1px 2px oklch(0% 0 0 / 0.04);
+  --shadow-2: 0 1px 0 oklch(0% 0 0 / 0.02), 0 4px 14px oklch(0% 0 0 / 0.06);
+  --shadow-3: 0 1px 0 oklch(0% 0 0 / 0.02), 0 12px 36px oklch(0% 0 0 / 0.10);
+  --shadow-inset: inset 0 0 0 1px oklch(0% 0 0 / 0.04);
 
-  /* — radius — */
-  --radius-xs:    4px;
-  --radius-sm:    6px;
-  --radius-md:    8px;
-  --radius-lg:   12px;
-  --radius-xl:   16px;
-  --radius-pill: 999px;
-
-  /* — shadow (uses --shadow-color so light theme can swap) — */
-  --shadow-sm: 0 1px 2px var(--shadow-color);
-  --shadow-md: 0 4px 12px var(--shadow-color);
-  --shadow-lg: 0 12px 32px var(--shadow-color);
-
-  /* — spacing (multiples of 4px) — */
-  --space-0:  0;
-  --space-1:  4px;
-  --space-2:  8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-7: 32px;
-  --space-8: 40px;
-  --space-9: 56px;
-  --space-10: 80px;
-
-  /* — typography — */
-  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-               "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
-
-  --text-xs:   11px;
-  --text-sm:   12px;
-  --text-base: 14px;  /* body default */
-  --text-md:   15px;
-  --text-lg:   16px;
-  --text-xl:   20px;
-  --text-2xl:  28px;
-  --text-3xl:  40px;  /* welcome greeting */
-
-  --leading-tight:  1.25;
-  --leading-snug:   1.4;
-  --leading-normal: 1.55;
-  --leading-loose:  1.7;
-
-  --weight-regular:  400;
-  --weight-medium:   500;
-  --weight-semibold: 600;
-
-  /* — layout — */
-  --sidebar-width:        260px;
-  --composer-max-width:   760px; /* chat column max width for readability */
-  --message-max-width:    760px;
-
-  /* — motion — */
-  --duration-instant: 80ms;
-  --duration-fast:    140ms;
-  --duration-normal:  220ms;
-  --duration-slow:    320ms;
-  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-
-  /* — z-index — */
-  --z-banner:   10;
-  --z-dropdown: 30;
-  --z-modal:    50;
-  --z-toast:    60;
+  /* Spacing scale (multiples of 4) */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 40px;
+  --s-9: 48px; --s-10: 64px; --s-11: 80px; --s-12: 120px;
 }
 
-/* Light theme — reserved; SP-1 ships dark only, but tokens swap correctly
-   if [data-theme="light"] is ever set on <html>. */
-:root[data-theme="light"] {
-  color-scheme: light;
+[data-theme="dark"] {
+  --bg:        oklch(20% 0.010 60);
+  --bg-sunk:   oklch(17% 0.010 60);
+  --surface:   oklch(24% 0.012 60);
+  --surface-2: oklch(22% 0.010 58);
+  --surface-3: oklch(28% 0.014 58);
+  --ink:       oklch(94% 0.008 78);
+  --ink-2:     oklch(82% 0.010 72);
+  --muted:     oklch(64% 0.012 64);
+  --muted-2:   oklch(48% 0.012 60);
+  --line:      oklch(32% 0.012 58);
+  --line-soft: oklch(28% 0.012 60);
 
-  --bg-app:         #f7f8fa;
-  --bg-sidebar:     #eef1f4;
-  --bg-elevated:    #ffffff;
-  --bg-strong:      #e6e9ee;
-  --bg-code:        #eef1f4;
+  --accent:      oklch(72% 0.135 50);
+  --accent-2:    oklch(76% 0.135 50);
+  --accent-soft: oklch(32% 0.080 50);
+  --accent-ink:  oklch(86% 0.110 50);
 
-  --fg:             #191c21;
-  --fg-dim:         #5f6672;
-  --fg-mute:        #8b929c;
+  --good:        oklch(72% 0.10 158);
+  --good-soft:   oklch(30% 0.040 158);
+  --warn:        oklch(80% 0.12 78);
+  --warn-soft:   oklch(32% 0.045 78);
+  --bad:         oklch(72% 0.14 28);
+  --bad-soft:    oklch(32% 0.045 28);
 
-  --accent:         #c65f3d;
-  --accent-soft:    rgba(198, 95, 61, 0.12);
-  --accent-strong:  #b65332;
-
-  --danger-bg:      rgba(184, 55, 55, 0.10);
-  --danger-fg:      #a33a3a;
-  --success-bg:     rgba(34, 128, 78, 0.10);
-  --success-fg:     #247a50;
-  --warning-bg:     rgba(180, 130, 40, 0.10);
-  --warning-fg:     #8a6217;
-
-  --border:         rgba(24, 31, 41, 0.10);
-  --border-strong:  rgba(24, 31, 41, 0.18);
-  --hover:          rgba(24, 31, 41, 0.05);
-  --hover-strong:   rgba(24, 31, 41, 0.09);
-  --scroll-thumb:   rgba(24, 31, 41, 0.18);
-  --overlay:        rgba(24, 31, 41, 0.30);
-  --shadow-color:   rgba(24, 31, 41, 0.14);
-  --inline-code-bg: rgba(24, 31, 41, 0.07);
+  --shadow-1: 0 1px 0 oklch(0% 0 0 / 0.20), 0 1px 2px oklch(0% 0 0 / 0.30);
+  --shadow-2: 0 2px 0 oklch(0% 0 0 / 0.20), 0 8px 22px oklch(0% 0 0 / 0.40);
+  --shadow-3: 0 2px 0 oklch(0% 0 0 / 0.20), 0 18px 44px oklch(0% 0 0 / 0.45);
+  --shadow-inset: inset 0 0 0 1px oklch(100% 0 0 / 0.04);
 }
