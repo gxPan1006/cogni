@@ -92,7 +92,7 @@ export function useAuth() {
   };
 
   const loginWithEmail = async (email: string): Promise<void> => {
-    await api.sendMagicLink(email);
+    await api.sendMagicLink(email, "desktop");
   };
 
   const logout = () => {

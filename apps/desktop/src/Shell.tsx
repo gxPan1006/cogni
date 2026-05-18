@@ -52,8 +52,8 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
     else console.error("cloud request failed", e);
   };
 
-  const refreshThreads = () => api.listThreads(token).then(setThreads).catch(handleApiError);
-  const refreshHosts = () => api.listHosts(token).then(setHosts).catch(handleApiError);
+  const refreshThreads = () => api.listThreads().then(setThreads).catch(handleApiError);
+  const refreshHosts = () => api.listHosts().then(setHosts).catch(handleApiError);
   useEffect(() => { refreshThreads(); refreshHosts(); }, [token]);
 
   // First login → register a runner-host + spawn the bundled sidecar.
@@ -61,19 +61,19 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   // local host.json belongs to a different user (dogfood scenario).
   useEffect(() => {
     (async () => {
-      const initialHosts = await api.listHosts(token);
+      const initialHosts = await api.listHosts();
       setHosts(initialHosts);
       const localHostId = await invoke<string | null>("read_host_id");
       const localHostBelongsToUser =
         localHostId !== null && initialHosts.some((h) => h.id === localHostId);
       if (initialHosts.length === 0 || !localHostBelongsToUser) {
-        const reg = await api.createHost(token, "My Computer");
+        const reg = await api.createHost("My Computer");
         await invoke("write_host_config", {
           hostId: reg.hostId,
           registrationToken: reg.registrationToken,
           cloudUrl: api.wsUrl,
         });
-        setHosts(await api.listHosts(token));
+        setHosts(await api.listHosts());
       }
       await invoke("ensure_daemon");
     })().catch(handleApiError);
@@ -101,7 +101,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
 
   const newChat = async (): Promise<string | null> => {
     try {
-      const t = await api.createThread(token);
+      const t = await api.createThread();
       await refreshThreads();
       setActiveThreadId(t.id);
       setPage("chat");

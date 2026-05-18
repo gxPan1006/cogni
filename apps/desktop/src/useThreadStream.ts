@@ -16,7 +16,7 @@ export function useThreadStream(token: string, threadId: string) {
     setStreaming([]);
     setConnected(false);
     api
-      .getThread(token, threadId)
+      .getThread(threadId)
       .then((d) => setMessages(d.messages ?? []))
       .catch((e) => {
         console.error("failed to load thread history", e);
