@@ -8,7 +8,6 @@ import { logger } from "@cogni/shared";
 import { listThreads, createThread, getThreadDetail, threadBelongsToUser } from "../db/threads.js";
 import { listEventsSince } from "../db/sessions.js";
 import { events as eventsTable } from "../db/schema.js";
-import { createHost, getActiveHostsForUser } from "../db/hosts.js";
 import { getAuthSession, touchAuthSession } from "../db/auth-sessions.js";
 import type { ServerDeps } from "../server.js";
 
@@ -75,21 +74,6 @@ export function registerClientRoutes(
     const since = Number.isFinite(sinceRaw) ? sinceRaw : 0;
     return c.json(await listEventsSince(deps.db, id, since));
   });
-  app.post("/api/hosts", async (c) => {
-    const { userId, tenantId } = c.get("claims");
-    const body = await c.req.json().catch(() => ({}));
-    const name = typeof (body as { name?: unknown }).name === "string"
-      ? (body as { name: string }).name
-      : "My Computer";
-    return c.json(await createHost(deps.db, { userId, tenantId, name }));
-  });
-  app.get("/api/hosts", async (c) => {
-    const { userId } = c.get("claims");
-    // SP-2: excludes soft-removed hosts (filter on hosts.removed_at IS NULL).
-    const hosts = await getActiveHostsForUser(deps.db, userId);
-    return c.json(hosts.map((h) => ({ id: h.id, name: h.name, status: h.status })));
-  });
-
   // --- WS: /api/ws?token=<jwt> ---
   app.get(
     "/api/ws",
