@@ -71,3 +71,88 @@ Both agents dispatched in a single message with `run_in_background: true`. Notif
 - Email change flow: currently `users.email` is locked to first-write; SP-2 will need a verified-email-change ceremony if a user wants to switch primary.
 
 ---
+
+## SP-2 batch 1 — DB helpers (2026-05-18 — 5 agent 并行)
+
+**Pre-condition:** main at `e4b2ca8` (SP-2 schema deltas + extended
+`RunnerSessionStatus` + test-db DDL synced). 5 tracks dispatched in one
+parallel batch. Source spec: `docs/superpowers/specs/2026-05-18-cogni-sp2-accounts-sync-web-design.md`. Source plan: `docs/superpowers/plans/2026-05-18-cogni-sp2-accounts-sync-web.md` (36 tasks total; this batch covers T2-T6).
+
+| Track | Commit | 内容 | 测试 |
+|---|---|---|---|
+| A · T2 sessions | `6517965` | `openRunnerSession` / `getCurrentActive` / `closeRunnerSession` / `getLatestSessionForThread` | 5 new (9 total in sessions.test.ts) |
+| B · T3 auth-sessions | `99f5758` | New `auth-sessions.ts` — create / get / list / revoke / touch | 4 new |
+| C · T4 hosts | `f991721` | `renameHost` / `softRemoveHost` / `isHostRemoved` / `getActiveHostsForUser` + `findHostByToken` filters removed | 3 new (4 total) |
+| D · T5 find-or-link | `f409678` | New `auth/find-or-link.ts` — identity-then-email auto-merge | 4 new |
+| E · T6 identities | `2c35154` | `countIdentities` + `deleteIdentity` | 2 new |
+
+**Merge:** Five `git merge --no-ff` into main (`34beb04 902ae63 046de72 bed8fd3
+3f437c3`). Plus follow-up `63dd3b8` for Track C's intentionally-skipped
+boundary work (`routes/client.ts` switches `getUserHosts` → `getActiveHostsForUser`).
+
+**Merged total:** +18 tests (66 → 84). `pnpm --filter @cogni/cloud typecheck`
+clean. `pnpm -r build` green.
+
+### Fanout effectiveness
+
+- ~485 lines new (tests + impl)
+- 5 agent total wallclock ≈ 12 min (slowest: Track A 11min; fastest: Track B 6.8min)
+- Sequential estimate ≈ 50 min → saved ~38 min
+- Integration gate time ≈ 5 min (diff/contract checks + batch merge + typecheck + boundary fix)
+- Conflicts / rejections: 0 true conflicts; 1 boundary task left for integration lead (T4 step 4 by design)
+
+### Lessons
+
+1. **`git stash` is repo-wide; worktrees share the stash pool.** Track E's
+   `git stash pop` in t6-identities accidentally popped Track A's wip. Track A
+   later stepped on a similar situation. Both agents self-detected, re-stashed,
+   continued. Final commits clean.
+   **Future prompt fix:** add "avoid `git stash`; if you must,
+   `git stash push -m '<track>:wip'` with a track-namespaced label so accidental
+   pops are recoverable."
+2. **Plan-vs-fixture-shape drift on `makeTestDb()`.** Plan code wrote
+   `db = await makeTestDb()` and passed `db` straight to helpers, but
+   `makeTestDb()` returns `{db, close}`. Three agents (B/D, plus A) each
+   independently adapted to the destructured form per surrounding test files.
+   **Future:** when planning, either grep the actual fixture shape, or upgrade
+   the fixture to accept both call shapes.
+3. **`test-db.ts` DDL must stay in sync with `schema.ts`.** T1 (foundation,
+   solo) updated both, so the 5 downstream tracks' pglite tests all worked.
+   If T1 had missed the DDL, every downstream track would fail on missing
+   columns. **Future:** push the SP-2 known-issue "drizzle-kit migrations"
+   forward.
+4. **Main lock during fanout.** User pushed `0ad1e2c` (forward-port from
+   sp1-followups) on main during the fanout window. The commit doesn't touch
+   cloud, but: (a) it temporarily left unresolved conflict markers in
+   `identities.ts` (since fixed); (b) my pending `routes/client.ts` working-tree
+   edit got reset. **Future:** fanout windows = main is locked for unrelated
+   merges, or unrelated merges go on a side branch.
+
+### Sovereignty table
+
+| Track | Independent path | Forbidden | Delivered |
+|---|---|---|---|
+| A | `packages/cloud/src/db/sessions.{ts,test.ts}` | schema, chat, client, contract | 5 new tests pass |
+| B | `packages/cloud/src/db/auth-sessions.{ts,test.ts}` (new) | other db/ files | 4 new tests pass |
+| C | `packages/cloud/src/db/hosts.{ts,test.ts}` | routes/client.ts (integration lead's job) | 3 new tests pass |
+| D | `packages/cloud/src/auth/find-or-link.{ts,test.ts}` (new dir) | db/ writes | 4 new tests pass |
+| E | `packages/cloud/src/db/identities.{ts,test.ts}` | other db/ files | 2 new tests pass |
+
+### Branches now
+
+- `main`: 6 new commits (5 merges + 1 boundary fix) on top of `e4b2ca8`
+- All `track/t*-*` branches deleted (local; never pushed to origin)
+- `.worktrees/t{2..6}-*/` removed
+
+### Next candidates
+
+- **Batch 2 (Section 7 HTTP routes):** T17 / T18 / T19 = `routes/identities.ts`
+  + `routes/devices.ts` + `routes/hosts.ts`, three independent route files.
+  Prerequisite: Sections 3-6 (auth + ClientHub fan-out + chat dispatcher) done
+  serially first — too interdependent for parallel.
+- **Batch 3 (UI extraction done):** `apps/web` scaffold + Settings hooks
+  + SettingsPage, three agents on independent subdirs. Prerequisite:
+  Section 8 (extract `@cogni/ui`) done — refactor with cross-file imports,
+  can't safely parallelize.
+
+---
