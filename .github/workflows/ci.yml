@@ -10,10 +10,10 @@
 #      own typecheck step, and any future test that imports a built artifact
 #      stays consistent with prod.
 #   2. typecheck across all 7 packages + apps (catches type drift apps).
-#   3. vitest with --no-file-parallelism to avoid a teardown race in the
-#      cloud server e2e (multiple parallel pglite + ws servers occasionally
-#      throw an uncaught ECONNREFUSED post-teardown). Serial-file run is
-#      stable; single-file parallelism still applies within each file.
+#   3. vitest runs all packages, file-level parallelism enabled. The earlier
+#      ECONNREFUSED flake in server.e2e was a real listen-bind race in
+#      @hono/node-server.serve() — fixed in 4dff6d3 by awaiting the listening
+#      callback + pinning 127.0.0.1. Parallel-file is safe again.
 name: CI
 
 on:
@@ -72,4 +72,4 @@ jobs:
         run: pnpm -r typecheck
 
       - name: Vitest (packages/cloud + packages/contract)
-        run: pnpm vitest run packages/cloud packages/contract --no-file-parallelism --reporter=verbose
+        run: pnpm vitest run packages/cloud packages/contract --reporter=verbose

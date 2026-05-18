@@ -5,6 +5,7 @@ import { findOrCreateUserByEmail } from "../db/users.js";
 import { upsertIdentity } from "../db/identities.js";
 import { createAuthSession } from "../db/auth-sessions.js";
 import { deriveDeviceName } from "../auth/device-name.js";
+import { InMemoryTokenStore, type TokenStore } from "../auth/token-store.js";
 import { logger } from "@cogni/shared";
 import type { ServerDeps } from "../server.js";
 
@@ -18,7 +19,6 @@ interface PendingLogin {
   origin: Origin;
   /** The exact redirect_uri Google was given in the auth request. Token exchange MUST repeat the same value. */
   redirectUri: string;
-  createdAt: number;
 }
 
 const DEFAULT_REDIRECT = "cogni://auth";
@@ -49,13 +49,14 @@ function callbackUriFor(deps: ServerDeps, origin: Origin): string {
 }
 
 export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
-  // SP-1: single-node in-memory state store. SP-2 moves this to a shared store.
-  const pending = new Map<string, PendingLogin>();
+  // SP-2+1: swap InMemoryTokenStore for a Redis-backed impl so an OAuth state
+  // issued on node A can be redeemed on node B. The interface is identical;
+  // routes/email.ts already does the same pattern for magic-link tokens.
   const TTL_MS = 10 * 60 * 1000;
-  const sweep = () => {
-    const now = Date.now();
-    for (const [k, v] of pending) if (now - v.createdAt > TTL_MS) pending.delete(k);
-  };
+  const pending: TokenStore<PendingLogin> = new InMemoryTokenStore<PendingLogin>({ ttlMs: TTL_MS });
+  // Belt-and-braces sweep for entries that were never `get`'d (InMemoryTokenStore
+  // evicts on access; this catches abandoned states).
+  setInterval(() => { void pending.sweep(); }, 5 * 60_000).unref();
 
   // Dev-only: signs a JWT for a stand-in user, bypassing Google OAuth.
   // Refuses to register in production. Used by the desktop dev fallback in
@@ -82,14 +83,13 @@ export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
   // Two callers:
   //   • desktop: opens this in the system browser with ?redirect=cogni://auth (and origin=desktop by default)
   //   • web:    redirects user here with ?origin=web; cloud sends them to chat.ai-cognit.com/chat afterwards
-  app.get("/auth/google/start", (c) => {
-    sweep();
+  app.get("/auth/google/start", async (c) => {
     const origin = readOrigin(c.req.query("origin"));
     const redirect = origin === "web" ? `${deps.webUrl}/chat` : safeRedirect(c.req.query("redirect"));
     const redirectUri = callbackUriFor(deps, origin);
     const state = generateState();
     const codeVerifier = generateCodeVerifier();
-    pending.set(state, { codeVerifier, redirect, origin, redirectUri, createdAt: Date.now() });
+    await pending.set(state, { codeVerifier, redirect, origin, redirectUri });
     const google = deps.auth.makeGoogle(redirectUri);
     const url = google.createAuthorizationURL(state, codeVerifier, ["openid", "email"]);
     return c.redirect(url.toString());
@@ -99,9 +99,10 @@ export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
     const code = c.req.query("code");
     const state = c.req.query("state");
     if (!code || !state) return c.text("missing code/state", 400);
-    const entry = pending.get(state);
+    // TokenStore.get handles expiration; null means unknown OR expired.
+    const entry = await pending.get(state);
     if (!entry) return c.text("unknown or expired state", 400);
-    pending.delete(state);
+    await pending.delete(state);
 
     try {
       const google = deps.auth.makeGoogle(entry.redirectUri);
