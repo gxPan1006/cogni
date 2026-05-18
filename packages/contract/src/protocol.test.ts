@@ -97,3 +97,83 @@ describe("protocol schemas", () => {
     expect(hostToCloudSchema.safeParse({ t: "session-update", sessionId: "s1", status: "idle" }).success).toBe(false);
   });
 });
+
+describe("SP-2 ClientToCloud variants", () => {
+  it("parses subscribe-list", () => {
+    const r = clientToCloudSchema.safeParse({ t: "subscribe-list" });
+    expect(r.success).toBe(true);
+  });
+  it("parses subscribe-thread with lastSeq", () => {
+    const r = clientToCloudSchema.safeParse({ t: "subscribe-thread", threadId: "t1", lastSeq: 42 });
+    expect(r.success).toBe(true);
+  });
+  it("parses subscribe-thread without lastSeq (defaults later)", () => {
+    const r = clientToCloudSchema.safeParse({ t: "subscribe-thread", threadId: "t1" });
+    expect(r.success).toBe(true);
+  });
+  it("parses unsubscribe-thread", () => {
+    const r = clientToCloudSchema.safeParse({ t: "unsubscribe-thread", threadId: "t1" });
+    expect(r.success).toBe(true);
+  });
+  it("parses resolve-fallback switch", () => {
+    const r = clientToCloudSchema.safeParse({
+      t: "resolve-fallback", pendingMessageId: "p1", action: "switch", targetHostId: "h1",
+    });
+    expect(r.success).toBe(true);
+  });
+  it("parses resolve-fallback cancel without targetHostId", () => {
+    const r = clientToCloudSchema.safeParse({
+      t: "resolve-fallback", pendingMessageId: "p1", action: "cancel",
+    });
+    expect(r.success).toBe(true);
+  });
+});
+
+describe("SP-2 CloudToClient variants", () => {
+  it("parses catchup-complete", () => {
+    const r = cloudToClientSchema.safeParse({ t: "catchup-complete", threadId: "t1", latestSeq: 47 });
+    expect(r.success).toBe(true);
+  });
+  it("parses thread-meta", () => {
+    const r = cloudToClientSchema.safeParse({
+      t: "thread-meta", threadId: "t1", title: "Hi", lastMsgAt: new Date().toISOString(),
+    });
+    expect(r.success).toBe(true);
+  });
+  it("parses thread-created", () => {
+    const r = cloudToClientSchema.safeParse({
+      t: "thread-created", thread: { id: "t1", title: "Hi", updatedAt: new Date().toISOString() },
+    });
+    expect(r.success).toBe(true);
+  });
+  it("parses thread-deleted", () => {
+    const r = cloudToClientSchema.safeParse({ t: "thread-deleted", threadId: "t1" });
+    expect(r.success).toBe(true);
+  });
+  it("parses device-list-changed", () => {
+    expect(cloudToClientSchema.safeParse({ t: "device-list-changed" }).success).toBe(true);
+  });
+  it("parses host-meta online/offline", () => {
+    const r = cloudToClientSchema.safeParse({
+      t: "host-meta", hostId: "h1", name: "MacBook", status: "online", lastSeen: new Date().toISOString(),
+    });
+    expect(r.success).toBe(true);
+  });
+  it("parses host-fallback-prompt", () => {
+    const r = cloudToClientSchema.safeParse({
+      t: "host-fallback-prompt",
+      pendingMessageId: "p1",
+      preferred: { id: "h1", name: "Home", lastSeenAgoMs: 7200000 },
+      alternatives: [{ id: "h2", name: "Work", lastSeenAgoMs: 1000 }],
+    });
+    expect(r.success).toBe(true);
+  });
+  it("parses no-host-online", () => {
+    const r = cloudToClientSchema.safeParse({ t: "no-host-online", pendingMessageId: "p1" });
+    expect(r.success).toBe(true);
+  });
+  it("parses catchup-too-long", () => {
+    const r = cloudToClientSchema.safeParse({ t: "catchup-too-long", threadId: "t1", latestSeq: 12345 });
+    expect(r.success).toBe(true);
+  });
+});
