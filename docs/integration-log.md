@@ -423,6 +423,86 @@ cloud, ui, contract).
 
 ---
 
+## SP-2 followup batch — known-issues cleanup (2026-05-19 — 4 agent 并行)
+
+**Pre-condition:** SP-2 main spec landed + deployed. Plan punted 4 things to
+known-issues / future-work; this batch cleans them up before SP-3. All 4 land
+in independent files, perfect fanout fit.
+
+| Track | Commit | 内容 |
+|---|---|---|
+| A · /healthz | `7cac020` | `routes/health.ts` (new) — real DB ping via `db.execute(sql\`SELECT 1\`)`; 503 if DB fails; `/health` kept as alias for CF probe |
+| B · e2e flake | `4dff6d3` | server.e2e.test.ts — root-cause fix: `serve()` sync return races with `listen()` bind; await listening callback + pin 127.0.0.1 to avoid IPv4/IPv6 dual-stack ECONNRESET smoke |
+| C · CI Action | `1d0a719` | `.github/workflows/ci.yml` (new) — push/PR triggers build + typecheck + vitest; pnpm store cache; concurrency group; dependabot bonus |
+| D · TokenStore | `ed67708` | `auth/token-store.ts` (new) — `TokenStore<T>` interface + `InMemoryTokenStore`; routes/email.ts swapped to use it; SP-2+1 Redis swap is 1-line in DI |
+
+**Merge:** Four `git merge --no-ff` (`ca86d97 64713dd 385535e 0c86011`). One
+stash-pop dance to resolve user's dirty `package.json` colliding with Track C's
+new `"ci"` script — 3-way merge auto-resolved cleanly (both added to same JSON
+section, no real conflict).
+
+**Merged total:** 161 → 172 tests (+3 health + +8 token-store). 26 test files,
+all green in 14s — Track B's flake fix means full-parallel runs are stable
+now (vs the prior ~30-50% fail rate). All 7 build targets green (cloud +
+contract + shared + runner-host + ui + desktop + web + apps/claude-watch).
+
+### Fanout effectiveness
+
+- ~560 lines new across 9 files
+- 4 agent total wallclock ≈ 18-22 min (slowest B 18min — included 10 stress
+  test runs; fastest A 18min — limited by 161-test suite re-runs)
+- Sequential estimate ≈ 60 min → saved ~40 min
+- Integration gate ≈ 5 min (stash-pop + 4 merges + full build/test/typecheck)
+- 0 boundary violations. 1 user-WIP collision (handled by stash-pop, same
+  recipe as batch 4).
+
+### Lessons
+
+1. **Root-cause > workaround for shared infrastructure.** Track C was scope-
+   limited to CI config (couldn't touch test code), so it used
+   `--no-file-parallelism` to dodge the e2e flake in CI. Track B was scope-
+   licensed to fix the test and found the real cause: `@hono/node-server`'s
+   `serve()` returns before `listen()` completes binding. Now both layers
+   work right — CI can drop the `--no-file-parallelism` flag in a future
+   followup since the test is no longer flaky.
+2. **3 agents independently flagged the e2e flake.** A, C, D all noticed
+   ECONNREFUSED during their own baseline runs (each ran `pnpm vitest run
+   packages/cloud` to check non-regression). This triangulation gave Track
+   B's fix high signal-to-noise. **Pattern: when an issue shows up
+   independently in multiple agent reports, it's almost certainly real and
+   worth fixing in its own track.**
+3. **Interface-first abstraction for future-proofing pays off cheap.** Track
+   D's `TokenStore<T>` interface + InMemoryTokenStore impl took ~5 min agent
+   wallclock, ~80 LOC. SP-2+1 will be able to swap in a `RedisTokenStore`
+   without touching `routes/email.ts` business logic. This is a 5-min-now /
+   save-2-hours-later trade.
+
+### Sovereignty table
+
+| Track | Independent path | Forbidden | Delivered |
+|---|---|---|---|
+| A | `packages/cloud/src/routes/health.{ts,test.ts}` (new) + 5-line server.ts edit | other routes, db, contract | 3 tests pass |
+| B | `packages/cloud/src/server.e2e.test.ts` (modify) | root vitest.config.ts, business code | 10/10 stable + 10/10 under 6-way CPU stress |
+| C | `.github/workflows/ci.yml` + `dependabot.yml` (new) + package.json +1 line script | source code, tests | local CI three-way green |
+| D | `packages/cloud/src/auth/token-store.{ts,test.ts}` (new) + `routes/email.ts` modify | routes/auth.ts, contract | 8 token-store tests + 10 email tests not-regressed |
+
+### Branches now
+
+- `main`: 5 new commits (4 merges + post-merge state) on top of `7e145a9`
+- All `track/sp2-followup-*` branches deleted; `.worktrees/sp2-followup-*/` removed
+
+### Next candidates
+
+- Apply the same TokenStore pattern to `routes/auth.ts` OAuth `pending` Map
+  (currently still in-memory; was punted out of Track D scope).
+- Drop the `--no-file-parallelism` flag from CI now that Track B fixed the
+  underlying race — let CI run files in parallel for speed.
+- Wire a Redis-backed TokenStore impl + multi-node cogni-cloud (SP-2+1 work).
+- Surface `/healthz` to whatever uptime monitor we eventually pick (CF
+  Workers, Better Stack, etc.) and wire alerting.
+
+---
+
 ## SP-2 follow-up — multiplexed WS lifetime (2026-05-18, single-author)
 
 **User-visible symptom:** every sidebar click flashed the red 胶囊 "与服务器的
