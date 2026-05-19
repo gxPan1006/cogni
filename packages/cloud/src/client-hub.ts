@@ -11,6 +11,13 @@ export class ClientHub {
   private clients = new Map<string, ConnectedClient>();
   private subs = new Map<string, Set<string>>(); // threadId -> clientIds
   private listSubs = new Set<string>();          // clientIds subscribed to the list channel
+  // SP-3 project domain subscriptions. Three distinct channels because the
+  // UI consumers are distinct: sidebar/project-list (`projectsSubs` keyed by
+  // userId), per-project board (`projectSubs` keyed by projectId), and per-
+  // task drawer (`taskSubs` keyed by taskId). Each is a Set<clientId>.
+  private projectsSubs = new Map<string, Set<string>>(); // userId   -> clientIds
+  private projectSubs  = new Map<string, Set<string>>(); // projectId -> clientIds
+  private taskSubs     = new Map<string, Set<string>>(); // taskId    -> clientIds
 
   register(client: ConnectedClient): void {
     this.clients.set(client.clientId, client);
@@ -22,6 +29,21 @@ export class ClientHub {
     for (const [threadId, set] of this.subs) {
       set.delete(clientId);
       if (set.size === 0) this.subs.delete(threadId);
+    }
+    // SP-3: sweep project-domain subscription sets too. Same shape (Set<clientId>),
+    // identical "delete + drop empty set" pattern; we keep them as three separate
+    // maps rather than one tagged map to keep the broadcast functions O(1).
+    for (const [userId, set] of this.projectsSubs) {
+      set.delete(clientId);
+      if (set.size === 0) this.projectsSubs.delete(userId);
+    }
+    for (const [projectId, set] of this.projectSubs) {
+      set.delete(clientId);
+      if (set.size === 0) this.projectSubs.delete(projectId);
+    }
+    for (const [taskId, set] of this.taskSubs) {
+      set.delete(clientId);
+      if (set.size === 0) this.taskSubs.delete(taskId);
     }
   }
 
@@ -106,5 +128,89 @@ export class ClientHub {
   /** User-wide broadcast — alias for sendToUser, named for call-site clarity in chat dispatcher. */
   publishUserBroadcast(userId: string, msg: CloudToClient): void {
     this.sendToUser(userId, msg);
+  }
+
+  // ─── SP-3 project domain subscriptions ─────────────────────────────────────
+  //
+  // Three channels mirror the SP-2 thread subscription pattern but keyed
+  // differently to match the UI consumers:
+  //
+  //   • `subscribeProjects(clientId, userId)` — sidebar/list-page subscribes
+  //     once per user; receives `project-event` (kind: created/updated/archived).
+  //     Note: we key on userId at subscribe-time (carried in from the WS auth
+  //     claims) instead of looking it up on every broadcast — saves a Map
+  //     deref + matches the listSubs ergonomics.
+  //
+  //   • `subscribeProject(clientId, projectId)` — kanban board subscribes
+  //     per open project; receives `task-event` (any task in that project)
+  //     plus `project-event` (this project's own updates, so board header
+  //     reflects rename/policy edits without a refetch).
+  //
+  //   • `subscribeTask(clientId, taskId)` — task drawer subscribes when
+  //     opened; receives `task-event` for that one task. Runner events for
+  //     the task's executionThreadId still flow via SP-2's `subscribe-thread`
+  //     (the drawer subscribes to both — taskId here, threadId via SP-2).
+
+  subscribeProjects(clientId: string, userId: string): void {
+    if (!this.clients.has(clientId)) return;
+    let set = this.projectsSubs.get(userId);
+    if (!set) { set = new Set(); this.projectsSubs.set(userId, set); }
+    set.add(clientId);
+  }
+
+  unsubscribeProjects(clientId: string, userId: string): void {
+    const set = this.projectsSubs.get(userId);
+    if (!set) return;
+    set.delete(clientId);
+    if (set.size === 0) this.projectsSubs.delete(userId);
+  }
+
+  subscribeProject(clientId: string, projectId: string): void {
+    if (!this.clients.has(clientId)) return;
+    let set = this.projectSubs.get(projectId);
+    if (!set) { set = new Set(); this.projectSubs.set(projectId, set); }
+    set.add(clientId);
+  }
+
+  unsubscribeProject(clientId: string, projectId: string): void {
+    const set = this.projectSubs.get(projectId);
+    if (!set) return;
+    set.delete(clientId);
+    if (set.size === 0) this.projectSubs.delete(projectId);
+  }
+
+  subscribeTask(clientId: string, taskId: string): void {
+    if (!this.clients.has(clientId)) return;
+    let set = this.taskSubs.get(taskId);
+    if (!set) { set = new Set(); this.taskSubs.set(taskId, set); }
+    set.add(clientId);
+  }
+
+  unsubscribeTask(clientId: string, taskId: string): void {
+    const set = this.taskSubs.get(taskId);
+    if (!set) return;
+    set.delete(clientId);
+    if (set.size === 0) this.taskSubs.delete(taskId);
+  }
+
+  /** Fan-out a project-event to every client subscribed to that user's project list. */
+  broadcastProjects(userId: string, msg: CloudToClient): void {
+    const set = this.projectsSubs.get(userId);
+    if (!set) return;
+    for (const clientId of set) this.clients.get(clientId)?.send(msg);
+  }
+
+  /** Fan-out an event (project-event or task-event) to per-project subscribers. */
+  broadcastProject(projectId: string, msg: CloudToClient): void {
+    const set = this.projectSubs.get(projectId);
+    if (!set) return;
+    for (const clientId of set) this.clients.get(clientId)?.send(msg);
+  }
+
+  /** Fan-out a task-event to per-task subscribers (drawer open clients). */
+  broadcastTask(taskId: string, msg: CloudToClient): void {
+    const set = this.taskSubs.get(taskId);
+    if (!set) return;
+    for (const clientId of set) this.clients.get(clientId)?.send(msg);
   }
 }
