@@ -57,7 +57,7 @@ import {
   createTaskRun,
   listTaskRuns,
 } from "../../db/projects.js";
-import { openRunnerSession } from "../../db/sessions.js";
+import { openRunnerSession, getLatestSessionForThread } from "../../db/sessions.js";
 import type { ClientHub } from "../../client-hub.js";
 import type { HostRouter } from "../../host-router.js";
 import type { Project, ProjectTask, TaskState, CloudToHost } from "@cogni/contract";
@@ -133,11 +133,89 @@ export class ProjectOrchestrator {
       if (!task) continue;
 
       if (task.state === "running" && task.hostId) {
+        // SP-3: a `running` task whose latest runner_session is already
+        // `completed` / `failed` means the runner finished but no one drove
+        // the lifecycle past `running`. (SP-1's ChatDomain.handleSessionUpdate
+        // updates runner_sessions.status but doesn't know about tasks; we
+        // close the loop here so the user doesn't see a stuck-running card.)
+        const finalized = await this.maybeFinalizeRunningTask(task);
+        if (finalized) continue;
         await this.warnIfHostOffline(task);
       } else if (task.state === "reviewing") {
         await this.maybeReapplyMergeGate(task);
       }
     }
+  }
+
+  /**
+   * If the latest runner_session for `task.executionThreadId` is `completed`
+   * or `failed`, drive the task lifecycle to the next state. Returns true if
+   * a transition fired (caller should skip the host-offline warn for this
+   * task). The merge-gate decides reviewing vs done vs reviewing-on-fail
+   * via `handleRunnerDoneForTask`; we just gate it on session status.
+   */
+  private async maybeFinalizeRunningTask(task: ProjectTask): Promise<boolean> {
+    if (!task.executionThreadId) return false;
+    const session = await getLatestSessionForThread(
+      this.deps.db,
+      task.executionThreadId,
+    );
+    if (!session) return false;
+    if (session.status === "completed") {
+      // Inline mirror of ProjectDomain.handleRunnerDoneForTask to avoid the
+      // orchestrator→domain back-reference: evaluate the merge gate against
+      // the project's current mergePolicy, then transition running → next.
+      // For require-review (default) the gate returns 'reviewing' and the
+      // worktree stays put for the user to inspect; for auto-merge variants
+      // it returns 'done' and the gate has already run git-merge-to-main +
+      // worktree-remove host RPCs so worktreePath is cleared on transition.
+      const project = await getProject(this.deps.db, task.projectId);
+      if (!project) return false;
+      let next: TaskState;
+      try {
+        next = await evaluateAndApplyMergeGate(
+          { hostRpc: this.deps.hostRpc, logger: this.deps.logger },
+          project,
+          task,
+        );
+      } catch (err) {
+        this.deps.logger?.warn?.(
+          { taskId: task.id, err: String(err) },
+          "orchestrator: merge-gate threw on running-done",
+        );
+        next = "reviewing";
+      }
+      try {
+        const updated = await transitionTask(this.deps.db, task.id, "running", next, {
+          worktreePath: next === "done" ? null : task.worktreePath,
+        });
+        this.broadcastTask(updated, "state-changed");
+        this.broadcastProject(project, "updated");
+      } catch (err) {
+        if (!(err instanceof StateMismatch)) {
+          this.deps.logger?.warn?.(
+            { taskId: task.id, err: String(err) },
+            "orchestrator: transition running→next threw",
+          );
+        }
+      }
+      return true;
+    }
+    if (session.status === "failed") {
+      try {
+        const updated = await transitionTask(this.deps.db, task.id, "running", "failed");
+        this.broadcastTask(updated, "state-changed");
+      } catch (err) {
+        if (!(err instanceof StateMismatch)) {
+          this.deps.logger?.warn?.(
+            { taskId: task.id, err: String(err) },
+            "orchestrator: failed-transition threw",
+          );
+        }
+      }
+      return true;
+    }
+    return false;
   }
 
   private async warnIfHostOffline(task: ProjectTask): Promise<void> {
