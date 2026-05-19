@@ -125,7 +125,15 @@ export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, de
                 return; // non-JSON frame — ignore
               }
               const parsed = hostToCloudSchema.safeParse(raw);
-              if (!parsed.success) return;
+              if (!parsed.success) {
+                // TEMP DEBUG (SP-3 dogfood): log dropped frames so we can
+                // see if the host is sending shapes we don't recognize.
+                logger.warn(
+                  { raw: JSON.stringify(raw).slice(0, 500), err: parsed.error.message.slice(0, 300) },
+                  "host-ws inbound frame failed schema parse — DROPPED",
+                );
+                return;
+              }
               const msg = parsed.data;
 
               if (msg.t === "register") {
