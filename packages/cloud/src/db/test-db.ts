@@ -8,6 +8,14 @@ import * as schema from "./schema.js";
 //   • runner_sessions: dropped thread_id UNIQUE, added closed_at
 //   • hosts: added removed_at
 //   • new auth_sessions table
+// SP-3 deltas (2026-05-19):
+//   • new projects table
+//   • new project_tasks table (depends on projects, hosts, threads)
+//   • new task_runs table (depends on project_tasks, runner_sessions)
+//   • runner_sessions: added nullable task_id FK (project_tasks)
+// Note: runner_sessions is created BEFORE project_tasks so the FK on
+// runner_sessions.task_id is added later via ALTER TABLE — postgres won't
+// accept a forward reference at CREATE TABLE time.
 const DDL = `
 CREATE TABLE tenants (id uuid primary key default gen_random_uuid(), name text not null, created_at timestamp not null default now());
 CREATE TABLE users (id uuid primary key default gen_random_uuid(), tenant_id uuid not null references tenants(id), email text not null unique, created_at timestamp not null default now());
@@ -17,8 +25,65 @@ CREATE TABLE auth_sessions (id uuid primary key default gen_random_uuid(), user_
 CREATE INDEX auth_sessions_user_idx ON auth_sessions(user_id) WHERE revoked_at IS NULL;
 CREATE TABLE threads (id uuid primary key default gen_random_uuid(), tenant_id uuid not null references tenants(id), user_id uuid not null references users(id), title text not null default 'New chat', created_at timestamp not null default now(), updated_at timestamp not null default now());
 CREATE TABLE messages (id uuid primary key default gen_random_uuid(), thread_id uuid not null references threads(id), role text not null, content text not null, created_at timestamp not null default now());
-CREATE TABLE runner_sessions (id uuid primary key default gen_random_uuid(), thread_id uuid not null references threads(id), host_id uuid references hosts(id), adapter text not null, runner_session_id text, status text not null default 'idle', closed_at timestamp, created_at timestamp not null default now());
+CREATE TABLE runner_sessions (id uuid primary key default gen_random_uuid(), thread_id uuid not null references threads(id), host_id uuid references hosts(id), adapter text not null, runner_session_id text, status text not null default 'idle', closed_at timestamp, task_id uuid, created_at timestamp not null default now());
 CREATE TABLE events (id uuid primary key default gen_random_uuid(), thread_id uuid not null references threads(id), session_id uuid not null references runner_sessions(id), seq integer not null, type text not null, payload_json jsonb not null, created_at timestamp not null default now(), constraint events_thread_seq_uq unique (thread_id, seq));
+CREATE TABLE projects (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references tenants(id),
+  user_id uuid not null references users(id),
+  name text not null,
+  description text,
+  repo_path text not null,
+  default_host_id uuid not null references hosts(id),
+  thread_id uuid references threads(id),
+  merge_policy text not null default 'require-review',
+  test_command text,
+  concurrency_limit integer not null default 2,
+  system_prompt text,
+  archived_at timestamp,
+  created_at timestamp not null default now(),
+  updated_at timestamp not null default now()
+);
+CREATE INDEX projects_tenant_user_idx ON projects(tenant_id, user_id, archived_at);
+CREATE INDEX projects_default_host_idx ON projects(default_host_id);
+CREATE TABLE project_tasks (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  ref text not null,
+  title text not null,
+  description text,
+  state text not null default 'queued',
+  priority integer not null default 0,
+  labels jsonb not null default '[]',
+  order_index text not null,
+  host_id uuid references hosts(id),
+  adapter text,
+  worktree_path text,
+  branch_name text,
+  execution_thread_id uuid references threads(id),
+  retries integer not null default 0,
+  max_retries integer not null default 3,
+  needs_input_what text,
+  created_at timestamp not null default now(),
+  updated_at timestamp not null default now(),
+  started_at timestamp,
+  completed_at timestamp,
+  constraint project_tasks_project_ref_uq unique (project_id, ref)
+);
+CREATE INDEX project_tasks_project_state_order_idx ON project_tasks(project_id, state, order_index);
+CREATE INDEX project_tasks_host_state_idx ON project_tasks(host_id, state);
+ALTER TABLE runner_sessions ADD CONSTRAINT runner_sessions_task_id_fk FOREIGN KEY (task_id) REFERENCES project_tasks(id) ON DELETE SET NULL;
+CREATE TABLE task_runs (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references project_tasks(id) on delete cascade,
+  runner_session_id uuid not null references runner_sessions(id),
+  attempt_number integer not null,
+  started_at timestamp not null,
+  ended_at timestamp,
+  exit_reason text,
+  error_message text
+);
+CREATE INDEX task_runs_task_idx ON task_runs(task_id);
 `;
 
 export async function makeTestDb() {

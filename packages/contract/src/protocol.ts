@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { runnerEventSchema, RUNNER_CAPABILITIES } from "./runner.js";
+import {
+  projectSchema,
+  projectTaskSchema,
+  projectEventKindSchema,
+  taskEventKindSchema,
+} from "./project.js";
 
 export const sessionStatusSchema = z.enum(["running", "completed", "failed"]);
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
@@ -48,6 +54,14 @@ export const clientToCloudSchema = z.discriminatedUnion("t", [
     action: z.enum(["switch", "cancel"]),
     targetHostId: z.string().optional(),
   }),
+  // SP-3 project domain subscriptions (one WS, N subscriptions; reconnect
+  // resubscribes automatically — same pattern as SP-2 thread subs).
+  z.object({ t: z.literal("subscribe-projects") }),
+  z.object({ t: z.literal("unsubscribe-projects") }),
+  z.object({ t: z.literal("subscribe-project"), projectId: z.string() }),
+  z.object({ t: z.literal("unsubscribe-project"), projectId: z.string() }),
+  z.object({ t: z.literal("subscribe-task"), taskId: z.string() }),
+  z.object({ t: z.literal("unsubscribe-task"), taskId: z.string() }),
 ]);
 export type ClientToCloud = z.infer<typeof clientToCloudSchema>;
 
@@ -94,5 +108,22 @@ export const cloudToClientSchema = z.discriminatedUnion("t", [
     alternatives: z.array(z.object({ id: z.string(), name: z.string(), lastSeenAgoMs: z.number() })),
   }),
   z.object({ t: z.literal("no-host-online"), threadId: z.string(), pendingMessageId: z.string() }),
+  // SP-3 project domain pushes. `project-event` fires for list-level
+  // changes (sidebar / ProjectsList); `task-event` fires for board-level
+  // changes (kanban card state, drag-reorder, etc). Task runner events
+  // — the per-tool-call stream the drawer renders — continue to flow on
+  // the existing `event` channel (re-using the task's executionThreadId
+  // as `threadId`); subscribers to `subscribe-task` resolve the taskId
+  // → threadId mapping client-side.
+  z.object({
+    t: z.literal("project-event"),
+    kind: projectEventKindSchema,
+    project: projectSchema,
+  }),
+  z.object({
+    t: z.literal("task-event"),
+    kind: taskEventKindSchema,
+    task: projectTaskSchema,
+  }),
 ]);
 export type CloudToClient = z.infer<typeof cloudToClientSchema>;
