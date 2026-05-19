@@ -7,6 +7,7 @@
 export { ApiClient, ApiError } from "./transport/api.js";
 export type {
   ApiConfig, HostInfo, DeviceRow, IdentityRow,
+  CreateProjectInput, UpdateProjectInput, CreateTaskInput, TaskDetailResponse,
 } from "./transport/api.js";
 
 // Hooks
@@ -15,6 +16,9 @@ export { useAuthCore } from "./hooks/useAuth-core.js";
 export { useDevices } from "./hooks/useDevices.js";
 export { useIdentities } from "./hooks/useIdentities.js";
 export { useHosts } from "./hooks/useHosts.js";
+export { useProjects, applyProjectEvent } from "./hooks/useProjects.js";
+export { useProjectBoard, applyTaskEvent } from "./hooks/useProjectBoard.js";
+export { useTaskDetail } from "./hooks/useTaskDetail.js";
 
 // Components (chat core — used by desktop today, web in SP-2 batch 4)
 export { Sidebar } from "./components/Sidebar.js";
@@ -34,3 +38,17 @@ export {
   UserMessage, AssistantText, ThinkingBlock, ToolCallBlock, PermissionPrompt, aggregateEvents,
 } from "./components/ChatBlocks.js";
 export { Markdown } from "./components/Markdown.js";
+
+// SP-3 project domain components (apps/desktop + apps/web share these)
+export {
+  ProjectsList,
+  ProjectBoard, STATE_COLOR, STATE_LABEL, StatePill,
+  TaskDetail,
+  NewProject, NewTask,
+  ProjectSettings,
+} from "./components/project/index.js";
+export type {
+  ProjectListItem, ProjectHealth,
+  NewProjectDraft, NewTaskDraft,
+  BrowseEntry, BrowseResponse,
+} from "./components/project/index.js";

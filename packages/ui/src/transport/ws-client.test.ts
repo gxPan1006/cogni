@@ -208,3 +208,106 @@ describe("createWsClient — multiplexed connection lifetime", () => {
     expect(FakeWebSocket.instances).toHaveLength(1); // no new socket spawned
   });
 });
+
+describe("createWsClient — SP-3 project / task channels", () => {
+  // Minimal fixture rows; only the fields the dispatcher routes on are real
+  // (id / projectId). Cast through `as any` to satisfy the wide ProjectTask /
+  // Project schemas without inlining every nullable field.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fakeTask = (id: string, projectId: string): any => ({ id, projectId, ref: id, title: id, description: null, state: "queued", priority: 3, labels: [], orderIndex: "1", hostId: null, adapter: null, worktreePath: null, branchName: null, executionThreadId: null, retries: 0, maxRetries: 3, needsInputWhat: null, createdAt: "", updatedAt: "", startedAt: null, completedAt: null });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fakeProject = (id: string): any => ({ id, tenantId: "t", userId: "u", name: id, description: null, repoPath: "/r", defaultHostId: "h", threadId: null, mergePolicy: "require-review", testCommand: null, concurrencyLimit: 2, systemPrompt: null, archivedAt: null, createdAt: "", updatedAt: "" });
+
+  it("subscribe-projects: emits frame once, fans out, unsub on last detach", () => {
+    const client = createWsClient(() => "ws://test/api/ws");
+    const handlerA = vi.fn();
+    const handlerB = vi.fn();
+
+    const unsubA = client.subscribeProjects({ onFrame: handlerA });
+    const sock = FakeWebSocket.instances[0]!;
+    sock.fireOpen();
+    // Second listener on same channel must NOT trigger a second subscribe-projects.
+    const unsubB = client.subscribeProjects({ onFrame: handlerB });
+
+    expect(sock.parsedSent()).toEqual([{ t: "subscribe-projects" }]);
+
+    sock.fireMessage({ t: "project-event", kind: "created", project: fakeProject("p1") });
+    expect(handlerA).toHaveBeenCalledTimes(1);
+    expect(handlerB).toHaveBeenCalledTimes(1);
+
+    // Detaching one listener must not emit unsubscribe-projects yet.
+    unsubA();
+    expect(sock.parsedSent()).toEqual([{ t: "subscribe-projects" }]);
+
+    // Detaching the last listener emits unsubscribe-projects.
+    unsubB();
+    expect(sock.parsedSent()).toEqual([
+      { t: "subscribe-projects" },
+      { t: "unsubscribe-projects" },
+    ]);
+    client.close();
+  });
+
+  it("subscribe-project routes task-event by projectId", () => {
+    const client = createWsClient(() => "ws://test/api/ws");
+    const handlerP1 = vi.fn();
+    const handlerP2 = vi.fn();
+    client.subscribeProject({ projectId: "p1", onFrame: handlerP1 });
+    client.subscribeProject({ projectId: "p2", onFrame: handlerP2 });
+    const sock = FakeWebSocket.instances[0]!;
+    sock.fireOpen();
+
+    sock.fireMessage({ t: "task-event", kind: "created", task: fakeTask("T1", "p1") });
+    sock.fireMessage({ t: "task-event", kind: "state-changed", task: fakeTask("T2", "p2") });
+
+    expect(handlerP1).toHaveBeenCalledTimes(1);
+    expect(handlerP1.mock.calls[0]![0]).toMatchObject({ t: "task-event", task: { id: "T1" } });
+    expect(handlerP2).toHaveBeenCalledTimes(1);
+    expect(handlerP2.mock.calls[0]![0]).toMatchObject({ t: "task-event", task: { id: "T2" } });
+    client.close();
+  });
+
+  it("subscribe-task: filters by taskId and unsub frames travel exactly once", () => {
+    const client = createWsClient(() => "ws://test/api/ws");
+    const handler = vi.fn();
+    const unsub = client.subscribeTask({ taskId: "T9", onFrame: handler });
+    const sock = FakeWebSocket.instances[0]!;
+    sock.fireOpen();
+
+    sock.fireMessage({ t: "task-event", kind: "updated", task: fakeTask("T9", "pX") });
+    sock.fireMessage({ t: "task-event", kind: "updated", task: fakeTask("T8", "pX") });
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    unsub();
+    expect(sock.parsedSent()).toEqual([
+      { t: "subscribe-task", taskId: "T9" },
+      { t: "unsubscribe-task", taskId: "T9" },
+    ]);
+    client.close();
+  });
+
+  it("re-emits SP-3 subscriptions on reconnect", () => {
+    const client = createWsClient(() => "ws://test/api/ws");
+    client.subscribeProjects({ onFrame: () => {} });
+    client.subscribeProject({ projectId: "pA", onFrame: () => {} });
+    client.subscribeTask({ taskId: "T1", onFrame: () => {} });
+    const sock1 = FakeWebSocket.instances[0]!;
+    sock1.fireOpen();
+    expect(sock1.parsedSent()).toEqual([
+      { t: "subscribe-projects" },
+      { t: "subscribe-project", projectId: "pA" },
+      { t: "subscribe-task", taskId: "T1" },
+    ]);
+
+    sock1.fireServerClose();
+    vi.advanceTimersByTime(1_000);
+    const sock2 = FakeWebSocket.instances[1]!;
+    sock2.fireOpen();
+    expect(sock2.parsedSent()).toEqual([
+      { t: "subscribe-projects" },
+      { t: "subscribe-project", projectId: "pA" },
+      { t: "subscribe-task", taskId: "T1" },
+    ]);
+    client.close();
+  });
+});

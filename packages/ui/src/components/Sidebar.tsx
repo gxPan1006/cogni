@@ -18,10 +18,10 @@ import { Icon } from "./icons.js";
 import "./sidebar.css";
 
 /**
- * Sidebar's view of a project. SP-3 desktop seeds this from `MOCK_PROJECTS`
- * (which has more fields than this); the cloud will eventually serve the
- * same shape via `GET /projects`. Kept inline so the ui package doesn't
- * depend back on apps/desktop.
+ * Sidebar's view of a project. SP-3 Track E feeds this from
+ * `useProjects(api)` (composed with per-project task aggregates) inside
+ * the host Shell/App; the four counters / health flag are computed at
+ * the page layer so this component stays a pure presenter.
  */
 export type SidebarProject = {
   id: string;
@@ -33,8 +33,6 @@ export type SidebarProject = {
   pinned?: boolean;
   archived?: boolean;
 };
-// Backwards-compatible alias used by SP-3 design files.
-type DesignProject = SidebarProject;
 
 export function Sidebar(props: {
   mode: "chat" | "project";
@@ -47,7 +45,7 @@ export function Sidebar(props: {
   onNewChat: () => void;
 
   // project mode (SP-3)
-  projects?: DesignProject[];
+  projects?: SidebarProject[];
   activeProjectId?: string | null;
   onSelectProject?: (id: string) => void;
   onNewProject?: () => void;
@@ -168,7 +166,7 @@ function ThreadButton({ thread, active, onClick }: { thread: ThreadSummary; acti
 /* ─── Project lists (SP-3) ─────────────────────────────── */
 
 function ProjectLists(props: {
-  projects?: DesignProject[];
+  projects?: SidebarProject[];
   activeProjectId?: string | null;
   onSelectProject?: (id: string) => void;
 }) {
@@ -215,7 +213,7 @@ function ProjectLists(props: {
   );
 }
 
-function ProjectButton({ project, active, onClick, dim }: { project: DesignProject; active: boolean; onClick: () => void; dim?: boolean }) {
+function ProjectButton({ project, active, onClick, dim }: { project: SidebarProject; active: boolean; onClick: () => void; dim?: boolean }) {
   const live = project.liveRunners;
   const queued = project.queuedCount;
   return (

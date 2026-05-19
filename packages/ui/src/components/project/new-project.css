@@ -163,3 +163,43 @@ select.input {
   font-family: var(--font-mono);
   font-size: 14px; font-weight: 500;
 }
+
+/* Repo path row (input + browse button side by side). */
+.np__path { display: flex; gap: 8px; align-items: center; }
+.np__path-input { flex: 1; }
+.np__init {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* fs-browse picker (web only, opened from inside NewProject). */
+.np-browse { width: min(520px, 90vw); }
+.np-browse__body {
+  max-height: 50vh;
+  overflow: auto;
+  padding: 8px 0;
+}
+.np-browse__row {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: var(--fg);
+  border-radius: var(--r-2);
+}
+.np-browse__row:hover { background: var(--surface-2, var(--bg-sunk)); }
+.np-browse__empty,
+.np-browse__loading,
+.np-browse__error {
+  padding: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.np-browse__error { color: var(--bad); }
