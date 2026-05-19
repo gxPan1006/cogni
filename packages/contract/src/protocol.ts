@@ -46,6 +46,13 @@ export const cloudToHostSchema = z.discriminatedUnion("t", [
     adapter: z.string(),
     runnerSessionId: z.string().nullable(),
     message: z.string(),
+    /**
+     * SP-3: project-task worktree path. The host overrides the adapter's
+     * cwd to this when present; chat dispatches omit it and the host falls
+     * back to the per-thread scratch dir (SP-1 behavior). Optional to stay
+     * backward-compatible with SP-1/SP-2 chat-only clients.
+     */
+    workspacePath: z.string().optional(),
   }),
   // SP-3 host RPC request envelope. The cloud assigns `rpcId`; the host
   // echoes it on the `host-rpc-response` frame. `request` is the typed

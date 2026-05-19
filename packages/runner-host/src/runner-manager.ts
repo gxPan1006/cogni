@@ -8,6 +8,13 @@ export interface DispatchInput {
   adapter: string;
   runnerSessionId: string | null;
   message: string;
+  /**
+   * SP-3: project-task dispatches set this to the per-task worktree path so
+   * the runner runs inside the right git tree (spec §七 invariant 3). When
+   * omitted (chat-only flow, SP-1/SP-2), we fall back to the per-thread
+   * scratch dir as before.
+   */
+  workspacePath?: string;
 }
 
 /** Holds registered adapters + live session handles, runs one turn per dispatch. */
@@ -43,8 +50,14 @@ export class RunnerManager {
       onEvent({ type: "error", code: "unknown_adapter", message: `no adapter registered for '${input.adapter}'` });
       return;
     }
-    const cwd = threadScratchDir(input.threadId);
-    await mkdir(cwd, { recursive: true });
+    // SP-3: project-task dispatches override cwd to the task's worktree
+    // (spec §七 invariant 3). The worktree is created via host RPC before
+    // dispatch, so it already exists — no mkdir. Chat-only flow keeps the
+    // SP-1 thread-scratch-dir behavior (lazy mkdir).
+    const cwd = input.workspacePath ?? threadScratchDir(input.threadId);
+    if (!input.workspacePath) {
+      await mkdir(cwd, { recursive: true });
+    }
 
     let handle = this.sessions.get(input.sessionId);
     if (!handle) {

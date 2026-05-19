@@ -330,6 +330,10 @@ export class ProjectOrchestrator {
         adapter,
         runnerSessionId: session.runnerSessionId,
         message: task.title + (task.description ? `\n\n${task.description}` : ""),
+        // SP-3 §七 invariant 3: runner cwd === task.worktreePath. The
+        // worktree was created via gitWorktreeCreate above so the path is
+        // guaranteed to exist on the host.
+        workspacePath: worktreePath,
       };
       conn.send(frame);
     } catch (err) {
