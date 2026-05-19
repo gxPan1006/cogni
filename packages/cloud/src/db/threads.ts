@@ -67,6 +67,55 @@ export async function touchThread(db: AnyDb, threadId: string): Promise<void> {
   await db.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId));
 }
 
+/**
+ * Rewrite the thread's title (used by the auto-titling RPC after the first
+ * round). Returns the updated row's userId so the caller can scope the
+ * `thread-meta` broadcast — looking it up here avoids a second roundtrip.
+ */
+export async function updateThreadTitle(
+  db: AnyDb,
+  threadId: string,
+  title: string,
+): Promise<{ userId: string; title: string; updatedAt: string } | null> {
+  const [row] = await db
+    .update(threads)
+    .set({ title })
+    .where(eq(threads.id, threadId))
+    .returning();
+  if (!row) return null;
+  return { userId: row.userId, title: row.title, updatedAt: row.updatedAt.toISOString() };
+}
+
+/**
+ * Title-generation precondition: thread still carries the default title AND
+ * we've only persisted one user+assistant pair so far. Returning both pieces
+ * (title + first user message) in one query keeps the chat domain's done-
+ * branch tight — we read once, branch, then either fire the RPC or no-op.
+ */
+export async function getFirstTurnIfDefaultTitle(
+  db: AnyDb,
+  threadId: string,
+): Promise<{ firstUserMessage: string } | null> {
+  const t = await db
+    .select({ title: threads.title })
+    .from(threads)
+    .where(eq(threads.id, threadId))
+    .limit(1);
+  if (!t[0] || t[0].title !== "New chat") return null;
+  const msgs = await db
+    .select({ role: messages.role, content: messages.content })
+    .from(messages)
+    .where(eq(messages.threadId, threadId))
+    .orderBy(asc(messages.createdAt));
+  // Expect exactly one user + one assistant (the one we just persisted).
+  // More than two ⇒ we missed the first-turn window (e.g. retry on a long-
+  // running thread). Bail rather than retitle something with history.
+  if (msgs.length !== 2) return null;
+  const userMsg = msgs.find((m) => m.role === "user");
+  if (!userMsg) return null;
+  return { firstUserMessage: userMsg.content };
+}
+
 function toMessageView(r: typeof messages.$inferSelect): MessageView {
   return {
     id: r.id,

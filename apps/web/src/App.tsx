@@ -126,6 +126,36 @@ function WebShell({ page }: { page: Page }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- refire only on identity change
   }, [token]);
 
+  // Sidebar list-channel live updates. Cloud pushes `thread-meta` whenever a
+  // thread's title or lastMsgAt changes (today: auto-title after the first
+  // assistant reply lands). `thread-created` / `thread-deleted` cover
+  // cross-device sync — same user opens the web app in two windows and
+  // creates a chat on one; the other window's sidebar reflects it without
+  // refresh. We rely on the WS-level reconnect to resubscribe on its own.
+  useEffect(() => {
+    const unsub = api.wsClient.subscribeList({
+      onFrame: (frame) => {
+        if (frame.t === "thread-meta") {
+          setThreads((prev) =>
+            prev.map((t) =>
+              t.id === frame.threadId
+                ? { ...t, title: frame.title, updatedAt: frame.lastMsgAt }
+                : t,
+            ),
+          );
+        } else if (frame.t === "thread-created") {
+          setThreads((prev) =>
+            prev.some((t) => t.id === frame.thread.id) ? prev : [frame.thread, ...prev],
+          );
+        } else if (frame.t === "thread-deleted") {
+          setThreads((prev) => prev.filter((t) => t.id !== frame.threadId));
+        }
+      },
+    });
+    return unsub;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- one subscription per session
+  }, [token]);
+
   const hostStats = useMemo(
     () =>
       hosts.length > 0

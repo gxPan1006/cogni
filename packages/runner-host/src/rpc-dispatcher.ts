@@ -37,9 +37,12 @@ import {
   type GitDiffSnapshotResponse,
   type FsBrowseRequest,
   type FsBrowseResponse,
+  type GenerateThreadTitleRequest,
+  type GenerateThreadTitleResponse,
 } from "@cogni/contract";
 import { GitOpError } from "./git-ops.js";
 import { FsBrowseError } from "./fs-browse.js";
+import { GenerateTitleError } from "./generate-title.js";
 
 export interface RpcDeps {
   gitInitIfMissing: (req: GitInitIfMissingRequest) => Promise<GitInitIfMissingResponse>;
@@ -49,6 +52,7 @@ export interface RpcDeps {
   gitTestsRun: (req: GitTestsRunRequest) => Promise<GitTestsRunResponse>;
   gitDiffSnapshot: (req: GitDiffSnapshotRequest) => Promise<GitDiffSnapshotResponse>;
   fsBrowse: (req: FsBrowseRequest) => Promise<FsBrowseResponse>;
+  generateThreadTitle: (req: GenerateThreadTitleRequest) => Promise<GenerateThreadTitleResponse>;
 }
 
 /**
@@ -106,11 +110,13 @@ async function routeRpc(frame: HostRpcRequest, deps: RpcDeps): Promise<HostRpcRe
       return { ok: true, method: frame.method, result: await deps.gitDiffSnapshot(frame.params) };
     case "fs-browse":
       return { ok: true, method: frame.method, result: await deps.fsBrowse(frame.params) };
+    case "generate-thread-title":
+      return { ok: true, method: frame.method, result: await deps.generateThreadTitle(frame.params) };
   }
 }
 
 function errorPayload(e: unknown): { code: string; message: string } {
-  if (e instanceof GitOpError || e instanceof FsBrowseError) {
+  if (e instanceof GitOpError || e instanceof FsBrowseError || e instanceof GenerateTitleError) {
     return { code: e.code, message: e.message };
   }
   if (e instanceof Error) {

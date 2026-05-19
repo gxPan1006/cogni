@@ -79,6 +79,33 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   const refreshHosts = () => api.listHosts().then(setHosts).catch(handleApiError);
   useEffect(() => { refreshThreads(); refreshHosts(); }, [token]);
 
+  // Sidebar list-channel live updates. Mirrors apps/web/src/App.tsx — cloud
+  // pushes `thread-meta` (auto-title), `thread-created` (multi-window sync),
+  // `thread-deleted`. WS-level reconnect resubscribes for us.
+  useEffect(() => {
+    const unsub = api.wsClient.subscribeList({
+      onFrame: (frame) => {
+        if (frame.t === "thread-meta") {
+          setThreads((prev) =>
+            prev.map((t) =>
+              t.id === frame.threadId
+                ? { ...t, title: frame.title, updatedAt: frame.lastMsgAt }
+                : t,
+            ),
+          );
+        } else if (frame.t === "thread-created") {
+          setThreads((prev) =>
+            prev.some((t) => t.id === frame.thread.id) ? prev : [frame.thread, ...prev],
+          );
+        } else if (frame.t === "thread-deleted") {
+          setThreads((prev) => prev.filter((t) => t.id !== frame.threadId));
+        }
+      },
+    });
+    return unsub;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- one subscription per session
+  }, [token]);
+
   // First login → register a runner-host + spawn the bundled sidecar.
   // Same heuristic as before: register fresh if cloud has no host OR
   // local host.json belongs to a different user (dogfood scenario).

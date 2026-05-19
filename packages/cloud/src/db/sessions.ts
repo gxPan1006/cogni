@@ -29,9 +29,13 @@ export async function getOrCreateRunnerSession(
   return toRow(row!);
 }
 
-export async function getRunnerSessionById(db: AnyDb, sessionId: string): Promise<RunnerSessionRow | null> {
+export async function getRunnerSessionById(
+  db: AnyDb,
+  sessionId: string,
+): Promise<(RunnerSessionRow & { hostId: string | null }) | null> {
   const rows = await db.select().from(runnerSessions).where(eq(runnerSessions.id, sessionId)).limit(1);
-  return rows[0] ? toRow(rows[0]) : null;
+  if (!rows[0]) return null;
+  return { ...toRow(rows[0]), hostId: rows[0].hostId };
 }
 
 export async function setRunnerSessionId(db: AnyDb, sessionId: string, runnerSessionId: string) {

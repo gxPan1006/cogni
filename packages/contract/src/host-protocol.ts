@@ -128,6 +128,30 @@ export const gitDiffSnapshotResponseSchema = z.object({
 });
 export type GitDiffSnapshotResponse = z.infer<typeof gitDiffSnapshotResponseSchema>;
 
+// generate-thread-title
+// Spawn the host-local "small model" CLI (currently `claude --print --model
+// claude-haiku-4-5`) and ask for a short title summarising the user's first
+// turn. The host owns the model + CLI specifics so the cloud doesn't need
+// its own API key; the response is just a trimmed string.
+export const generateThreadTitleRequestSchema = z.object({
+  /** The runner adapter the chat is using (e.g. "claude-code"). Lets the
+   *  host pick a matching CLI / model — for now only claude-code is supported. */
+  adapter: z.string(),
+  /** Verbatim first user message. */
+  userMessage: z.string(),
+  /** Final assistant reply text (concatenated `text` events). May be empty
+   *  if the assistant produced only tool calls; host should still try. */
+  assistantReply: z.string(),
+});
+export type GenerateThreadTitleRequest = z.infer<typeof generateThreadTitleRequestSchema>;
+
+export const generateThreadTitleResponseSchema = z.object({
+  /** Already trimmed, single-line, no surrounding quotes. Cloud writes this
+   *  straight into threads.title — keep ≤ 60 chars on the host side. */
+  title: z.string().min(1).max(120),
+});
+export type GenerateThreadTitleResponse = z.infer<typeof generateThreadTitleResponseSchema>;
+
 // fs-browse
 export const fsBrowseRequestSchema = z.object({
   /** Absolute path on the host. If unset, host picks a sensible default (e.g. $HOME). */
@@ -165,6 +189,7 @@ export const hostRpcRequestSchema = z.discriminatedUnion("method", [
   z.object({ method: z.literal("git-tests-run"), params: gitTestsRunRequestSchema }),
   z.object({ method: z.literal("git-diff-snapshot"), params: gitDiffSnapshotRequestSchema }),
   z.object({ method: z.literal("fs-browse"), params: fsBrowseRequestSchema }),
+  z.object({ method: z.literal("generate-thread-title"), params: generateThreadTitleRequestSchema }),
 ]);
 export type HostRpcRequest = z.infer<typeof hostRpcRequestSchema>;
 
@@ -176,6 +201,7 @@ export const hostRpcMethodSchema = z.enum([
   "git-tests-run",
   "git-diff-snapshot",
   "fs-browse",
+  "generate-thread-title",
 ]);
 
 /**
@@ -197,6 +223,7 @@ export const hostRpcResponseSchema = z.union([
   z.object({ ok: z.literal(true), method: z.literal("git-tests-run"), result: gitTestsRunResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("git-diff-snapshot"), result: gitDiffSnapshotResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("fs-browse"), result: fsBrowseResponseSchema }),
+  z.object({ ok: z.literal(true), method: z.literal("generate-thread-title"), result: generateThreadTitleResponseSchema }),
   z.object({
     ok: z.literal(false),
     method: hostRpcMethodSchema,
@@ -220,5 +247,6 @@ export const HOST_RPC_METHODS = [
   "git-tests-run",
   "git-diff-snapshot",
   "fs-browse",
+  "generate-thread-title",
 ] as const;
 export type HostRpcMethod = (typeof HOST_RPC_METHODS)[number];

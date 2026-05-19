@@ -13,6 +13,7 @@ import {
   gitDiffSnapshot,
 } from "./git-ops.js";
 import { fsBrowse } from "./fs-browse.js";
+import { generateThreadTitle } from "./generate-title.js";
 import { logger } from "@cogni/shared";
 
 const config = await readHostConfig();
@@ -38,6 +39,7 @@ connectToCloud(config, manager, (req) =>
     gitTestsRun,
     gitDiffSnapshot,
     fsBrowse,
+    generateThreadTitle,
   }),
 );
 logger.info({ hostId: config.hostId }, "runner host daemon started");

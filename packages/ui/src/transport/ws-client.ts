@@ -49,6 +49,16 @@ export interface ThreadSubscription {
 }
 
 /**
+ * SP-2 thread-list subscriber. The cloud's `subscribe-list` channel pushes
+ * `thread-meta` (auto-title updates), `thread-created`, and `thread-deleted`
+ * — all the events the sidebar needs to keep its left-rail list in sync
+ * without polling `/api/threads` after every turn.
+ */
+export interface ListSubscription {
+  onFrame: (frame: CloudToClient) => void;
+}
+
+/**
  * SP-3 list-level subscriber (the user's whole project list). One frame
  * `project-event` per change; the hook's reducer applies created / updated /
  * archived locally.
@@ -100,6 +110,10 @@ export interface WsClient {
   subscribeProject(sub: ProjectSubscription): () => void;
   /** Attach a per-task subscriber. Emits `subscribe-task` once per taskId. */
   subscribeTask(sub: TaskSubscription): () => void;
+  /** Attach a thread-list subscriber. Emits `subscribe-list` exactly once when
+   *  the first local listener attaches, and `unsubscribe-list` only when the
+   *  last one detaches. The single sidebar mount is the expected caller. */
+  subscribeList(sub: ListSubscription): () => void;
   /** Returns true iff the frame could be written to the socket synchronously. */
   send(threadId: string, text: string): boolean;
   resolveFallback(
@@ -131,6 +145,7 @@ export function createWsClient(buildUrl: () => string): WsClient {
   const projectsSubs = new Set<ProjectsSubscription>();
   const projectSubs = new Set<ProjectSubscription>();
   const taskSubs = new Set<TaskSubscription>();
+  const listSubs = new Set<ListSubscription>();
   // Per-scope refcount so we send `subscribe-X` exactly once on open and
   // `unsubscribe-X` only when the last listener detaches. Keyed by the
   // scope's stable identifier ("__list__" for the list channel, or the
@@ -138,6 +153,7 @@ export function createWsClient(buildUrl: () => string): WsClient {
   const projectRefcount = new Map<string, number>();
   const taskRefcount = new Map<string, number>();
   let projectsRefcount = 0;
+  let listRefcount = 0;
   const connectionListeners = new Set<(c: boolean) => void>();
 
   function setConnected(next: boolean) {
@@ -201,9 +217,18 @@ export function createWsClient(buildUrl: () => string): WsClient {
       }
       return;
     }
-    // List-channel frames (thread-meta / thread-created / thread-deleted /
-    // device-list-changed) are intentionally dropped here. List consumers can
-    // be added later without disturbing thread subscribers.
+    // SP-2 list-channel frames. Sidebar (and any future list-aware mount)
+    // attaches via `subscribeList`; the cloud only pushes these to clients
+    // that sent `subscribe-list`, so the fan-out here is unconditional.
+    if (
+      frame.t === "thread-meta" ||
+      frame.t === "thread-created" ||
+      frame.t === "thread-deleted" ||
+      frame.t === "device-list-changed"
+    ) {
+      for (const s of listSubs) s.onFrame(frame);
+      return;
+    }
   }
 
   function connect() {
@@ -220,6 +245,10 @@ export function createWsClient(buildUrl: () => string): WsClient {
       for (const s of subs.values()) {
         sendFrame({ t: "subscribe-thread", threadId: s.threadId, lastSeq: s.getLastSeq() });
       }
+      // SP-2 list channel — resubscribe if any listener attached before
+      // (re)connect. Cloud's subscribeList is idempotent per clientId, but
+      // we still gate on the refcount to avoid noise.
+      if (listRefcount > 0) sendFrame({ t: "subscribe-list" });
       // SP-3 channels — resubscribe each scope exactly once even if multiple
       // local listeners share it (the refcount maps drive this).
       if (projectsRefcount > 0) sendFrame({ t: "subscribe-projects" });
@@ -329,6 +358,21 @@ export function createWsClient(buildUrl: () => string): WsClient {
       };
     },
 
+    subscribeList(sub) {
+      listSubs.add(sub);
+      const wasZero = listRefcount === 0;
+      listRefcount += 1;
+      if (!ws) connect();
+      else if (wasZero) sendFrame({ t: "subscribe-list" });
+      // Cloud has no `unsubscribe-list` frame — the list channel is cheap
+      // and ClientHub.unregister cleans up on disconnect. We still drop the
+      // local listener so its callback stops firing after teardown.
+      return () => {
+        if (!listSubs.delete(sub)) return;
+        listRefcount = Math.max(0, listRefcount - 1);
+      };
+    },
+
     send(threadId, text) {
       return sendFrame({ t: "send", threadId, text });
     },
@@ -349,9 +393,11 @@ export function createWsClient(buildUrl: () => string): WsClient {
       projectsSubs.clear();
       projectSubs.clear();
       taskSubs.clear();
+      listSubs.clear();
       projectRefcount.clear();
       taskRefcount.clear();
       projectsRefcount = 0;
+      listRefcount = 0;
       connectionListeners.clear();
       ws?.close();
       ws = null;
