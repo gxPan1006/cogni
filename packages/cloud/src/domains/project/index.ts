@@ -33,6 +33,7 @@ import {
   createTask as dbCreateTask,
   listTasksByProject as dbListTasksByProject,
   getTask as dbGetTask,
+  getTaskByThreadId as dbGetTaskByThreadId,
   listTaskRuns as dbListTaskRuns,
   type CreateProjectInput,
   type CreateTaskInput,
@@ -393,6 +394,41 @@ export class ProjectDomain {
    * this up; for SP-3 MVP the orchestrator's reconcile picks up
    * reviewing-state tasks on the next tick too (defense in depth).
    */
+  /**
+   * SP-3 needs-input bridge — invoked by ChatDomain when it sees a runner
+   * `AskUserQuestion` tool-call on a thread that belongs to a project task.
+   *
+   * **Surface:** the project board's T-x card moves from "进行中" to "等待
+   * 输入" (purple pulse). Clicking the card opens the drawer with the
+   * runner's question rendered in the state stepper area, and the reply
+   * box accepts a free-form text answer. On reply submit, ProjectDomain's
+   * `replyToTask` path transitions the task back to `running` and forwards
+   * the answer to the runner via SP-1's ChatDomain.handleClientSend.
+   *
+   * **Idempotent / safe:** no-op when the thread isn't a task (chat-only),
+   * when the task isn't in `running` (already paused, already done,
+   * cancelled), or when the questionText is empty.
+   */
+  async handleAskUserQuestion(threadId: string, questionText: string): Promise<void> {
+    const task = await dbGetTaskByThreadId(this.deps.db, threadId);
+    if (!task) return; // chat thread, not a task — no lifecycle to pause
+    if (task.state !== "running") return; // already paused / terminal — ignore
+    const trimmed = questionText.trim();
+    if (!trimmed) return;
+    try {
+      const updated = await transitionTask(this.deps.db, task.id, "running", "needs-input", {
+        needsInputWhat: trimmed,
+      });
+      this.broadcastTask(updated, "state-changed");
+    } catch (err) {
+      if (err instanceof StateMismatch) return; // raced — orchestrator/another path moved it
+      this.deps.logger?.warn?.(
+        { taskId: task.id, err: String(err) },
+        "handleAskUserQuestion: transition running→needs-input threw",
+      );
+    }
+  }
+
   async handleRunnerDoneForTask(taskId: string): Promise<void> {
     const task = await dbGetTask(this.deps.db, taskId);
     if (!task || task.state !== "running") return;

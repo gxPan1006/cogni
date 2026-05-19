@@ -272,6 +272,25 @@ export async function getTask(db: AnyDb, taskId: string): Promise<ProjectTask | 
   return rows[0] ? rowToTask(rows[0]) : null;
 }
 
+/**
+ * Reverse lookup: find the task that owns a given thread. Used by the SP-3
+ * needs-input bridge — when the runner emits an `AskUserQuestion` tool-call
+ * on a thread, ChatDomain calls this to discover whether that thread is a
+ * project task (vs a free-form chat) and forward the event to ProjectDomain.
+ * Returns null for chat-only threads with no owning task.
+ */
+export async function getTaskByThreadId(
+  db: AnyDb,
+  executionThreadId: string,
+): Promise<ProjectTask | null> {
+  const rows = await db
+    .select()
+    .from(projectTasks)
+    .where(eq(projectTasks.executionThreadId, executionThreadId))
+    .limit(1);
+  return rows[0] ? rowToTask(rows[0]) : null;
+}
+
 export interface UpdateTaskStatePatch {
   hostId?: string | null;
   adapter?: string | null;

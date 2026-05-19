@@ -401,13 +401,43 @@ export class ProjectOrchestrator {
       return false;
     }
     try {
+      // Compose the dispatch message: project system prompt (if any) +
+      // file-commit operational suffix + task title/description.
+      //
+      // The operational suffix is mandatory and project-agnostic. Without
+      // it, claude on a vague task ("贪吃蛇小游戏") tends to plan-mode +
+      // paste code in chat — Accept then merges an empty branch. Telling
+      // it explicitly "write files in cwd, git add, git commit before
+      // reporting done" reliably switches behavior to producing real
+      // artifacts. (Custom project.systemPrompt prepended above this so
+      // user prompts can override / specialize.)
+      const FILE_COMMIT_RULES = [
+        "# Operational rules for this task",
+        "",
+        "- Your CWD is a git worktree dedicated to this task. Treat it as the deliverable surface.",
+        "- For any code/document/asset the user is asking for, **write real files** in CWD (do NOT only paste the content in chat).",
+        "- When done implementing, run `git add -A && git commit -m \"<concise summary>\"` before reporting completion.",
+        "- If the task is exploratory / Q&A only (no deliverable), say so explicitly and don't force a commit.",
+        "",
+      ].join("\n");
+      const messageParts: string[] = [];
+      if (project.systemPrompt && project.systemPrompt.trim().length > 0) {
+        messageParts.push(project.systemPrompt.trim(), "");
+      }
+      messageParts.push(FILE_COMMIT_RULES);
+      messageParts.push("# Task");
+      messageParts.push("");
+      messageParts.push(task.title);
+      if (task.description) {
+        messageParts.push("", task.description);
+      }
       const frame: CloudToHost = {
         t: "dispatch",
         sessionId: session.id,
         threadId: task.executionThreadId,
         adapter,
         runnerSessionId: session.runnerSessionId,
-        message: task.title + (task.description ? `\n\n${task.description}` : ""),
+        message: messageParts.join("\n"),
         // SP-3 §七 invariant 3: runner cwd === task.worktreePath. The
         // worktree was created via gitWorktreeCreate above so the path is
         // guaranteed to exist on the host.

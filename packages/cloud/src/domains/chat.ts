@@ -2,7 +2,7 @@ import type { RunnerEvent, SessionStatus } from "@cogni/contract";
 import { randomUUID } from "node:crypto";
 import { inArray, and, eq } from "drizzle-orm";
 import type { AnyDb } from "../db/users.js";
-import { appendMessage, touchThread } from "../db/threads.js";
+import { appendMessage, touchThread, updateThreadTitle, getFirstTurnIfDefaultTitle } from "../db/threads.js";
 import {
   getRunnerSessionById, setRunnerSessionId, setRunnerSessionStatus, appendEvent,
   getLatestSessionForThread, openRunnerSession, closeRunnerSession,
@@ -10,6 +10,8 @@ import {
 import { hosts as hostsTable } from "../db/schema.js";
 import type { HostRouter, ConnectedHost } from "../host-router.js";
 import type { ClientHub } from "../client-hub.js";
+import { logger } from "@cogni/shared";
+import { sendHostRpc } from "../routes/host-ws.js";
 
 const ADAPTER = "claude-code"; // SP-2: chat domain still always uses Claude Code
 
@@ -21,6 +23,29 @@ interface PendingFallback {
 }
 
 const PENDING_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Render an `AskUserQuestion` tool-call's `input.questions` payload into a
+ * compact human-readable string for `project_tasks.needs_input_what`. The
+ * runner's question shape (per superpowers tool: array of {question, header,
+ * options[]}) is collapsed to the first question's text — the drawer's reply
+ * box accepts free-form text, and one line is more useful than dumping the
+ * whole multi-choice JSON. Falls back to a generic prompt if the shape is
+ * unrecognized; we never throw — UX glitch beats lost lifecycle bridge.
+ */
+function formatAskUserQuestion(input: unknown): string {
+  if (input && typeof input === "object" && "questions" in input) {
+    const qs = (input as { questions?: unknown }).questions;
+    if (Array.isArray(qs) && qs.length > 0) {
+      const first = qs[0];
+      if (first && typeof first === "object" && "question" in first) {
+        const q = (first as { question?: unknown }).question;
+        if (typeof q === "string" && q.trim().length > 0) return q.trim();
+      }
+    }
+  }
+  return "Runner needs your input to continue.";
+}
 
 /**
  * Chat domain — SP-2 state machine.
@@ -43,6 +68,16 @@ export class ChatDomain {
   /** sessionId → accumulated assistant text for the in-flight turn. */
   private accumulating = new Map<string, string>();
   private pendingFallbacks = new Map<string, PendingFallback>();
+
+  /**
+   * SP-3 hook: when a runner emits an `AskUserQuestion` tool-call on a thread
+   * owned by a project task, ProjectDomain wires this to transition the task
+   * `running → needs-input` and surface the question to the user via the
+   * drawer's reply box. Optional — SP-1/SP-2 chat threads have no task and
+   * the wiring stays untouched (hook left undefined). Set by main.ts after
+   * ChatDomain + ProjectDomain are both constructed.
+   */
+  public onRunnerAskingForInput?: (threadId: string, questionText: string) => Promise<void>;
 
   constructor(
     private readonly db: AnyDb,
@@ -145,6 +180,18 @@ export class ChatDomain {
 
     if (event.type === "session-id") {
       await setRunnerSessionId(this.db, sessionId, event.id);
+    } else if (event.type === "tool-call" && event.name === "AskUserQuestion" && this.onRunnerAskingForInput) {
+      // SP-3 needs-input bridge: runners (claude-code, codex) surface
+      // mid-task clarifications via the AskUserQuestion tool. The cloud
+      // catches the event, formats the question list, and lets ProjectDomain
+      // pause the task lifecycle until the user replies in the drawer. We
+      // don't await this — the broadcast below should still fire so the UI
+      // sees the tool-call event itself.
+      void this.onRunnerAskingForInput(threadId, formatAskUserQuestion(event.input)).catch((err) => {
+        // best-effort hook; surface the error but never abort event processing.
+        // eslint-disable-next-line no-console
+        console.warn("onRunnerAskingForInput hook threw:", err);
+      });
     } else if (event.type === "text") {
       this.accumulating.set(sessionId, (this.accumulating.get(sessionId) ?? "") + event.text);
     } else if (event.type === "done") {
@@ -157,6 +204,19 @@ export class ChatDomain {
           t: "message", threadId, messageId: msg.id, role: "assistant",
           content: msg.content, createdAt: msg.createdAt,
         });
+        // After the first assistant reply lands, fire-and-forget the
+        // host-side titling RPC so "New chat" gets replaced in the sidebar.
+        // Skipped if the host has gone offline or the thread already has a
+        // non-default title (e.g. user renamed it manually, or we're past
+        // the first round). See `getFirstTurnIfDefaultTitle` for the guard.
+        if (session.hostId) {
+          void this.maybeGenerateTitle({
+            threadId,
+            hostId: session.hostId,
+            adapter: session.adapter,
+            assistantReply: text,
+          });
+        }
       }
       await setRunnerSessionStatus(this.db, sessionId, "completed");
     } else if (event.type === "error") {
@@ -217,6 +277,54 @@ export class ChatDomain {
     } catch {
       await setRunnerSessionStatus(this.db, session.id, "failed");
       this.clients.sendToUser(p.userId, { t: "host-status", online: false });
+    }
+  }
+
+  /**
+   * Fire-and-forget thread auto-titling. Triggered after the first
+   * assistant reply on a thread whose title is still "New chat".
+   *
+   * Why fire-and-forget: titling adds 1-3s of CLI latency and must not
+   * block the `done` event broadcast — the user is already looking at
+   * the assistant's reply by then; the sidebar title catching up a beat
+   * later is fine. Errors are logged and swallowed (title stays default).
+   *
+   * Idempotency: `getFirstTurnIfDefaultTitle` re-checks the precondition
+   * inside the same tick the RPC fires; if a parallel done event slipped
+   * through (shouldn't, since chat is single-turn but defensive), the
+   * second invocation bails on the message-count mismatch.
+   */
+  private async maybeGenerateTitle(p: {
+    threadId: string; hostId: string; adapter: string; assistantReply: string;
+  }): Promise<void> {
+    try {
+      const precond = await getFirstTurnIfDefaultTitle(this.db, p.threadId);
+      if (!precond) return;
+      const resp = await sendHostRpc(
+        p.hostId,
+        {
+          method: "generate-thread-title",
+          params: {
+            adapter: p.adapter,
+            userMessage: precond.firstUserMessage,
+            assistantReply: p.assistantReply,
+          },
+        },
+        { timeoutMs: 30_000 },
+      );
+      if (!resp.ok || resp.method !== "generate-thread-title") {
+        logger.warn({ threadId: p.threadId, resp }, "generate-thread-title rpc failed");
+        return;
+      }
+      const updated = await updateThreadTitle(this.db, p.threadId, resp.result.title);
+      if (!updated) return;
+      this.clients.publishThreadMeta(updated.userId, {
+        threadId: p.threadId,
+        title: updated.title,
+        lastMsgAt: updated.updatedAt,
+      });
+    } catch (err) {
+      logger.warn({ threadId: p.threadId, err: String(err) }, "auto-title failed");
     }
   }
 
