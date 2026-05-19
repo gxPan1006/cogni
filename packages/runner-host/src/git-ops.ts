@@ -137,12 +137,57 @@ export async function gitInitIfMissing(
 
 // ─── Handler 2: gitWorktreeCreate ──────────────────────────────────────────
 
-/** Create a new per-task worktree + branch. Safety: worktree must live under repo. */
+/**
+ * Create a new per-task worktree + branch. Safety: worktree must live under
+ * repo.
+ *
+ * **Idempotent.** WS RPCs aren't reliably acked — if the cloud restarts or
+ * the host reconnects between `git worktree add` succeeding and the response
+ * being delivered, the cloud's in-flight Promise is dropped and the
+ * orchestrator retries on the next tick. Without idempotency the retry hits
+ * `fatal: a branch named 'X' already exists` and the task stays queued
+ * forever. So before adding, check whether the requested worktree + branch
+ * already exist and match: if yes, return success without re-running git.
+ */
 export async function gitWorktreeCreate(
   req: GitWorktreeCreateRequest,
 ): Promise<GitWorktreeCreateResponse> {
   assertWorktreeInRepo(req.repoPath, req.worktreePath);
   await assertIsGitRepo(req.repoPath);
+
+  // Idempotency check: `git worktree list --porcelain` is the canonical way
+  // to enumerate worktrees. Lines look like `worktree /path`, `branch refs/heads/foo`.
+  // We scan for a worktree whose path resolves equal to ours; if its branch
+  // matches the requested branchName, this is already-created — return success.
+  const listed = await execa(
+    "git",
+    ["-C", req.repoPath, "worktree", "list", "--porcelain"],
+    { reject: false },
+  );
+  if (listed.exitCode === 0) {
+    const want = resolve(req.worktreePath);
+    const wantBranch = `refs/heads/${req.branchName}`;
+    const entries = listed.stdout.split("\n\n");
+    for (const block of entries) {
+      const lines = block.split("\n");
+      const pathLine = lines.find((l) => l.startsWith("worktree "));
+      const branchLine = lines.find((l) => l.startsWith("branch "));
+      if (!pathLine) continue;
+      const existingPath = resolve(pathLine.slice("worktree ".length).trim());
+      if (existingPath !== want) continue;
+      const existingBranch = branchLine?.slice("branch ".length).trim();
+      if (existingBranch === wantBranch) {
+        return { worktreePath: existingPath };
+      }
+      // Same path but different branch — this is a real conflict, not the
+      // retry case; surface it as a normal error.
+      throw new GitOpError(
+        "worktree-conflict",
+        `worktree at ${existingPath} exists on branch ${existingBranch ?? "<unknown>"}, not ${wantBranch}`,
+      );
+    }
+  }
+
   const r = await execa(
     "git",
     ["-C", req.repoPath, "worktree", "add", "-b", req.branchName, req.worktreePath],
