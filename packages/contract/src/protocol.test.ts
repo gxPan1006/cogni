@@ -129,6 +129,48 @@ describe("SP-2 ClientToCloud variants", () => {
   });
 });
 
+describe("SP-3 host RPC envelope variants", () => {
+  it("parses cloud→host host-rpc-request with fs-browse payload", () => {
+    const r = cloudToHostSchema.safeParse({
+      t: "host-rpc-request",
+      rpcId: "rpc-1",
+      request: { method: "fs-browse", params: { path: "/tmp" } },
+    });
+    expect(r.success).toBe(true);
+  });
+  it("parses host→cloud host-rpc-response ok=true with fs-browse result", () => {
+    const r = hostToCloudSchema.safeParse({
+      t: "host-rpc-response",
+      rpcId: "rpc-1",
+      response: {
+        ok: true,
+        method: "fs-browse",
+        result: { entries: [{ name: "foo", type: "dir" }], cwd: "/tmp" },
+      },
+    });
+    expect(r.success).toBe(true);
+  });
+  it("parses host→cloud host-rpc-response ok=false (error branch)", () => {
+    const r = hostToCloudSchema.safeParse({
+      t: "host-rpc-response",
+      rpcId: "rpc-1",
+      response: {
+        ok: false,
+        method: "fs-browse",
+        error: { code: "path-not-found", message: "no such dir" },
+      },
+    });
+    expect(r.success).toBe(true);
+  });
+  it("rejects host-rpc-request without rpcId", () => {
+    const r = cloudToHostSchema.safeParse({
+      t: "host-rpc-request",
+      request: { method: "fs-browse", params: { path: "/tmp" } },
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
 describe("SP-2 CloudToClient variants", () => {
   it("parses catchup-complete", () => {
     const r = cloudToClientSchema.safeParse({ t: "catchup-complete", threadId: "t1", latestSeq: 47 });

@@ -6,6 +6,7 @@ import {
   projectEventKindSchema,
   taskEventKindSchema,
 } from "./project.js";
+import { hostRpcRequestSchema, hostRpcResponseSchema } from "./host-protocol.js";
 
 export const sessionStatusSchema = z.enum(["running", "completed", "failed"]);
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
@@ -22,6 +23,16 @@ export const hostToCloudSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("heartbeat") }),
   z.object({ t: z.literal("event"), sessionId: z.string(), event: runnerEventSchema }),
   z.object({ t: z.literal("session-update"), sessionId: z.string(), status: sessionStatusSchema }),
+  // SP-3 host RPC response envelope. The host wraps a typed `hostRpcResponse`
+  // payload (success branch carries the typed result; error branch carries
+  // ok:false + message). `rpcId` echoes the request so the cloud can resolve
+  // the in-flight RPC table even when multiple RPCs are in flight on the
+  // single host WS.
+  z.object({
+    t: z.literal("host-rpc-response"),
+    rpcId: z.string(),
+    response: hostRpcResponseSchema,
+  }),
 ]);
 export type HostToCloud = z.infer<typeof hostToCloudSchema>;
 
@@ -35,6 +46,14 @@ export const cloudToHostSchema = z.discriminatedUnion("t", [
     adapter: z.string(),
     runnerSessionId: z.string().nullable(),
     message: z.string(),
+  }),
+  // SP-3 host RPC request envelope. The cloud assigns `rpcId`; the host
+  // echoes it on the `host-rpc-response` frame. `request` is the typed
+  // method+params union from host-protocol.ts.
+  z.object({
+    t: z.literal("host-rpc-request"),
+    rpcId: z.string(),
+    request: hostRpcRequestSchema,
   }),
 ]);
 export type CloudToHost = z.infer<typeof cloudToHostSchema>;
