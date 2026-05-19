@@ -546,3 +546,65 @@ the composer status pill alone (still green / unchanged). The red 重连中
 this follow-up finally aligns code with plan.
 
 ---
+
+## SP-3 项目域 + Codex adapter — 2026-05-19 (1+1+4 phased fanout, 6 agents)
+
+**Goal**: 第一次新增业务域 —— 把 cogni 从对话助手扩到 "监督式 AI worker 编排器"。项目 + per-task git worktree + reconcile loop + 第二个 RunnerAdapter (Codex) + 权限模型简化。Source spec: `docs/superpowers/specs/2026-05-19-cogni-sp3-project-domain-design.md` (557 行 / 13 章)。Source plan: 无单独 plan 文件 —— 直接以 spec §12 的 5-track 拆分为扇出骨架。
+
+**Structure**: not pure 5-way fanout —— Track A 定契约,B/C/D/E 全消费。于是:
+
+| Phase | Mode | Tracks | Commits |
+|---|---|---|---|
+| Round 1 | **Solo** (1 agent) | A: contract + DB schema + db helpers + tests | `d6921e5` (merge `eca9b17`) |
+| Mid-fix | Integration lead | 补 host RPC envelope (B BLOCKED 报告) | `12d0dca` |
+| Round 2 | **Fanout 4 agents** | B: cloud domain / C: routes / D: runner-host + Codex / E: UI 接线 | `1e7b29c` / `af2b045` / `b07d0df` / `c89ba6b` (+ 4 merge commits) |
+| Integration | lead | 解 server.ts/main.ts 冲突 + D envelope 适配 + C test fixup | `5c21867` |
+
+**Round 1 (Track A solo)**:
+
+| Track | Worktree | Commit | Content | Tests |
+|---|---|---|---|---|
+| A contract+db | `.worktrees/sp3-a-contract` | `d6921e5` | `contract/{project,host-protocol,protocol+,index+}.ts` + `cloud/db/{schema+,projects,test-db+}.ts` + 全套 test | 230 pass |
+
+**Mid-fix**:Track B v1 BLOCKED 报告 contract 漏了 `host-rpc-request` / `host-rpc-response` 信封 union(只有 payload schema 没有 envelope)。Integration lead 加 commit `12d0dca`:`cloudToHostSchema` / `hostToCloudSchema` 各加一个 envelope variant + 4 round-trip test。B v2 拉新 main 重派。
+
+**Round 2 (Fanout 4 agents)**:
+
+| Track | Worktree | Commit | Content | Tests | Wallclock |
+|---|---|---|---|---|---|
+| B v2 cloud domain | `.worktrees/sp3-b-domain` | `1e7b29c` | `domains/project/` 全套(orchestrator + lifecycle + merge-gate + host-rpc) + `client-hub.ts` 追加 3 topic + `routes/host-ws.ts` 追加 sendHostRpc + in-flight RPC table | 302 pass | ~19min |
+| C routes | `.worktrees/sp3-c-routes` | `af2b045` | `routes/projects.ts` (486 行) + `routes/projects.test.ts` (645 行, 29 test) + `routes/client.ts` 追加 6 subscribe-* + `server.ts` 追加 projectDomain field + `main.ts` 追加 registerProjectsRoutes | 171/171 cloud, 29 新 routes test | ~13min |
+| D runner-host | `.worktrees/sp3-d-runner` | `b07d0df` | `git-ops.ts` (7 method + safety) + `fs-browse.ts` + `rpc-dispatcher.ts` + `adapters/codex/` 全套 + `main.ts/registry.ts` 追加 | 60/60 runner-host (16 base + 44 new), 296 full | ~13min |
+| E UI | `.worktrees/sp3-e-ui` | `c89ba6b` | 6 组件提升到 `packages/ui/src/components/project/` + 3 个新 hook(useProjects/useProjectBoard/useTaskDetail) + `api.ts` 追加 15 method + `ws-client.ts` 扩 3 subscribe API + Shell/web 接线 + 删除 `apps/desktop/src/{NewProject,NewTask,Project,...}` (6 个 tsx + 6 个 css) | 25/25 ui, 275 full, desktop/web build green | ~24min |
+
+**Integration gate (lead)**:
+- B + C 都在 `server.ts` 加 `projectDomain` field(B 必填 / C 可选 + 本地 interface 定义)。冲突解:用 B 的 import-from-domain(单一真相),保留 C 的 `?:` optional(SP-1/SP-2 fixture 不强求传 projectDomain)。
+- B + C 都改 `main.ts`(B 加 HostRpcClient + projectDomain.start;C 加 registerProjectsRoutes 调用)。冲突解:B 的实例化(带 hostRpc + start)+ C 的 routes mount 一起保留。
+- C 的 routes/projects.ts 调用与 B 的 class 不完全对齐:`createProject` 多传 `initGit`(B 没该字段) → 删除;`replyToTask(taskId, content)` 改成 B 的对象签名 `{taskId,userId,content,sourceClientId}`(因为 B 内部复用 ChatDomain.handleClientSend 必须有 userId + sourceClientId)。test 配套改。
+- D 的 wire 格式与 12d0dca envelope 不一致(D base 在 envelope 落地前):D 在 `registry.ts` 用 `hostRpcRequestSchema.safeParse` 直接 parse 裸 payload,fallback 才走 `cloudToHostSchema`。B 用信封发,D 不识别 → 静默 drop → 5min 超时。Integration fix:简化为只 parse envelope,`t === 'host-rpc-request'` 时 unwrap → dispatch → 回包 `host-rpc-response` 带 rpcId。
+
+**merge 后全量**:`pnpm run ci` = build + typecheck + vitest **all green / 309 pass / 34 files / 0 fail / 0 skip**。
+
+**扇出效果**:
+- Round 1 (A solo):~12min wallclock,1567 行新增
+- Round 2 (B/C/D/E 4 路并行):wallclock 取最长(E ~24min),累计 agent 总 wallclock ~69min,顺串成 1 人干约要 ~1.5 倍(因 B 重派 + 集成冲突解决)
+- 4 个 round-2 commit 累计 ~7900 行新增 / ~990 行删除(主要是 E 把 desktop mock 组件搬到 packages/ui)
+- Integration 介入时间:envelope mid-fix(~10min)+ 4 路 merge + 冲突解决 + D fixup + CI 验证(~20min)
+- 冲突 / 驳回:1 次 BLOCKED(B v1 正确报 envelope gap;经 12d0dca 修复后 v2 顺利交付),0 次驳回
+
+**踩坑 / 决策**:
+- **契约 envelope 漏 union — Track A 漏的最关键事**。host-protocol.ts 定了 payload schema,但 protocol.ts 的 WS frame union 没把它们包进 envelope variant。B v1 第一时间检测到并报 BLOCKED(没硬扩 contract,严格遵循"越界必停")。整合期补一个 4-test commit 就行。**下次教训**:Track A 的 prompt 应该明确列出 "envelope union 的 variant 要加" 这一步,不要假定 agent 推断得出。
+- **类 vs interface 双重定义**:C 在 server.ts 写本地 interface,B 把 class import 进来。整合时只能保留一个。**经验**:contract 这一层的"对象形状"应该写在 packages/contract/,不在 cloud 端再定一份。下次让 Track A 把 ProjectDomain class 用到的 input/output type(`CreateProjectInput` 等)也定到 contract.types/project.ts。
+- **routes 的 reply call 签名分歧**:B 的 `replyToTask` 是 object 形参(需要 userId + sourceClientId 给 chat domain),C 写 routes 时不知道 B 会这么设计,默认了 `(taskId, content)` 两参。整合时由 C 的 routes 改 call site。**经验**:fanout 前明确域方法签名(写到 spec §一里的"interface")。
+- **D 不知道 12d0dca**:D 派出时 12d0dca 还没合,D base 在 eca9b17。D 用了"先 try 裸 schema 再 fallback"的策略,逻辑自洽但和真实信封不兼容。**经验**:当 main 在 fanout 期间被 hotfix 推进,要不就把所有 in-flight worktree 全部 rebase + SendMessage 通知,要不就在 integration 期做适配。这次选了后者(因为 D 已经在跑,打扰成本更高)。
+- **5-way 同派会翻车**:`/fanout` 自己的检查项"稳定契约"就是为 SP-3 这种"第一次新增业务域"准备的。若不把 A solo 跑,B/C/D/E 全要扩契约,合不回来。1+1+4 这种 phased fanout 是 fanout playbook 在"契约本轮要变"场景下的正确解法。
+- **6 agent 总规模 vs 整合代价**:6 agent / ~10000 行净增 / 整合介入 ~30min。这是扇出 "7-9 agent 整合开始吃力" 区间的体感印证 —— 5-7 agent 是甜蜜点,再多就要拆两批。
+
+**下一轮候选**:
+- T36 dogfood 场景 3-7 (SP-2 留尾巴,需用户 Mac)
+- SP-3+1:多节点 cogni-cloud (Redis-backed orchestrator leader 选举)、跨 host fan-out、per-task host override
+- ProjectDomain 输入类型升到 contract 层
+- 把 mock 数据从 `mock.ts` 完全清掉(SP-3 已删了 project 相关,但 chat/host 部分还在)
+- Linear 集成(SP-3+1 单独 epic)
+- 端到端真机演练:跑通 "新建项目 → 创建第一个 task → runner 启动 → reviewing → accept → merge to main" 完整链路
+
