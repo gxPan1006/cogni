@@ -7,11 +7,10 @@ import type { Auth, SessionClaims } from "./auth.js";
 import type { HostRouter } from "./host-router.js";
 import type { ClientHub } from "./client-hub.js";
 import type { ChatDomain } from "./domains/chat.js";
-// SP-3 project domain. ServerDeps declares the field so Track C's HTTP routes
-// + Track-B-owned WS subscription handlers in routes/client.ts can resolve it
-// off `deps.projectDomain`. createServer() itself doesn't instantiate or
-// mount it — that's Track C's job (their mount call lands in the existing
-// createServer body) and main.ts (which constructs deps).
+// SP-3 project domain — single source of truth is the concrete class in
+// domains/project/index.ts (Track B). routes/projects.ts (Track C) types its
+// handlers against this same type, so they see the same method surface as
+// the runtime object main.ts constructs.
 import type { ProjectDomain } from "./domains/project/index.js";
 import type { EmailTransport } from "./email/transport.js";
 import { registerAuthRoutes } from "./routes/auth.js";
@@ -21,6 +20,7 @@ import { registerClientRoutes } from "./routes/client.js";
 import { registerIdentitiesRoutes } from "./routes/identities.js";
 import { registerDevicesRoutes } from "./routes/devices.js";
 import { registerHostsRoutes } from "./routes/hosts.js";
+import { registerProjectsRoutes } from "./routes/projects.js";
 import { registerHealthRoutes } from "./routes/health.js";
 
 declare module "hono" {
@@ -35,11 +35,13 @@ export interface ServerDeps {
   hosts: HostRouter;
   clients: ClientHub;
   chat: ChatDomain;
-  /** SP-3: project domain (orchestrator + use-cases). Track C's routes resolve
-   * `deps.projectDomain.<verb>` for HTTP handlers; client-ws subscribe-* cases
-   * also reference it for ownership checks. Field-only on `ServerDeps`;
-   * createServer() does not wire it (Track C / main.ts compose). */
-  projectDomain: ProjectDomain;
+  /**
+   * SP-3 project domain. Optional so SP-1/SP-2 server-construction fixtures
+   * keep compiling without having to wire a full orchestrator stack; routes
+   * that need it 503 when absent. Production main.ts always passes the real
+   * instance, so the optional `?` is purely a test-ergonomics escape hatch.
+   */
+  projectDomain?: ProjectDomain;
   emailTransport: EmailTransport;
   magicLinkTtlMinutes: number;
   publicUrl: string;
@@ -92,6 +94,9 @@ export function createServer(deps: ServerDeps) {
   registerIdentitiesRoutes(app, deps);
   registerDevicesRoutes(app, deps);
   registerHostsRoutes(app, deps);
+  // SP-3 project domain REST routes + fs-browse passthrough. Same /api/*
+  // Bearer middleware applies (registered by registerClientRoutes above).
+  registerProjectsRoutes(app, deps);
 
   return { app, injectWebSocket };
 }

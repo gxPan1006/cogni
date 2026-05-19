@@ -29,7 +29,8 @@ const clients = new ClientHub();
 const chat = new ChatDomain(db, hosts, clients);
 // SP-3: HostRpcClient wraps the transport-level sendHostRpc (exported from
 // routes/host-ws.ts where the WS connection registry lives). ProjectDomain
-// owns the orchestrator and starts it now so the reconcile loop ticks.
+// owns the reconcile orchestrator and starts it now so the loop ticks.
+// Disposed on shutdown so in-flight RPCs drain and reconcile timers stop.
 const hostRpc = new HostRpcClient({ sendHostRpc, logger });
 const projectDomain = new ProjectDomain({
   db, hostRpc, hostRouter: hosts, clients, chat, logger,
@@ -63,3 +64,17 @@ const server = serve({ fetch: app.fetch, port: env.port }, (info) =>
   logger.info({ port: info.port, emailTransport: env.emailTransport }, "cloud control plane listening"),
 );
 injectWebSocket(server);
+
+// Graceful shutdown — drain project domain reconcile + in-flight host RPCs
+// before the process exits. SIGTERM is what `serve` sees from Docker / k8s.
+const shutdown = async (sig: string) => {
+  logger.info({ sig }, "shutting down");
+  try {
+    await projectDomain.dispose();
+  } catch (err) {
+    logger.warn({ err: String(err) }, "projectDomain dispose failed");
+  }
+  server.close(() => process.exit(0));
+};
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
+process.once("SIGINT", () => void shutdown("SIGINT"));
