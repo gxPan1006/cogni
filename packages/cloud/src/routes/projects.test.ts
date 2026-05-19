@@ -465,7 +465,15 @@ describe("POST /api/tasks/:taskId/reply", () => {
       body: JSON.stringify({ content: "use sqlite" }),
     });
     expect(res.status).toBe(200);
-    expect(fns.replyToTask).toHaveBeenCalledWith(task.id, "use sqlite");
+    // B's replyToTask takes a single object {taskId,userId,content,sourceClientId}
+    // (rather than positional args) because it reuses ChatDomain.handleClientSend
+    // under the hood. The HTTP route adapts the call shape; assertions follow suit.
+    expect(fns.replyToTask).toHaveBeenCalledWith({
+      taskId: task.id,
+      userId: user.id,
+      content: "use sqlite",
+      sourceClientId: "rest:reply",
+    });
     await close();
   });
 

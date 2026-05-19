@@ -1,15 +1,16 @@
 import { WebSocket } from "ws";
 import type { CloudToHost, HostToCloud, HostRpcRequest, HostRpcResponse, RunnerCapability } from "@cogni/contract";
-import { cloudToHostSchema, hostRpcRequestSchema } from "@cogni/contract";
+import { cloudToHostSchema } from "@cogni/contract";
 import { logger } from "@cogni/shared";
 import { RunnerManager } from "./runner-manager.js";
 import type { HostConfig } from "./config.js";
 
 /**
  * SP-3 add-on: optional host-RPC handler injected into `connectToCloud`.
- * Frames that match `hostRpcRequestSchema` (i.e. carry a `method` field) are
- * routed here instead of through `cloudToHostSchema`. Returning undefined is
- * not allowed — the dispatcher always produces a response, even on error.
+ * Inbound `host-rpc-request` envelopes (per `cloudToHostSchema`) carry an
+ * `rpcId` + nested `request`; the handler receives the unwrapped request and
+ * its result is re-wrapped in a matching `host-rpc-response` envelope so
+ * concurrent in-flight RPCs over the same WS can be correlated by rpcId.
  */
 export type HostRpcHandler = (req: HostRpcRequest) => Promise<HostRpcResponse>;
 
@@ -40,10 +41,10 @@ export async function handleDispatch(
 export function connectToCloud(
   config: HostConfig,
   manager: RunnerManager,
-  // SP-3: optional. When provided, frames that pass `hostRpcRequestSchema`
-  // are routed here and the response is sent back as a bare JSON-encoded
-  // `HostRpcResponse` (no envelope — matches the contract pair). When
-  // omitted, RPC frames are ignored, preserving SP-1/SP-2 behavior.
+  // SP-3: optional. When provided, `t: 'host-rpc-request'` envelope frames
+  // are unwrapped, dispatched here, and the result wrapped in a matching
+  // `host-rpc-response` envelope (echoing `rpcId`) sent back. When omitted,
+  // RPC frames are ignored, preserving SP-1/SP-2 behavior.
   rpcHandler?: HostRpcHandler,
 ): void {
   let attempt = 0;
@@ -86,26 +87,19 @@ export function connectToCloud(
           } catch {
             return; // non-JSON frame — ignore
           }
-          // SP-3 RPC path: try the host-rpc envelope first. RPC frames carry
-          // `method` instead of `t` and are bare (no `t` discriminator), so
-          // they would otherwise be rejected by `cloudToHostSchema`. The
-          // response shape (`HostRpcResponse`) is also bare — we send it as
-          // raw JSON, not wrapped in a `HostToCloud` variant.
-          if (rpcHandler) {
-            const rpcParsed = hostRpcRequestSchema.safeParse(raw);
-            if (rpcParsed.success) {
-              const resp = await rpcHandler(rpcParsed.data);
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify(resp));
-              }
-              return;
-            }
-          }
           const parsed = cloudToHostSchema.safeParse(raw);
           if (!parsed.success) return;
           const msg = parsed.data;
           if (msg.t === "dispatch") {
             await handleDispatch(manager, msg, send);
+          } else if (msg.t === "host-rpc-request" && rpcHandler) {
+            // SP-3: unwrap envelope → dispatch → re-wrap with the same
+            // rpcId so the cloud's in-flight RPC table resolves correctly
+            // even with concurrent RPCs multiplexed onto one WS.
+            const response = await rpcHandler(msg.request);
+            if (ws.readyState === WebSocket.OPEN) {
+              send({ t: "host-rpc-response", rpcId: msg.rpcId, response });
+            }
           }
         })
         .catch((err) => {
