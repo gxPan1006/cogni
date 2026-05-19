@@ -7,6 +7,12 @@ import type { Auth, SessionClaims } from "./auth.js";
 import type { HostRouter } from "./host-router.js";
 import type { ClientHub } from "./client-hub.js";
 import type { ChatDomain } from "./domains/chat.js";
+// SP-3 project domain. ServerDeps declares the field so Track C's HTTP routes
+// + Track-B-owned WS subscription handlers in routes/client.ts can resolve it
+// off `deps.projectDomain`. createServer() itself doesn't instantiate or
+// mount it — that's Track C's job (their mount call lands in the existing
+// createServer body) and main.ts (which constructs deps).
+import type { ProjectDomain } from "./domains/project/index.js";
 import type { EmailTransport } from "./email/transport.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerEmailRoutes } from "./routes/email.js";
@@ -29,6 +35,11 @@ export interface ServerDeps {
   hosts: HostRouter;
   clients: ClientHub;
   chat: ChatDomain;
+  /** SP-3: project domain (orchestrator + use-cases). Track C's routes resolve
+   * `deps.projectDomain.<verb>` for HTTP handlers; client-ws subscribe-* cases
+   * also reference it for ownership checks. Field-only on `ServerDeps`;
+   * createServer() does not wire it (Track C / main.ts compose). */
+  projectDomain: ProjectDomain;
   emailTransport: EmailTransport;
   magicLinkTtlMinutes: number;
   publicUrl: string;

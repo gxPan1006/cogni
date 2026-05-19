@@ -1,0 +1,400 @@
+/**
+ * SP-3 project orchestrator — the reconcile loop.
+ *
+ * Single-node MVP: a 5s `setInterval` tick on every cloud node (currently
+ * only one). Each tick:
+ *
+ *   Phase 1 — reconcile: scan tasks in non-terminal "active" states
+ *     (`running`, `needs-input`, `reviewing`) and patch up state when
+ *     external conditions (host went offline, runner died, mergePolicy
+ *     deferred) drifted it from what's persisted:
+ *       - `running` + host offline > 60s → log warning. We *don't* mark
+ *         failed here because SP-2 session-resume re-attaches the runner on
+ *         host reconnect (spec §五.reconcile + §十一 链路 C).
+ *       - `reviewing` + project.mergePolicy ≠ require-review → re-run the
+ *         merge gate (covers the case where the task entered `reviewing`
+ *         under one policy but the user has since edited the project to
+ *         auto-merge).
+ *
+ *   Phase 2 — dispatch: for each active project, pick queued tasks in
+ *     priority order while the project's running count < concurrencyLimit.
+ *     For each picked task:
+ *       1. `git-init-if-missing` on the project's defaultHost (idempotent)
+ *       2. `git-worktree-create` for a fresh per-task branch
+ *       3. open a SP-1 runner_session row pinned to (task, host)
+ *       4. send a `dispatch` frame to the host so the runner starts at
+ *          cwd=worktreePath
+ *       5. transitionTask queued→running with hostId/worktreePath/branchName
+ *       6. createTaskRun (attempt=prev+1)
+ *       7. broadcast task-event + project-event
+ *
+ *     If any host RPC fails (host offline, RPC error), we skip this task for
+ *     this tick — the next tick retries. We do NOT mark the task `failed` for
+ *     a transient host hiccup; that's reserved for runner-level errors which
+ *     flow via SP-1's event path (handled by SP-1 chat domain → events table).
+ *
+ *   Phase 3 — retry: spec §五.retry mentions this as a separate phase. We
+ *     fold it into dispatch: if a task is in `failed` state with retries <
+ *     maxRetries, we don't auto-restart on the orchestrator's own
+ *     initiative — that's an explicit user action (replyToTask /
+ *     retryTask) in MVP. SP-3+1 adds automatic exponential-backoff retry.
+ *
+ * What this does NOT do:
+ *   - listen to runner events (SP-1 ChatDomain.handleHostEvent already
+ *     ingests them into events/messages tables; the merge-gate hook in
+ *     reconcile picks up the resulting completed runner_session row when
+ *     the task drifts to `reviewing` via ChatDomain's `done` handler — see
+ *     ProjectDomain.handleRunnerDone wiring)
+ *   - drive the lifecycle on user requests (use-cases live in ProjectDomain;
+ *     orchestrator is purely background)
+ */
+
+import { eq, inArray, isNull } from "drizzle-orm";
+import { projectTasks, projects as projectsTable, hosts as hostsTable } from "../../db/schema.js";
+import type { AnyDb } from "../../db/users.js";
+import {
+  getProject,
+  createTaskRun,
+  listTaskRuns,
+} from "../../db/projects.js";
+import { openRunnerSession } from "../../db/sessions.js";
+import type { ClientHub } from "../../client-hub.js";
+import type { HostRouter } from "../../host-router.js";
+import type { Project, ProjectTask, TaskState, CloudToHost } from "@cogni/contract";
+import { HostRpcError, type HostRpcClient, type HostRpcLogger } from "./host-rpc.js";
+import { evaluateAndApplyMergeGate } from "./merge-gate.js";
+import { transitionTask, StateMismatch } from "./lifecycle.js";
+
+const TICK_INTERVAL_MS = 5_000;
+const HOST_OFFLINE_THRESHOLD_MS = 60_000;
+// SP-3 has no per-project default adapter column yet; orchestrator falls back
+// to "claude-code" until SP-3+1 adds `projects.default_adapter`. Document this
+// at the dispatch call-site too.
+const DEFAULT_ADAPTER = "claude-code";
+
+export interface OrchestratorDeps {
+  db: AnyDb;
+  hostRpc: HostRpcClient;
+  hostRouter: HostRouter;
+  clients: ClientHub;
+  logger?: HostRpcLogger;
+}
+
+const ACTIVE_STATES: TaskState[] = ["running", "needs-input", "reviewing"];
+
+export class ProjectOrchestrator {
+  private timer: ReturnType<typeof setInterval> | null = null;
+  /** Re-entrancy guard: a slow tick must not stack with the next interval fire. */
+  private ticking = false;
+
+  constructor(private readonly deps: OrchestratorDeps) {}
+
+  start(): void {
+    if (this.timer) return; // idempotent
+    this.timer = setInterval(() => void this.tick(), TICK_INTERVAL_MS);
+    this.timer.unref?.();
+  }
+
+  stop(): void {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+
+  /**
+   * One reconcile + dispatch pass. Tests drive this directly to avoid
+   * waiting on the 5s interval. Re-entry is no-op; failures are caught and
+   * logged so a single bad project can't kill the loop.
+   */
+  async tick(): Promise<void> {
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      await this.reconcileActiveTasks();
+      await this.dispatchQueuedTasks();
+    } catch (err) {
+      this.deps.logger?.warn?.({ err: String(err) }, "orchestrator tick failed");
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  // ─── Phase 1: reconcile ───────────────────────────────────────────────────
+
+  private async reconcileActiveTasks(): Promise<void> {
+    const rows = await this.deps.db
+      .select()
+      .from(projectTasks)
+      .where(inArray(projectTasks.state, ACTIVE_STATES));
+
+    for (const row of rows) {
+      const task = await this.fetchTaskById(row.id);
+      if (!task) continue;
+
+      if (task.state === "running" && task.hostId) {
+        await this.warnIfHostOffline(task);
+      } else if (task.state === "reviewing") {
+        await this.maybeReapplyMergeGate(task);
+      }
+    }
+  }
+
+  private async warnIfHostOffline(task: ProjectTask): Promise<void> {
+    if (!task.hostId) return;
+    const rows = await this.deps.db
+      .select({ lastSeen: hostsTable.lastSeen })
+      .from(hostsTable)
+      .where(eq(hostsTable.id, task.hostId))
+      .limit(1);
+    const lastSeen = rows[0]?.lastSeen;
+    if (!lastSeen) return;
+    const ageMs = Date.now() - lastSeen.getTime();
+    if (ageMs > HOST_OFFLINE_THRESHOLD_MS) {
+      this.deps.logger?.warn?.(
+        { taskId: task.id, hostId: task.hostId, lastSeenAgoMs: ageMs },
+        "orchestrator: running task on offline host (SP-2 session-resume will recover on host reconnect)",
+      );
+    }
+  }
+
+  private async maybeReapplyMergeGate(task: ProjectTask): Promise<void> {
+    const project = await getProject(this.deps.db, task.projectId);
+    if (!project) return;
+    if (project.mergePolicy === "require-review") return; // user must act
+    // Project's policy changed (or initial gate deferred for another reason)
+    // — try the gate again. If it stays in reviewing we just no-op.
+    let next: TaskState;
+    try {
+      next = await evaluateAndApplyMergeGate(
+        { hostRpc: this.deps.hostRpc, logger: this.deps.logger },
+        project,
+        task,
+      );
+    } catch (err) {
+      this.deps.logger?.warn?.(
+        { taskId: task.id, err: String(err) },
+        "orchestrator: merge gate threw during reconcile",
+      );
+      return;
+    }
+    if (next === "reviewing") return; // unchanged
+    try {
+      const updated = await transitionTask(this.deps.db, task.id, "reviewing", next);
+      this.broadcastTask(updated, "state-changed");
+      this.broadcastProject(project, "updated");
+    } catch (err) {
+      if (err instanceof StateMismatch) return; // another path raced us — fine
+      throw err;
+    }
+  }
+
+  // ─── Phase 2: dispatch ────────────────────────────────────────────────────
+
+  private async dispatchQueuedTasks(): Promise<void> {
+    // Walk active (non-archived) projects, then per-project pick eligible tasks.
+    // For SP-3 single-node, scanning every project on every tick is cheap.
+    const projectRows = await this.deps.db
+      .select()
+      .from(projectsTable)
+      .where(isNull(projectsTable.archivedAt));
+    // Re-fetch via getProject path for consistent camelCase shape.
+    for (const pr of projectRows) {
+      const project = await getProject(this.deps.db, pr.id);
+      if (!project) continue;
+      if (project.archivedAt) continue;
+      await this.dispatchForProject(project);
+    }
+  }
+
+  private async dispatchForProject(project: Project): Promise<void> {
+    // Running headcount for this project.
+    const allTasks = await this.deps.db
+      .select()
+      .from(projectTasks)
+      .where(eq(projectTasks.projectId, project.id));
+    const runningCount = allTasks.filter((t) =>
+      t.state === "running" || t.state === "needs-input",
+    ).length;
+    let slots = project.concurrencyLimit - runningCount;
+    if (slots <= 0) return;
+
+    // Queued tasks ordered by priority desc, orderIndex asc, createdAt asc.
+    const queued = allTasks
+      .filter((t) => t.state === "queued")
+      .sort((a, b) => {
+        if (b.priority !== a.priority) return b.priority - a.priority;
+        if (a.orderIndex !== b.orderIndex) {
+          // orderIndex is a lex-sortable decimal string; numeric parse for
+          // correctness when strings differ in length ("10" < "9" lex-wise).
+          const na = parseFloat(a.orderIndex);
+          const nb = parseFloat(b.orderIndex);
+          if (!Number.isNaN(na) && !Number.isNaN(nb) && na !== nb) return na - nb;
+          return a.orderIndex.localeCompare(b.orderIndex);
+        }
+        return a.createdAt.getTime() - b.createdAt.getTime();
+      });
+
+    for (const row of queued) {
+      if (slots <= 0) break;
+      const task = await this.fetchTaskById(row.id);
+      if (!task || task.state !== "queued") continue;
+      const dispatched = await this.tryDispatchTask(project, task);
+      if (dispatched) slots--;
+    }
+  }
+
+  /**
+   * Returns true if the task was successfully moved queued→running.
+   * Transient failures (host offline, RPC error) return false and the task
+   * stays queued for the next tick.
+   */
+  private async tryDispatchTask(project: Project, task: ProjectTask): Promise<boolean> {
+    const hostId = project.defaultHostId;
+    const branchName = `task/${task.ref.toLowerCase()}`;
+    const worktreePath = `${project.repoPath}.worktrees/${task.ref}`;
+
+    try {
+      await this.deps.hostRpc.gitInitIfMissing(hostId, {
+        repoPath: project.repoPath,
+      });
+      await this.deps.hostRpc.gitWorktreeCreate(hostId, {
+        repoPath: project.repoPath,
+        branchName,
+        worktreePath,
+      });
+    } catch (err) {
+      if (err instanceof HostRpcError && err.code === "host-offline") {
+        // Don't escalate — wait for host to come back.
+        this.deps.logger?.debug?.(
+          { projectId: project.id, taskId: task.id, hostId },
+          "orchestrator: skipping dispatch (host offline)",
+        );
+        return false;
+      }
+      this.deps.logger?.warn?.(
+        { projectId: project.id, taskId: task.id, hostId, err: String(err) },
+        "orchestrator: git RPC failed during dispatch (will retry next tick)",
+      );
+      return false;
+    }
+
+    // The task's `executionThreadId` is what the runner will stream events
+    // into. SP-3 reuses the SP-1 threads table; the runner_session is opened
+    // here against that thread. If the task doesn't yet have one, we don't
+    // create one in MVP — the desktop UI's "open task drawer" path or the
+    // explicit POST /tasks/:id/start (Track C) seeds it. For dispatch to
+    // proceed without a thread, we open the runner_session against a thread
+    // we create lazily here so SP-1's event path has somewhere to write.
+    //
+    // To keep the orchestrator's scope tight, we require an executionThreadId
+    // to exist; if not, skip and let the use-case-level path (Track C
+    // createTask) seed it. Tests can pre-populate it.
+    if (!task.executionThreadId) {
+      this.deps.logger?.warn?.(
+        { taskId: task.id },
+        "orchestrator: task has no executionThreadId — skipping dispatch (Track C creates this)",
+      );
+      return false;
+    }
+
+    const adapter = task.adapter ?? DEFAULT_ADAPTER;
+
+    const session = await openRunnerSession(this.deps.db, {
+      threadId: task.executionThreadId,
+      hostId,
+      adapter,
+    });
+
+    // Send the dispatch frame to the host. We go through hostRouter so the
+    // host's WS sees a frame in the same exact shape SP-1 uses.
+    const conn = this.deps.hostRouter.getHostByIdForUser(project.userId, hostId);
+    if (!conn) {
+      // Host disconnected between init/worktree calls and now — rare race.
+      // Don't transition the task; let next tick retry.
+      this.deps.logger?.warn?.(
+        { projectId: project.id, taskId: task.id, hostId },
+        "orchestrator: host vanished mid-dispatch",
+      );
+      return false;
+    }
+    try {
+      const frame: CloudToHost = {
+        t: "dispatch",
+        sessionId: session.id,
+        threadId: task.executionThreadId,
+        adapter,
+        runnerSessionId: session.runnerSessionId,
+        message: task.title + (task.description ? `\n\n${task.description}` : ""),
+      };
+      conn.send(frame);
+    } catch (err) {
+      this.deps.logger?.warn?.(
+        { taskId: task.id, err: String(err) },
+        "orchestrator: dispatch frame send failed",
+      );
+      return false;
+    }
+
+    // Move state + record the new attempt.
+    let updated: ProjectTask;
+    try {
+      updated = await transitionTask(this.deps.db, task.id, "queued", "running", {
+        hostId,
+        adapter,
+        worktreePath,
+        branchName,
+      });
+    } catch (err) {
+      if (err instanceof StateMismatch) {
+        // Someone else moved the task — cancel from the user, e.g. — abandon.
+        return false;
+      }
+      throw err;
+    }
+    const priorRuns = await listTaskRuns(this.deps.db, task.id);
+    await createTaskRun(this.deps.db, {
+      taskId: task.id,
+      runnerSessionId: session.id,
+      attemptNumber: priorRuns.length + 1,
+      startedAt: updated.startedAt ? new Date(updated.startedAt) : new Date(),
+    });
+
+    this.broadcastTask(updated, "state-changed");
+    this.broadcastProject(project, "updated");
+    return true;
+  }
+
+  // ─── helpers ──────────────────────────────────────────────────────────────
+
+  private async fetchTaskById(taskId: string): Promise<ProjectTask | null> {
+    // Reuse the row-mapper in db/projects.ts to avoid drift. `getTask` would
+    // pull this same row, but we import it lazily here to keep the
+    // file's dep graph tight.
+    const { getTask } = await import("../../db/projects.js");
+    return getTask(this.deps.db, taskId);
+  }
+
+  private broadcastTask(task: ProjectTask, kind: "created" | "updated" | "deleted" | "state-changed"): void {
+    this.deps.clients.broadcastTask(task.id, { t: "task-event", kind, task });
+    // Project's view of the task also moves — board hooks subscribe to project,
+    // not task, so push there too.
+    this.deps.clients.broadcastProject(task.projectId, { t: "task-event", kind, task });
+  }
+
+  private broadcastProject(project: Project, kind: "created" | "updated" | "archived"): void {
+    this.deps.clients.broadcastProjects(project.userId, {
+      t: "project-event",
+      kind,
+      project,
+    });
+    this.deps.clients.broadcastProject(project.id, {
+      t: "project-event",
+      kind,
+      project,
+    });
+  }
+}
+
+// Re-export lifecycle helpers + active-states for tests / direct callers.
+export { ACTIVE_STATES, TICK_INTERVAL_MS, HOST_OFFLINE_THRESHOLD_MS };
