@@ -1,34 +1,65 @@
 /**
- * Project — supervised orchestration view (SP-3 reference design).
+ * Project — supervised orchestration view for ONE project.
  *
- * STATUS: presentational reference only. Uses MOCK_TASKS. Three view modes:
- *   - columns:  classic kanban; each card is one live runner with progress/retries
- *   - swarm:    big "in-flight" cards showing each running agent in detail
- *   - timeline: lifespans per runner along a horizontal time axis
- *
- * When SP-3 lands, swap MOCK_TASKS for a `useProjectTasks(projectId)` hook that
- * subscribes to task events from the cloud (same `events` table as chat).
+ * Replaces the SP-1 reference Project.tsx. Changes vs reference:
+ *   - Adds breadcrumb (`项目 / <name>`)
+ *   - Cards in all 3 views are clickable → opens TaskDetail drawer (right side)
+ *   - needs-input cards in columns/swarm view have a pulsing amber border
+ *   - "新任务" button in the toolbar → opens NewTask modal (host provides handler)
+ *   - "项目设置" cog in the toolbar → opens ProjectSettings (host provides handler)
+ *   - "项目" → "项目列表" breadcrumb is a real button (host provides handler)
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Icon } from "@cogni/ui";
-import { MOCK_TASKS, MOCK_HOSTS, STATE_COLOR, STATE_LABEL, type DesignTask } from "./mock.js";
+import { MOCK_TASKS, MOCK_HOSTS, MOCK_PROJECTS, STATE_COLOR, STATE_LABEL, type DesignTask } from "./mock.js";
+import { TaskDetail } from "./TaskDetail.js";
 import "./project.css";
 
 type View = "columns" | "swarm" | "timeline";
 
-export function Project({ projectName = "SP-2 · Sync & Web" }: { projectName?: string }) {
+export function Project({
+  projectId = "p-sp2",
+  onBack,
+  onNewTask,
+  onOpenSettings,
+}: {
+  projectId?: string;
+  onBack?: () => void;
+  onNewTask?: () => void;
+  onOpenSettings?: () => void;
+}) {
   const [view, setView] = useState<View>("swarm");
-  const live = MOCK_TASKS.filter((t) => t.state === "running" || t.state === "needs-input").length;
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+
+  const project = MOCK_PROJECTS.find((p) => p.id === projectId) ?? MOCK_PROJECTS[0];
+  const tasks = useMemo(() => MOCK_TASKS.filter((t) => t.projectId === project.id), [project.id]);
+
+  const live    = tasks.filter((t) => ["running", "needs-input"].includes(t.state)).length;
+  const queued  = tasks.filter((t) => t.state === "queued").length;
+  const needs   = tasks.filter((t) => t.state === "needs-input").length;
+
+  const orderedTaskIds = tasks.map((t) => t.id);
+  const openTask = tasks.find((t) => t.id === openTaskId) ?? null;
 
   return (
     <div className="project">
       <header className="project__head">
         <div className="project__head-text">
-          <div className="project__eyebrow">PROJECT</div>
-          <h1 className="project__title">{projectName}</h1>
+          <nav className="project__crumbs">
+            <button className="project__crumb" onClick={onBack}>项目</button>
+            <span className="project__crumb-sep">/</span>
+            <span className="project__crumb project__crumb--current">{project.name}</span>
+          </nav>
+          {project.description && <div className="project__desc">{project.description}</div>}
           <div className="project__sub">
             <span className="dot" style={{ background: "var(--accent)" }} />
-            {live} runners alive · {MOCK_TASKS.filter((t) => t.state === "queued").length} queued
+            <span><b>{live}</b> 在跑 · <b>{queued}</b> 排队</span>
+            {needs > 0 && (
+              <span className="project__needs-pill">
+                <span className="project__needs-pill-dot" />
+                <span>{needs} 个等你</span>
+              </span>
+            )}
           </div>
         </div>
         <div className="project__head-tools">
@@ -37,38 +68,48 @@ export function Project({ projectName = "SP-2 · Sync & Web" }: { projectName?: 
             <button className={"seg__btn" + (view === "swarm"   ? " is-on" : "")} onClick={() => setView("swarm")}>Swarm</button>
             <button className={"seg__btn" + (view === "timeline"? " is-on" : "")} onClick={() => setView("timeline")}>Timeline</button>
           </div>
-          <button className="btn btn-sm">{Icon.plus} 新任务</button>
+          <button className="btn btn-sm" onClick={onNewTask}>{Icon.plus} 新任务</button>
+          <button className="btn btn-sm btn-ghost" onClick={onOpenSettings} title="项目设置">{Icon.cog}</button>
         </div>
       </header>
 
       <div className="project__body">
-        {view === "columns"  && <ColumnsView />}
-        {view === "swarm"    && <SwarmView />}
-        {view === "timeline" && <TimelineView />}
+        {view === "columns"  && <ColumnsView tasks={tasks} onOpenTask={setOpenTaskId} />}
+        {view === "swarm"    && <SwarmView    tasks={tasks} onOpenTask={setOpenTaskId} />}
+        {view === "timeline" && <TimelineView tasks={tasks} onOpenTask={setOpenTaskId} />}
       </div>
+
+      {openTask && (
+        <TaskDetail
+          task={openTask}
+          allTaskIds={orderedTaskIds}
+          onClose={() => setOpenTaskId(null)}
+          onNavigate={(id) => setOpenTaskId(id)}
+        />
+      )}
     </div>
   );
 }
 
 /* ─── Columns ──────────────────────────────────────────── */
 
-function ColumnsView() {
+function ColumnsView({ tasks, onOpenTask }: { tasks: DesignTask[]; onOpenTask: (id: string) => void }) {
   const cols: DesignTask["state"][] = ["queued", "running", "needs-input", "reviewing", "done"];
   return (
     <div className="kb-cols">
       {cols.map((state) => {
-        const tasks = MOCK_TASKS.filter((t) => t.state === state);
+        const filtered = tasks.filter((t) => t.state === state);
         return (
-          <div key={state} className="kb-col">
+          <div key={state} className={"kb-col" + (state === "needs-input" && filtered.length > 0 ? " kb-col--alert" : "")}>
             <div className="kb-col__head">
               <span className="dot" style={{ background: STATE_COLOR[state] }} />
               <span className="kb-col__label">{STATE_LABEL[state]}</span>
-              <span className="kb-col__count">{tasks.length}</span>
+              <span className="kb-col__count">{filtered.length}</span>
             </div>
             <div className="kb-col__body">
-              {tasks.length === 0
-                ? <div className="kb-col__empty">nothing here</div>
-                : tasks.map((t) => <ColumnCard key={t.id} task={t} />)}
+              {filtered.length === 0
+                ? <div className="kb-col__empty">空</div>
+                : filtered.map((t) => <ColumnCard key={t.id} task={t} onOpen={onOpenTask} />)}
             </div>
           </div>
         );
@@ -77,11 +118,14 @@ function ColumnsView() {
   );
 }
 
-function ColumnCard({ task }: { task: DesignTask }) {
+function ColumnCard({ task, onOpen }: { task: DesignTask; onOpen: (id: string) => void }) {
   const host = MOCK_HOSTS.find((h) => h.id === task.hostId);
-  const isRunning = task.state === "running";
+  const cls = "kb-card"
+    + (task.state === "running"     ? " kb-card--running" : "")
+    + (task.state === "needs-input" ? " kb-card--needs-input" : "")
+    + (task.state === "failed"      ? " kb-card--failed" : "");
   return (
-    <div className={"kb-card" + (isRunning ? " kb-card--running" : "")}>
+    <button className={cls} onClick={() => onOpen(task.id)}>
       <div className="kb-card__head">
         <span className="kb-card__ref">{task.ref}</span>
         <StatePill state={task.state} />
@@ -112,50 +156,58 @@ function ColumnCard({ task }: { task: DesignTask }) {
           <Delta delta={task.delta} />
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
 /* ─── Swarm ────────────────────────────────────────────── */
 
-function SwarmView() {
-  const live   = MOCK_TASKS.filter((t) => ["running", "needs-input", "reviewing", "failed"].includes(t.state));
-  const queued = MOCK_TASKS.filter((t) => t.state === "queued");
-  const done   = MOCK_TASKS.filter((t) => t.state === "done");
+function SwarmView({ tasks, onOpenTask }: { tasks: DesignTask[]; onOpenTask: (id: string) => void }) {
+  const live   = tasks.filter((t) => ["running", "needs-input", "reviewing", "failed"].includes(t.state));
+  const queued = tasks.filter((t) => t.state === "queued");
+  const done   = tasks.filter((t) => t.state === "done");
   return (
     <div className="sw">
-      <SwarmSection state="running" title="In flight" count={live.length}>
+      <SwarmSection state="needs-input" title="等你回应" count={live.filter((t) => t.state === "needs-input").length}>
         <div className="sw__grid">
-          {live.map((t) => <Pod key={t.id} task={t} />)}
+          {live.filter((t) => t.state === "needs-input").map((t) => <Pod key={t.id} task={t} onOpen={onOpenTask} />)}
         </div>
       </SwarmSection>
-      <SwarmSection state="queued" title="Queued" count={queued.length}>
+      <SwarmSection state="running" title="进行中" count={live.filter((t) => t.state !== "needs-input").length}>
+        <div className="sw__grid">
+          {live.filter((t) => t.state !== "needs-input").map((t) => <Pod key={t.id} task={t} onOpen={onOpenTask} />)}
+        </div>
+      </SwarmSection>
+      <SwarmSection state="queued" title="排队" count={queued.length}>
         <div className="sw__list">
           {queued.map((t) => (
-            <div key={t.id} className="sw__row">
+            <button key={t.id} className="sw__row" onClick={() => onOpenTask(t.id)}>
               <span className="kb-card__ref">{t.ref}</span>
               <span className="sw__row-title">{t.title}</span>
-              <span className="sw__row-meta">waiting for runner</span>
-            </div>
+              <span className="sw__row-meta">等可用 runner</span>
+            </button>
           ))}
         </div>
       </SwarmSection>
-      <SwarmSection state="done" title="Done · today" count={done.length}>
-        <div className="sw__list">
-          {done.map((t) => (
-            <div key={t.id} className="sw__row sw__row--dim">
-              <span className="kb-card__ref">{t.ref}</span>
-              <span className="sw__row-title">{t.title}</span>
-              <span className="sw__row-meta">{t.elapsed}</span>
-            </div>
-          ))}
-        </div>
-      </SwarmSection>
+      {done.length > 0 && (
+        <SwarmSection state="done" title="今日完成" count={done.length}>
+          <div className="sw__list">
+            {done.map((t) => (
+              <button key={t.id} className="sw__row sw__row--dim" onClick={() => onOpenTask(t.id)}>
+                <span className="kb-card__ref">{t.ref}</span>
+                <span className="sw__row-title">{t.title}</span>
+                <span className="sw__row-meta">{t.elapsed}</span>
+              </button>
+            ))}
+          </div>
+        </SwarmSection>
+      )}
     </div>
   );
 }
 
 function SwarmSection({ state, title, count, children }: { state: DesignTask["state"]; title: string; count: number; children: React.ReactNode }) {
+  if (count === 0) return null;
   return (
     <section className="sw__section">
       <div className="sw__section-head">
@@ -168,11 +220,14 @@ function SwarmSection({ state, title, count, children }: { state: DesignTask["st
   );
 }
 
-function Pod({ task }: { task: DesignTask }) {
+function Pod({ task, onOpen }: { task: DesignTask; onOpen: (id: string) => void }) {
   const host = MOCK_HOSTS.find((h) => h.id === task.hostId);
-  const live = task.state === "running";
+  const cls = "pod"
+    + (task.state === "running"     ? " pod--live" : "")
+    + (task.state === "needs-input" ? " pod--needs-input" : "")
+    + (task.state === "failed"      ? " pod--failed" : "");
   return (
-    <div className={"pod" + (live ? " pod--live" : "")}>
+    <button className={cls} onClick={() => onOpen(task.id)}>
       <div className="pod__head">
         <div className="pod__host">
           <span className={"dot " + (host?.status === "online" ? "dot-online" : "dot-offline")} />
@@ -187,16 +242,16 @@ function Pod({ task }: { task: DesignTask }) {
         <span className="pod__activity-text">{task.activity}</span>
       </div>
       <div className="pod__meters">
-        <Meter label="Progress">
+        <Meter label="进度">
           <div className="kb-progress">
             <div className="kb-progress__fill" style={{ width: `${task.progress * 100}%`, background: STATE_COLOR[task.state] }} />
           </div>
         </Meter>
-        <Meter label="Elapsed"><span className="pod__metric">{task.elapsed}</span></Meter>
-        <Meter label="Retries"><span className="pod__metric" style={{ color: task.retries > 0 ? "var(--warn)" : "var(--muted)" }}>{task.retries}</span></Meter>
-        <Meter label="Delta"><Delta delta={task.delta} /></Meter>
+        <Meter label="已用"><span className="pod__metric">{task.elapsed}</span></Meter>
+        <Meter label="重试"><span className="pod__metric" style={{ color: task.retries > 0 ? "var(--warn)" : "var(--muted)" }}>{task.retries}</span></Meter>
+        <Meter label="diff"><Delta delta={task.delta} /></Meter>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -211,8 +266,8 @@ function Meter({ label, children }: { label: string; children: React.ReactNode }
 
 /* ─── Timeline ────────────────────────────────────────── */
 
-function TimelineView() {
-  const live = MOCK_TASKS.filter((t) => t.state !== "queued");
+function TimelineView({ tasks, onOpenTask }: { tasks: DesignTask[]; onOpenTask: (id: string) => void }) {
+  const live = tasks.filter((t) => t.state !== "queued");
   const NOW_PCT = 78;
   return (
     <div className="tl">
@@ -232,7 +287,7 @@ function TimelineView() {
           const widthPct = NOW_PCT - startPct;
           const color = STATE_COLOR[t.state];
           return (
-            <div key={t.id} className="tl__row">
+            <button key={t.id} className="tl__row" onClick={() => onOpenTask(t.id)}>
               <div className="tl__row-label">
                 <span className="kb-card__ref">{t.ref}</span>
                 <span className="tl__row-title">{t.title}</span>
@@ -243,7 +298,7 @@ function TimelineView() {
                   <span className="tl__bar-label">{t.activity}</span>
                 </div>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -253,7 +308,7 @@ function TimelineView() {
 
 /* ─── Atoms ────────────────────────────────────────────── */
 
-function StatePill({ state }: { state: DesignTask["state"] }) {
+export function StatePill({ state }: { state: DesignTask["state"] }) {
   const color = STATE_COLOR[state];
   const isPulse = state === "running" || state === "needs-input";
   return (
@@ -264,7 +319,7 @@ function StatePill({ state }: { state: DesignTask["state"] }) {
   );
 }
 
-function Delta({ delta }: { delta: string }) {
+export function Delta({ delta }: { delta: string }) {
   if (delta === "—") return <span className="pod__metric pod__metric--muted">—</span>;
   const [plus, minus] = delta.split(" ");
   return (

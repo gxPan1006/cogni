@@ -1,39 +1,69 @@
 /**
- * Sidebar — left rail with mode switcher / search / new / pinned / recents / host health / user menu.
+ * Sidebar — left rail, now mode-aware.
  *
- * Same prop contract as the SP-1 spike, plus one new optional callback:
- *   - onOpenSettings — opens the Settings page in the main slot
+ * Adds in SP-3:
+ *   - When `mode === "project"`, the Pinned/Recents list shows projects instead
+ *     of threads, the "New chat" button becomes "New project", search placeholder
+ *     swaps to "搜索项目", and each project row shows a live runner count + a
+ *     small amber badge when needs-input > 0 (the sidebar-level "叫人" cue).
+ *   - Two new optional callbacks: `onSelectProject` / `onNewProject`. The Shell
+ *     keeps them paired with `mode` so the same "primary" button maps to the
+ *     right action.
  *
- * Visual rewrite:
- *   - Mode switcher is a single pill at the top (chat ↔ project)
- *   - Search field replaces the icon cluster
- *   - "Pinned" surfaces threads with `pinned: true` (SP-2 adds a pin column);
- *     for now everything goes under Recents
- *   - Host health summary above the user menu — counts online/total hosts
- *   - User menu doubles as the settings entry
+ * Everything else (host health, user menu, mode pill, settings entry) is
+ * unchanged — same look as SP-2.
  */
 import type { ThreadSummary } from "@cogni/contract";
 import { Icon } from "./icons.js";
-import { LogoMark } from "./LogoMark.js";
 import "./sidebar.css";
+
+/**
+ * Sidebar's view of a project. SP-3 desktop seeds this from `MOCK_PROJECTS`
+ * (which has more fields than this); the cloud will eventually serve the
+ * same shape via `GET /projects`. Kept inline so the ui package doesn't
+ * depend back on apps/desktop.
+ */
+export type SidebarProject = {
+  id: string;
+  name: string;
+  liveRunners: number;
+  queuedCount: number;
+  needsInputCount: number;
+  health: "ok" | "warn" | "error";
+  pinned?: boolean;
+  archived?: boolean;
+};
+// Backwards-compatible alias used by SP-3 design files.
+type DesignProject = SidebarProject;
 
 export function Sidebar(props: {
   mode: "chat" | "project";
   onMode: (m: "chat" | "project") => void;
+
+  // chat mode
   threads: ThreadSummary[];
   activeThreadId: string | null;
   onSelect: (id: string) => void;
   onNewChat: () => void;
+
+  // project mode (SP-3)
+  projects?: DesignProject[];
+  activeProjectId?: string | null;
+  onSelectProject?: (id: string) => void;
+  onNewProject?: () => void;
+
   onLogout: () => void;
-  /** Optional: opens Settings in the main slot. */
   onOpenSettings?: () => void;
-  /** Optional: host health summary. SP-1 doesn't fetch this yet, leave undefined. */
   hosts?: { online: number; total: number };
-  /** Optional: signed-in user — SP-2 will fetch via /api/me. */
   user?: { name: string; email: string };
 }) {
   const user = props.user ?? { name: "Cogni", email: "" };
   const initial = user.name.slice(0, 1).toUpperCase();
+
+  const isChat = props.mode === "chat";
+  const newAction  = isChat ? props.onNewChat : (props.onNewProject ?? (() => {}));
+  const newLabel   = isChat ? "新对话" : "新项目";
+  const searchHint = isChat ? "搜索对话" : "搜索项目";
 
   return (
     <aside className="sb">
@@ -43,17 +73,10 @@ export function Sidebar(props: {
 
       <div className="sb__modewrap">
         <div className="sb-mode">
-          <button
-            className={"sb-mode__btn" + (props.mode === "chat" ? " is-on" : "")}
-            onClick={() => props.onMode("chat")}
-          >
+          <button className={"sb-mode__btn" + (isChat ? " is-on" : "")} onClick={() => props.onMode("chat")}>
             {Icon.chat} Chat
           </button>
-          <button
-            className={"sb-mode__btn" + (props.mode === "project" ? " is-on" : "")}
-            onClick={() => props.onMode("project")}
-            title="项目 — SP-3 即将上线"
-          >
+          <button className={"sb-mode__btn" + (!isChat ? " is-on" : "")} onClick={() => props.onMode("project")}>
             {Icon.kanban} 项目
           </button>
         </div>
@@ -61,50 +84,18 @@ export function Sidebar(props: {
 
       <div className="sb__search">
         <span className="sb__search-icon">{Icon.search}</span>
-        <input className="sb__search-input" placeholder={props.mode === "chat" ? "搜索对话" : "搜索项目"} />
+        <input className="sb__search-input" placeholder={searchHint} />
         <span className="sb__search-kbd">⌘K</span>
       </div>
 
-      <button className="sb__new" onClick={props.onNewChat}>
+      <button className="sb__new" onClick={newAction}>
         {Icon.plus}
-        <span>新 {props.mode === "chat" ? "对话" : "项目"}</span>
+        <span>{newLabel}</span>
         <span className="sb__new-kbd">⌘N</span>
       </button>
 
       <div className="sb__body">
-        <section className="sb__section">
-          <div className="sb__section-head">PINNED</div>
-          <div className="sb__section-body">
-            {props.threads.filter((t) => (t as ThreadSummary & { pinned?: boolean }).pinned).length === 0 ? (
-              <div className="sb__empty">Drag to pin</div>
-            ) : (
-              props.threads
-                .filter((t) => (t as ThreadSummary & { pinned?: boolean }).pinned)
-                .map((t) => (
-                  <ThreadButton
-                    key={t.id}
-                    thread={t}
-                    active={t.id === props.activeThreadId}
-                    onClick={() => props.onSelect(t.id)}
-                  />
-                ))
-            )}
-          </div>
-        </section>
-
-        <section className="sb__section">
-          <div className="sb__section-head">RECENTS</div>
-          <div className="sb__section-body">
-            {props.threads.map((t) => (
-              <ThreadButton
-                key={t.id}
-                thread={t}
-                active={t.id === props.activeThreadId}
-                onClick={() => props.onSelect(t.id)}
-              />
-            ))}
-          </div>
-        </section>
+        {isChat ? <ChatLists {...props} /> : <ProjectLists {...props} />}
       </div>
 
       {props.hosts && (
@@ -126,15 +117,43 @@ export function Sidebar(props: {
   );
 }
 
-function ThreadButton({
-  thread,
-  active,
-  onClick,
-}: {
-  thread: ThreadSummary;
-  active: boolean;
-  onClick: () => void;
+/* ─── Chat lists ───────────────────────────────────────── */
+
+function ChatLists(props: {
+  threads: ThreadSummary[];
+  activeThreadId: string | null;
+  onSelect: (id: string) => void;
 }) {
+  const pinned = props.threads.filter((t) => (t as ThreadSummary & { pinned?: boolean }).pinned);
+  const rest   = props.threads.filter((t) => !(t as ThreadSummary & { pinned?: boolean }).pinned);
+
+  return (
+    <>
+      {pinned.length > 0 && (
+        <section className="sb__section">
+          <div className="sb__section-head">PINNED</div>
+          <div className="sb__section-body">
+            {pinned.map((t) => (
+              <ThreadButton key={t.id} thread={t} active={t.id === props.activeThreadId} onClick={() => props.onSelect(t.id)} />
+            ))}
+          </div>
+        </section>
+      )}
+      <section className="sb__section">
+        <div className="sb__section-head">RECENTS</div>
+        <div className="sb__section-body">
+          {rest.length > 0
+            ? rest.map((t) => (
+                <ThreadButton key={t.id} thread={t} active={t.id === props.activeThreadId} onClick={() => props.onSelect(t.id)} />
+              ))
+            : <div className="sb__empty">还没有对话</div>}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function ThreadButton({ thread, active, onClick }: { thread: ThreadSummary; active: boolean; onClick: () => void }) {
   return (
     <button
       className={"sb-thread" + (active ? " is-active" : "")}
@@ -146,10 +165,92 @@ function ThreadButton({
   );
 }
 
+/* ─── Project lists (SP-3) ─────────────────────────────── */
+
+function ProjectLists(props: {
+  projects?: DesignProject[];
+  activeProjectId?: string | null;
+  onSelectProject?: (id: string) => void;
+}) {
+  const list = props.projects ?? [];
+  const pinned   = list.filter((p) => p.pinned && !p.archived);
+  const active   = list.filter((p) => !p.pinned && !p.archived);
+  const archived = list.filter((p) => p.archived);
+
+  return (
+    <>
+      {pinned.length > 0 && (
+        <section className="sb__section">
+          <div className="sb__section-head">PINNED</div>
+          <div className="sb__section-body">
+            {pinned.map((p) => (
+              <ProjectButton key={p.id} project={p} active={p.id === props.activeProjectId} onClick={() => props.onSelectProject?.(p.id)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="sb__section">
+        <div className="sb__section-head">RECENTS</div>
+        <div className="sb__section-body">
+          {active.length > 0
+            ? active.map((p) => (
+                <ProjectButton key={p.id} project={p} active={p.id === props.activeProjectId} onClick={() => props.onSelectProject?.(p.id)} />
+              ))
+            : <div className="sb__empty">还没有项目</div>}
+        </div>
+      </section>
+
+      {archived.length > 0 && (
+        <section className="sb__section">
+          <div className="sb__section-head">已归档</div>
+          <div className="sb__section-body">
+            {archived.map((p) => (
+              <ProjectButton key={p.id} project={p} active={p.id === props.activeProjectId} onClick={() => props.onSelectProject?.(p.id)} dim />
+            ))}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
+function ProjectButton({ project, active, onClick, dim }: { project: DesignProject; active: boolean; onClick: () => void; dim?: boolean }) {
+  const live = project.liveRunners;
+  const queued = project.queuedCount;
+  return (
+    <button
+      className={"sb-project" + (active ? " is-active" : "") + (dim ? " sb-project--dim" : "")}
+      onClick={onClick}
+      title={project.name}
+    >
+      <div className="sb-project__row">
+        <span className={`sb-project__health sb-project__health--${project.health}`} />
+        <span className="sb-project__name">{project.name}</span>
+        {project.needsInputCount > 0 && (
+          <span className="sb-project__needs" title={`${project.needsInputCount} 个等你`}>
+            <span className="sb-project__needs-dot" />
+            {project.needsInputCount}
+          </span>
+        )}
+      </div>
+      <div className="sb-project__meta">
+        {live > 0
+          ? <><span className="dot" style={{ background: "var(--accent)" }} /><span>{live} 在跑</span></>
+          : queued > 0
+            ? <><span className="dot" style={{ background: "var(--muted)" }} /><span>{queued} 排队</span></>
+            : <span>空闲</span>}
+      </div>
+    </button>
+  );
+}
+
+/* ─── Wordmark (unchanged from SP-2) ────────────────────── */
+
 function Wordmark({ size = 22 }: { size?: number }) {
   return (
     <div className="sb__wordmark" style={{ fontSize: size }}>
-      <LogoMark className="sb__logo-mark" size={size} />
+      <span className="sb__wordmark-c" style={{ width: size, height: size, fontSize: size * 0.56 }}>c</span>
       <span className="sb__wordmark-text" style={{ fontSize: size * 0.78 }}>cogni</span>
     </div>
   );
