@@ -1,7 +1,18 @@
 import { readHostConfig } from "./config.js";
 import { RunnerManager } from "./runner-manager.js";
 import { ClaudeCodeAdapter } from "./adapters/claude-code.js";
+import { CodexAdapter } from "./adapters/codex/index.js";
 import { connectToCloud } from "./registry.js";
+import { dispatchHostRpc } from "./rpc-dispatcher.js";
+import {
+  gitInitIfMissing,
+  gitWorktreeCreate,
+  gitWorktreeRemove,
+  gitMergeToMain,
+  gitTestsRun,
+  gitDiffSnapshot,
+} from "./git-ops.js";
+import { fsBrowse } from "./fs-browse.js";
 import { logger } from "@cogni/shared";
 
 const config = await readHostConfig();
@@ -12,5 +23,21 @@ if (!config) {
 
 const manager = new RunnerManager();
 manager.register(new ClaudeCodeAdapter());
-connectToCloud(config, manager);
+// SP-3: second adapter — see adapters/codex/index.ts for the capability
+// asymmetry with claude-code (no session-resume, no permission-prompt).
+manager.register(new CodexAdapter());
+
+// SP-3: wire the host-RPC dispatcher. The cloud uses this to delegate
+// git-ops + fs-browse to the host (which owns the user's local disk).
+connectToCloud(config, manager, (req) =>
+  dispatchHostRpc(req, {
+    gitInitIfMissing,
+    gitWorktreeCreate,
+    gitWorktreeRemove,
+    gitMergeToMain,
+    gitTestsRun,
+    gitDiffSnapshot,
+    fsBrowse,
+  }),
+);
 logger.info({ hostId: config.hostId }, "runner host daemon started");
