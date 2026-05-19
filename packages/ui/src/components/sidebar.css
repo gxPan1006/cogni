@@ -1,4 +1,4 @@
-/* Sidebar — left rail. */
+/* Sidebar — left rail. SP-3 adds project list rows. */
 
 .sb {
   width: 280px; flex-shrink: 0;
@@ -9,12 +9,20 @@
 }
 
 .sb__head { padding: 18px 18px 12px; }
-.sb__wordmark { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); }
-.sb__logo-mark { display: block; flex-shrink: 0; }
+.sb__wordmark { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
+.sb__wordmark-c {
+  background: var(--ink); color: var(--bg);
+  border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
 .sb__wordmark-text {
   font-family: var(--font-sans);
   font-weight: 600;
-  letter-spacing: 0;
+  letter-spacing: -0.028em;
   line-height: 1;
 }
 
@@ -36,7 +44,11 @@
   transition: background .15s, color .15s;
 }
 .sb-mode__btn:hover:not(.is-on) { color: var(--ink-2); }
-.sb-mode__btn.is-on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); font-weight: 500; }
+.sb-mode__btn.is-on {
+  background: var(--surface); color: var(--ink);
+  box-shadow: var(--shadow-1);
+  font-weight: 500;
+}
 
 .sb__search {
   display: flex; align-items: center; gap: 8px;
@@ -81,33 +93,83 @@
   font-size: 12px; color: var(--muted-2);
 }
 
+/* ─── Chat thread row ────────────────────────── */
+
 .sb-thread {
   display: block;
   padding: 8px 10px;
   background: transparent;
-  border: 0;
-  border-radius: var(--r-2);
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
+  border: 0; border-radius: var(--r-2);
+  cursor: pointer; font: inherit; text-align: left;
   color: var(--ink-2);
   transition: background .12s, color .12s;
   width: 100%;
 }
-.sb-thread:hover  { background: var(--bg-sunk); color: var(--ink); }
-.sb-thread.is-active {
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
-  color: var(--ink);
-}
+.sb-thread:hover     { background: var(--bg-sunk); color: var(--ink); }
+.sb-thread.is-active { background: var(--surface); box-shadow: var(--shadow-1); color: var(--ink); }
 .sb-thread__title {
-  display: block;
+  display: block; font-size: 13px; font-weight: 500;
+  line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ─── Project row (SP-3) ─────────────────────── */
+
+.sb-project {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0; border-radius: var(--r-2);
+  cursor: pointer; font: inherit; text-align: left;
+  color: var(--ink-2);
+  transition: background .12s, color .12s;
+  width: 100%;
+}
+.sb-project:hover     { background: var(--bg-sunk); color: var(--ink); }
+.sb-project.is-active { background: var(--surface); box-shadow: var(--shadow-1); color: var(--ink); }
+.sb-project--dim      { opacity: 0.6; }
+
+.sb-project__row { display: flex; align-items: center; gap: 6px; }
+.sb-project__health {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sb-project__health--ok    { background: var(--good); }
+.sb-project__health--warn  { background: var(--warn); }
+.sb-project__health--error { background: var(--bad); }
+
+.sb-project__name {
+  flex: 1; min-width: 0;
   font-size: 13px; font-weight: 500;
   line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.sb-project__needs {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 0 7px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: var(--r-full);
+  font-family: var(--font-mono);
+  font-size: 10.5px; font-weight: 500;
+  flex-shrink: 0;
+}
+.sb-project__needs-dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--warn);
+  animation: sb-needs-pulse 1.4s ease-in-out infinite;
+}
+@keyframes sb-needs-pulse { 50% { opacity: 0.35; transform: scale(0.6); } }
+
+.sb-project__meta {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px; color: var(--muted);
+  padding-left: 13px;
+}
+
+/* ─── Footer (hosts + user) ──────────────────── */
 
 .sb__hosts {
   display: flex; align-items: center; justify-content: space-between;

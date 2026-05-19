@@ -1,0 +1,165 @@
+/* NewProject — modal styles + shared modal primitives. */
+
+/* ─── Shared modal scaffolding (used by NewProject, NewTask) ─── */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 0.32);
+  z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  animation: modal-fade .16s ease-out;
+}
+@keyframes modal-fade { from { opacity: 0; } }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-4);
+  box-shadow: var(--shadow-3);
+  width: 520px; max-width: 100%;
+  max-height: calc(100vh - 48px);
+  display: flex; flex-direction: column;
+  animation: modal-in .2s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+@keyframes modal-in { from { transform: translateY(8px); opacity: 0; } }
+
+.modal__head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.modal__eyebrow {
+  font-family: var(--font-mono); font-size: 10.5px;
+  letter-spacing: 0.1em; color: var(--muted);
+}
+.modal__title {
+  font-size: 20px; font-weight: 600;
+  letter-spacing: -0.012em;
+  margin: 4px 0 0;
+}
+.modal__close {
+  width: 28px; height: 28px;
+  border-radius: var(--r-2);
+  background: transparent; border: 0;
+  cursor: pointer; color: var(--ink-2);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.modal__close:hover { background: var(--bg-sunk); color: var(--ink); }
+
+.modal__body {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 22px 24px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+
+.modal__foot {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 14px 24px 20px;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* ─── Field primitive ───────────────────────── */
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  display: inline-flex; align-items: baseline; gap: 4px;
+}
+.field__required { color: var(--bad); }
+.field__hint {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.input {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit; font-size: 14px;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.input:focus {
+  border-color: var(--ink-2);
+  box-shadow: 0 0 0 3px var(--surface-3);
+}
+.input::placeholder { color: var(--muted-2); }
+select.input {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+                    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 10px) 50%;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  padding-right: 28px;
+}
+
+/* ─── Segments ───────────────────────────────── */
+
+.seg--block {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  width: 100%;
+}
+.seg--block .seg__btn { padding: 8px 12px; font-size: 13px; }
+
+/* ─── NewProject-specific ──────────────────── */
+
+.np__textarea {
+  resize: vertical;
+  min-height: 60px;
+  font-family: var(--font-sans);
+}
+
+.np__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.np__linear {
+  display: flex; gap: 8px;
+  margin-top: 8px;
+}
+.np__linear-input { flex: 1; }
+
+.np__test {
+  font-size: 12.5px;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: var(--r-2);
+}
+.np__test--ok   { background: var(--good-soft); color: var(--good); }
+.np__test--fail { background: var(--bad-soft);  color: var(--bad); }
+
+.np__hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: var(--bg-sunk);
+  border-radius: var(--r-2);
+  line-height: 1.4;
+}
+
+.np__stepper {
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  padding: 2px;
+}
+.np__stepper-value {
+  min-width: 36px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 14px; font-weight: 500;
+}

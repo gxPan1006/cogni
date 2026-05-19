@@ -31,6 +31,6 @@ export { SettingsPage } from "./components/SettingsPage.js";
 // Lower-level chat building blocks (Conversation composes them; apps that
 // want to render messages outside of Conversation can use them directly)
 export {
-  UserMessage, AssistantText, ToolCallBlock, PermissionPrompt, aggregateEvents,
+  UserMessage, AssistantText, ThinkingBlock, ToolCallBlock, PermissionPrompt, aggregateEvents,
 } from "./components/ChatBlocks.js";
 export { Markdown } from "./components/Markdown.js";

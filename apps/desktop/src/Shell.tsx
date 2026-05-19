@@ -19,8 +19,18 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ThreadSummary } from "@cogni/contract";
 import { api, ApiError, type HostInfo } from "./api.js";
 import { Sidebar, Conversation, Welcome, SettingsPage } from "@cogni/ui";
+import { MOCK_PROJECTS } from "./mock.js";
+import { Project } from "./Project.js";
+import { ProjectsList } from "./ProjectsList.js";
+import { ProjectSettings } from "./ProjectSettings.js";
+import { NewProject, type NewProjectDraft } from "./NewProject.js";
+import { NewTask, type NewTaskDraft } from "./NewTask.js";
 
-type Page = "chat" | "settings";
+type Page = "chat" | "settings" | "projects" | "project" | "project-settings";
+
+// SP-3 backend isn't done yet — sidebar / project pages read straight from
+// the design mocks. Swap for `useProjects(api)` when /projects ships.
+const projects = MOCK_PROJECTS;
 
 // Decode JWT `payload` (no verification — we trust the token we just received
 // from the cloud and only read `email` / `sub` to populate the sidebar.
@@ -43,6 +53,11 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(null);
   const [hosts, setHosts] = useState<HostInfo[]>([]);
+
+  // SP-3 project state (mock-backed until /projects ships)
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
 
   const handleApiError = (e: unknown) => {
     if (e instanceof ApiError && e.status === 401) onLogout();
@@ -114,36 +129,94 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
     await newChat();
   };
 
+  const openProject = (id: string) => { setActiveProjectId(id); setPage("project"); };
+
   return (
     <div className="layout">
       <Sidebar
         mode={mode}
-        onMode={setMode}
+        onMode={(m) => {
+          setMode(m);
+          if (m === "chat") {
+            setPage(activeThreadId ? "chat" : "chat");
+          } else {
+            setPage(activeProjectId ? "project" : "projects");
+          }
+        }}
         threads={threads}
         activeThreadId={activeThreadId}
-        onSelect={(id) => { setActiveThreadId(id); setPage("chat"); }}
+        onSelect={(id) => { setActiveThreadId(id); setMode("chat"); setPage("chat"); }}
         onNewChat={() => { void newChat(); }}
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onSelectProject={openProject}
+        onNewProject={() => setNewProjectOpen(true)}
         onLogout={onLogout}
         onOpenSettings={() => setPage("settings")}
         hosts={hostStats}
         user={user}
       />
       <div className="main">
-        {page === "settings" ? (
+        {page === "settings" && (
           <SettingsPage api={api} user={user} onClose={() => setPage("chat")} />
-        ) : activeThreadId ? (
-          <Conversation
-            api={api}
-            threadId={activeThreadId}
-            initialDraft={pendingFirstMessage ?? undefined}
-            onConsumeInitialDraft={() => setPendingFirstMessage(null)}
-            onTitleMaybeChanged={refreshThreads}
-            hostName={hostName}
+        )}
+        {page === "projects" && (
+          <ProjectsList
+            projects={projects}
+            onOpen={openProject}
+            onNew={() => setNewProjectOpen(true)}
           />
-        ) : (
-          <Welcome onStartChat={startFromWelcome} hostName={hostName} />
+        )}
+        {page === "project" && activeProjectId && (
+          <Project
+            projectId={activeProjectId}
+            onBack={() => setPage("projects")}
+            onNewTask={() => setNewTaskOpen(true)}
+            onOpenSettings={() => setPage("project-settings")}
+          />
+        )}
+        {page === "project-settings" && activeProjectId && (
+          <ProjectSettings
+            projectId={activeProjectId}
+            onClose={() => setPage("project")}
+          />
+        )}
+        {page === "chat" && (
+          activeThreadId ? (
+            <Conversation
+              api={api}
+              threadId={activeThreadId}
+              initialDraft={pendingFirstMessage ?? undefined}
+              onConsumeInitialDraft={() => setPendingFirstMessage(null)}
+              onTitleMaybeChanged={refreshThreads}
+              hostName={hostName}
+            />
+          ) : (
+            <Welcome onStartChat={startFromWelcome} hostName={hostName} />
+          )
         )}
       </div>
+
+      {newProjectOpen && (
+        <NewProject
+          onClose={() => setNewProjectOpen(false)}
+          onCreate={(draft: NewProjectDraft) => {
+            // SP-3: POST /projects then navigate into the new project.
+            console.log("[shell] create project draft", draft);
+            setNewProjectOpen(false);
+          }}
+        />
+      )}
+      {newTaskOpen && activeProjectId && (
+        <NewTask
+          onClose={() => setNewTaskOpen(false)}
+          onCreate={(draft: NewTaskDraft) => {
+            // SP-3: POST /projects/:id/tasks
+            console.log("[shell] create task draft", { projectId: activeProjectId, draft });
+            setNewTaskOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
