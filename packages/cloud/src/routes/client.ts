@@ -9,7 +9,24 @@ import { listThreads, createThread, getThreadDetail, threadBelongsToUser } from 
 import { listEventsSince } from "../db/sessions.js";
 import { events as eventsTable } from "../db/schema.js";
 import { getAuthSession, touchAuthSession } from "../db/auth-sessions.js";
+import { getProject, getTask } from "../db/projects.js";
 import type { ServerDeps } from "../server.js";
+
+/**
+ * SP-3 project domain ClientHub fan-out methods. Track B augments the
+ * concrete `ClientHub` class with these; we type the surface locally so
+ * this file compiles independently. The runtime methods are added in
+ * `client-hub.ts` (Track B's main); if they're missing at runtime the
+ * subscribe-* branches no-op via the `typeof` guard below.
+ */
+interface ProjectAwareClients {
+  subscribeProjects?(userId: string, clientId: string): void;
+  unsubscribeProjects?(userId: string, clientId: string): void;
+  subscribeProject?(projectId: string, clientId: string): void;
+  unsubscribeProject?(projectId: string, clientId: string): void;
+  subscribeTask?(taskId: string, clientId: string): void;
+  unsubscribeTask?(taskId: string, clientId: string): void;
+}
 
 /**
  * SP-2 hard cap on a single subscribe-thread catchup. If the unread tail
@@ -151,6 +168,49 @@ export function registerClientRoutes(
                   targetHostId: msg.targetHostId ?? null,
                   sourceClientId: clientId,
                 });
+              }
+
+              // SP-3 project domain subscriptions. Same pattern as
+              // SP-2 subscribe-thread: ownership check (via DB lookup),
+              // then register on ClientHub. Cleanup on disconnect is
+              // handled by ClientHub.unregister (Track B's sweep covers
+              // the new subscription maps).
+              else if (msg.t === "subscribe-projects") {
+                const c = deps.clients as ProjectAwareClients;
+                c.subscribeProjects?.(claims.userId, clientId);
+              } else if (msg.t === "unsubscribe-projects") {
+                const c = deps.clients as ProjectAwareClients;
+                c.unsubscribeProjects?.(claims.userId, clientId);
+              } else if (msg.t === "subscribe-project") {
+                // Validate ownership: project's userId must match caller.
+                const project = await getProject(deps.db, msg.projectId);
+                if (!project || project.userId !== claims.userId) {
+                  ws.close(4003, "forbidden");
+                  return;
+                }
+                const c = deps.clients as ProjectAwareClients;
+                c.subscribeProject?.(msg.projectId, clientId);
+              } else if (msg.t === "unsubscribe-project") {
+                // No ownership check on unsubscribe — idempotent cleanup.
+                const c = deps.clients as ProjectAwareClients;
+                c.unsubscribeProject?.(msg.projectId, clientId);
+              } else if (msg.t === "subscribe-task") {
+                // Validate ownership: task → parent project → user.
+                const task = await getTask(deps.db, msg.taskId);
+                if (!task) {
+                  ws.close(4003, "forbidden");
+                  return;
+                }
+                const project = await getProject(deps.db, task.projectId);
+                if (!project || project.userId !== claims.userId) {
+                  ws.close(4003, "forbidden");
+                  return;
+                }
+                const c = deps.clients as ProjectAwareClients;
+                c.subscribeTask?.(msg.taskId, clientId);
+              } else if (msg.t === "unsubscribe-task") {
+                const c = deps.clients as ProjectAwareClients;
+                c.unsubscribeTask?.(msg.taskId, clientId);
               }
             })
             .catch((err) => {

@@ -7,6 +7,7 @@ import type { Auth, SessionClaims } from "./auth.js";
 import type { HostRouter } from "./host-router.js";
 import type { ClientHub } from "./client-hub.js";
 import type { ChatDomain } from "./domains/chat.js";
+import type { Project, ProjectTask, MergePolicy, Priority } from "@cogni/contract";
 import type { EmailTransport } from "./email/transport.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerEmailRoutes } from "./routes/email.js";
@@ -15,7 +16,86 @@ import { registerClientRoutes } from "./routes/client.js";
 import { registerIdentitiesRoutes } from "./routes/identities.js";
 import { registerDevicesRoutes } from "./routes/devices.js";
 import { registerHostsRoutes } from "./routes/hosts.js";
+import { registerProjectsRoutes } from "./routes/projects.js";
 import { registerHealthRoutes } from "./routes/health.js";
+
+/**
+ * SP-3 ProjectDomain surface consumed by routes/projects.ts. Track B's
+ * concrete class (`domains/project/index.ts`) implements this structurally
+ * — we declare the interface here so routes + tests can type against it
+ * even while Track B's implementation lands in parallel. Method semantics
+ * follow spec §四 (lifecycle) + §六 (HTTP routes):
+ *   - createProject runs `git-init-if-missing` if `initGit` is true
+ *   - replyToTask only valid in needs-input
+ *   - accept/reject only valid in reviewing
+ *   - retry only valid in failed/done
+ *   - cancel valid in any non-terminal state
+ *   - getTaskDiff proxies to host RPC `git-diff-snapshot`
+ *   - fsBrowse proxies to host RPC `fs-browse`
+ * The domain throws `Error & { code, currentState? }` for non-200 paths;
+ * routes/projects.ts maps them via `domainErrorResponse`.
+ */
+export interface ProjectDomain {
+  createProject(input: {
+    tenantId: string;
+    userId: string;
+    name: string;
+    description?: string;
+    repoPath: string;
+    defaultHostId: string;
+    mergePolicy?: MergePolicy;
+    testCommand?: string;
+    concurrencyLimit?: number;
+    systemPrompt?: string;
+    initGit?: boolean;
+  }): Promise<Project>;
+  updateProject(
+    projectId: string,
+    patch: {
+      name?: string;
+      description?: string | null;
+      defaultHostId?: string;
+      mergePolicy?: MergePolicy;
+      testCommand?: string | null;
+      concurrencyLimit?: number;
+      systemPrompt?: string | null;
+    },
+  ): Promise<Project>;
+  archiveProject(projectId: string): Promise<void>;
+
+  createTask(input: {
+    projectId: string;
+    title: string;
+    description?: string;
+    priority?: Priority;
+    labels?: string[];
+    adapter?: string;
+  }): Promise<ProjectTask>;
+
+  replyToTask(taskId: string, content: string): Promise<void>;
+  acceptTask(taskId: string): Promise<void>;
+  rejectTask(taskId: string): Promise<void>;
+  retryTask(taskId: string): Promise<void>;
+  cancelTask(taskId: string): Promise<void>;
+
+  getTaskDiff(
+    taskId: string,
+  ): Promise<{
+    diff: string;
+    stats: { files: number; additions: number; deletions: number };
+  }>;
+
+  fsBrowse(
+    hostId: string,
+    path: string | undefined,
+  ): Promise<{
+    entries: Array<{ name: string; type: "file" | "dir"; size?: number }>;
+    cwd: string;
+  }>;
+
+  /** Stop reconcile loops + drain in-flight RPCs on shutdown. */
+  dispose(): Promise<void>;
+}
 
 declare module "hono" {
   interface ContextVariableMap {
@@ -29,6 +109,13 @@ export interface ServerDeps {
   hosts: HostRouter;
   clients: ClientHub;
   chat: ChatDomain;
+  /**
+   * SP-3 project domain. Optional so SP-1/SP-2 tests + the staged Track B/C
+   * landing path keep compiling: routes that need it 503 when absent, and
+   * tests that don't exercise project surface can omit it. main.ts wires
+   * the real instance.
+   */
+  projectDomain?: ProjectDomain;
   emailTransport: EmailTransport;
   magicLinkTtlMinutes: number;
   publicUrl: string;
@@ -81,6 +168,9 @@ export function createServer(deps: ServerDeps) {
   registerIdentitiesRoutes(app, deps);
   registerDevicesRoutes(app, deps);
   registerHostsRoutes(app, deps);
+  // SP-3 project domain REST routes + fs-browse passthrough. Same /api/*
+  // Bearer middleware applies (registered by registerClientRoutes above).
+  registerProjectsRoutes(app, deps);
 
   return { app, injectWebSocket };
 }
