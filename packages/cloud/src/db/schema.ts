@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, jsonb, unique } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, jsonb, unique, index } from "drizzle-orm/pg-core";
 
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -85,6 +85,12 @@ export const runnerSessions = pgTable("runner_sessions", {
   // + closed_at=now. The unique-per-thread constraint is dropped — a thread now
   // has many historic sessions, the latest non-closed one is "current".
   closedAt: timestamp("closed_at"),
+  // SP-3: nullable FK to project_tasks. NULL ⇢ chat session (SP-1/SP-2 path);
+  // non-NULL ⇢ project task session. ON DELETE SET NULL so deleting a task
+  // doesn't cascade to event history (events keep referencing the session).
+  // Forward-references `projectTasks` defined below; drizzle resolves via the
+  // thunk-style reference callback so declaration order doesn't matter.
+  taskId: uuid("task_id").references((): any => projectTasks.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -98,4 +104,90 @@ export const events = pgTable("events", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => ({
   threadSeq: unique("events_thread_seq_uq").on(t.threadId, t.seq),
+}));
+
+// ─── SP-3 project domain ────────────────────────────────────────────────────
+
+/**
+ * A user-owned project rooted at one git repo on one default host. Soft-delete
+ * via `archivedAt`. `concurrencyLimit` caps simultaneous running tasks within
+ * this project (1-16, validated at the contract layer). `mergePolicy` selects
+ * the post-runner gate (require-review | auto-merge | auto-merge-if-tests-pass).
+ */
+export const projects = pgTable("projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  repoPath: text("repo_path").notNull(),
+  defaultHostId: uuid("default_host_id").notNull().references(() => hosts.id),
+  // SP-3 reserves; SP-4 Workspace Chat will write here. Nullable until then.
+  threadId: uuid("thread_id").references(() => threads.id),
+  mergePolicy: text("merge_policy").notNull().default("require-review"),
+  testCommand: text("test_command"),
+  concurrencyLimit: integer("concurrency_limit").notNull().default(2),
+  systemPrompt: text("system_prompt"),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => ({
+  byUser: index("projects_tenant_user_idx").on(t.tenantId, t.userId, t.archivedAt),
+  byHost: index("projects_default_host_idx").on(t.defaultHostId),
+}));
+
+/**
+ * One task inside a project. `ref` is the human-readable code ("MYAPP-1");
+ * `(projectId, ref)` is unique. `orderIndex` is stored as text so the UI can
+ * insert between siblings with lexicographic fractional keys (e.g. "1", "1.5",
+ * "2") — chosen over numeric to avoid float precision drift; comparison
+ * happens by parsing client-side or `(text::numeric)` in SQL when ordering.
+ * `labels` is jsonb-encoded `string[]` (drizzle has no native pg text[] helper
+ * across PGlite + neon-serverless consistently; jsonb gives us portable
+ * arrays + identical query ergonomics).
+ */
+export const projectTasks = pgTable("project_tasks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  ref: text("ref").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  state: text("state").notNull().default("queued"),
+  priority: integer("priority").notNull().default(0),
+  labels: jsonb("labels").notNull().default([]),
+  orderIndex: text("order_index").notNull(),
+  hostId: uuid("host_id").references(() => hosts.id),
+  adapter: text("adapter"),
+  worktreePath: text("worktree_path"),
+  branchName: text("branch_name"),
+  executionThreadId: uuid("execution_thread_id").references(() => threads.id),
+  retries: integer("retries").notNull().default(0),
+  maxRetries: integer("max_retries").notNull().default(3),
+  needsInputWhat: text("needs_input_what"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+}, (t) => ({
+  byProjectStateOrder: index("project_tasks_project_state_order_idx").on(t.projectId, t.state, t.orderIndex),
+  byHostState: index("project_tasks_host_state_idx").on(t.hostId, t.state),
+  refUq: unique("project_tasks_project_ref_uq").on(t.projectId, t.ref),
+}));
+
+/**
+ * Audit row for every `queued → running` transition of a task. Resume reuses
+ * the existing run; retry creates a new one with incremented `attemptNumber`.
+ * `exitReason` enumerated values match the contract `TaskExitReason` union.
+ */
+export const taskRuns = pgTable("task_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  taskId: uuid("task_id").notNull().references(() => projectTasks.id, { onDelete: "cascade" }),
+  runnerSessionId: uuid("runner_session_id").notNull().references(() => runnerSessions.id),
+  attemptNumber: integer("attempt_number").notNull(),
+  startedAt: timestamp("started_at").notNull(),
+  endedAt: timestamp("ended_at"),
+  exitReason: text("exit_reason"),
+  errorMessage: text("error_message"),
+}, (t) => ({
+  byTask: index("task_runs_task_idx").on(t.taskId),
 }));
