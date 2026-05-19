@@ -100,7 +100,7 @@ describe("ProjectOrchestrator dispatch", () => {
     const after = await getTask(f.db, f.task.id);
     expect(after?.state).toBe("running");
     expect(after?.hostId).toBe(f.host.hostId);
-    expect(after?.worktreePath).toBe(`/r.worktrees/${f.task.ref}`);
+    expect(after?.worktreePath).toBe(`/r/.worktrees/${f.task.ref}`);
     expect(after?.branchName).toBe(`task/${f.task.ref.toLowerCase()}`);
     expect(after?.startedAt).not.toBeNull();
     expect(after?.adapter).toBe("claude-code");
@@ -194,7 +194,7 @@ describe("ProjectOrchestrator reconcile", () => {
     // Pre-move the task to running.
     await updateTaskState(f.db, f.task.id, "running", {
       hostId: f.host.hostId,
-      worktreePath: "/r.worktrees/T-1",
+      worktreePath: "/r/.worktrees/T-1",
       branchName: "task/t-1",
       startedAt: new Date(),
     });
@@ -217,7 +217,7 @@ describe("ProjectOrchestrator reconcile", () => {
     // ChatDomain finalizes 'done' under a prior require-review setting).
     await updateTaskState(f.db, f.task.id, "reviewing", {
       hostId: f.host.hostId,
-      worktreePath: "/r.worktrees/T-1",
+      worktreePath: "/r/.worktrees/T-1",
       branchName: "task/t-1",
       startedAt: new Date(),
     });

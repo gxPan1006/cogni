@@ -252,7 +252,11 @@ export class ProjectOrchestrator {
   private async tryDispatchTask(project: Project, task: ProjectTask): Promise<boolean> {
     const hostId = project.defaultHostId;
     const branchName = `task/${task.ref.toLowerCase()}`;
-    const worktreePath = `${project.repoPath}.worktrees/${task.ref}`;
+    // Per-task worktree lives under `<repo>/.worktrees/<ref>`. The leading
+    // slash is required — without it the path resolves OUTSIDE repoPath
+    // (e.g. `/Users/x/code/test.worktrees/T-1` not `…/test/.worktrees/T-1`),
+    // and the host's `assertWorktreeInRepo` safety check correctly rejects it.
+    const worktreePath = `${project.repoPath}/.worktrees/${task.ref}`;
 
     try {
       await this.deps.hostRpc.gitInitIfMissing(hostId, {
