@@ -2,31 +2,53 @@
  * ProjectsList — main-slot view when the user is in project mode and no
  * project is open.
  *
- * Layout:
- *   ┌─── header (title + search + new) ─────────────────────────┐
- *   ├─── 📌 PINNED ──────────────────────────────────────────────┤
- *   │     [project card]  [project card]  [project card]        │
- *   ├─── 进行中 ───────────────────────────────────────────────────┤
- *   │     [project card]  …                                      │
- *   ├─── 已归档  (collapsible) ──────────────────────────────────┤
- *   │     [project card]  …                                      │
- *   └────────────────────────────────────────────────────────────┘
+ * Visual / layout: identical to the SP-1/PR-#11 mock-driven version
+ * (`apps/desktop/src/ProjectsList.tsx`, now deleted). Only the data source
+ * changed: instead of importing `MOCK_PROJECTS`, callers pass `items` —
+ * each item bundles the contract `Project` row with the four derived
+ * counters that drive the card visuals (`liveRunners` / `queuedCount` /
+ * `needsInputCount` / `health`). Pinned/archived are read off the same
+ * item shape so the SP-3 backend can ship these flags later without
+ * touching this file.
  *
- * Sorting: health=warn|error projects float to the top of "进行中" so a sea of
- * normal projects can't hide a fire. Pinned uses author order.
+ * Wiring expectations:
+ *   - Desktop Shell / web App build `items` by combining `useProjects()`
+ *     with whatever per-project task stats are available (SP-3 MVP can
+ *     pass zeros for the counters; the layout still works — empty
+ *     "进行中" section + idle cards).
+ *   - `onOpen` navigates into the project board. `onNew` opens the
+ *     <NewProject> modal at the parent level.
  */
 import { useMemo, useState } from "react";
-import type { DesignProject } from "./mock.js";
-import { MOCK_PROJECTS } from "./mock.js";
-import { Icon } from "@cogni/ui";
+import type { Project } from "@cogni/contract";
+import { Icon } from "../icons.js";
 import "./projects-list.css";
 
+export type ProjectHealth = "ok" | "warn" | "error";
+
+/**
+ * A row in the projects list. `project` is the contract row; the rest are
+ * UI-only counters the caller computes from the user's task stream.
+ */
+export interface ProjectListItem {
+  project: Project;
+  liveRunners: number;
+  queuedCount: number;
+  needsInputCount: number;
+  health: ProjectHealth;
+  pinned?: boolean;
+  /** Display-only last-touch hint (e.g. "12m ago"); callers format the timestamp. */
+  updatedAtLabel?: string;
+  /** Display-only source label ("Linear" / "Internal" / "手动"). SP-3 backend has no source field. */
+  sourceLabel?: string;
+}
+
 export function ProjectsList({
-  projects = MOCK_PROJECTS,
+  items,
   onOpen,
   onNew,
 }: {
-  projects?: DesignProject[];
+  items: ProjectListItem[];
   onOpen?: (id: string) => void;
   onNew?: () => void;
 }) {
@@ -35,19 +57,20 @@ export function ProjectsList({
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return projects;
-    return projects.filter((p) =>
-      p.name.toLowerCase().includes(needle) ||
-      (p.description ?? "").toLowerCase().includes(needle));
-  }, [projects, q]);
+    if (!needle) return items;
+    return items.filter((it) =>
+      it.project.name.toLowerCase().includes(needle) ||
+      (it.project.description ?? "").toLowerCase().includes(needle));
+  }, [items, q]);
 
-  const pinned = filtered.filter((p) => p.pinned && !p.archived);
-  const active = filtered
-    .filter((p) => !p.pinned && !p.archived)
+  const isArchived = (it: ProjectListItem) => it.project.archivedAt !== null;
+  const pinned   = filtered.filter((it) => it.pinned && !isArchived(it));
+  const active   = filtered
+    .filter((it) => !it.pinned && !isArchived(it))
     .sort((a, b) => healthRank(b.health) - healthRank(a.health));
-  const archived = filtered.filter((p) => p.archived);
+  const archived = filtered.filter(isArchived);
 
-  if (projects.length === 0) {
+  if (items.length === 0) {
     return <EmptyAll onNew={onNew} />;
   }
 
@@ -80,14 +103,14 @@ export function ProjectsList({
       <div className="projects-list__body">
         {pinned.length > 0 && (
           <Section title="PINNED" icon={Icon.spark}>
-            <Grid projects={pinned} onOpen={onOpen} />
+            <Grid items={pinned} onOpen={onOpen} />
           </Section>
         )}
 
         <Section title="进行中" subtitle={`${active.length} 个`}>
           {active.length === 0
             ? <EmptyActive onNew={onNew} />
-            : <Grid projects={active} onOpen={onOpen} />}
+            : <Grid items={active} onOpen={onOpen} />}
         </Section>
 
         {archived.length > 0 && (
@@ -97,7 +120,7 @@ export function ProjectsList({
             open={showArchived}
             onToggle={() => setShowArchived(!showArchived)}
           >
-            {showArchived && <Grid projects={archived} onOpen={onOpen} dim />}
+            {showArchived && <Grid items={archived} onOpen={onOpen} dim />}
           </Section>
         )}
       </div>
@@ -141,30 +164,28 @@ function Section({
 
 // ─── Grid + card ─────────────────────────────────────────
 
-function Grid({ projects, onOpen, dim }: { projects: DesignProject[]; onOpen?: (id: string) => void; dim?: boolean }) {
+function Grid({ items, onOpen, dim }: { items: ProjectListItem[]; onOpen?: (id: string) => void; dim?: boolean }) {
   return (
     <div className={"projects-list__grid" + (dim ? " projects-list__grid--dim" : "")}>
-      {projects.map((p) => <ProjectCard key={p.id} project={p} onOpen={onOpen} />)}
+      {items.map((it) => <ProjectCard key={it.project.id} item={it} onOpen={onOpen} />)}
     </div>
   );
 }
 
-function ProjectCard({ project, onOpen }: { project: DesignProject; onOpen?: (id: string) => void }) {
-  const totalRunners = project.liveRunners + project.queuedCount;
-  const sourceLabel = project.source ? {
-    linear: "Linear",
-    internal: "Internal tracker",
-    manual: "手动",
-  }[project.source.kind] : "—";
+function ProjectCard({ item, onOpen }: { item: ProjectListItem; onOpen?: (id: string) => void }) {
+  const { project, liveRunners, queuedCount, needsInputCount, health } = item;
+  const totalRunners = liveRunners + queuedCount;
+  const sourceLabel = item.sourceLabel ?? "—";
+  const updatedAtLabel = item.updatedAtLabel ?? "";
 
   return (
     <button className="project-card" onClick={() => onOpen?.(project.id)}>
       <div className="project-card__head">
-        <span className={`project-card__health project-card__health--${project.health}`} title={`Health: ${project.health}`} />
-        {project.needsInputCount > 0 && (
-          <span className="project-card__needs-input" title={`${project.needsInputCount} 个任务在等你`}>
+        <span className={`project-card__health project-card__health--${health}`} title={`Health: ${health}`} />
+        {needsInputCount > 0 && (
+          <span className="project-card__needs-input" title={`${needsInputCount} 个任务在等你`}>
             <span className="project-card__needs-input-dot" />
-            {project.needsInputCount}
+            {needsInputCount}
           </span>
         )}
       </div>
@@ -174,15 +195,15 @@ function ProjectCard({ project, onOpen }: { project: DesignProject; onOpen?: (id
       )}
       <div className="project-card__meta">
         <span className="project-card__meta-cell">
-          <span className="project-card__meta-num">{project.liveRunners}</span>
+          <span className="project-card__meta-num">{liveRunners}</span>
           <span className="project-card__meta-label">在跑</span>
         </span>
         <span className="project-card__meta-sep">·</span>
         <span className="project-card__meta-cell">
-          <span className="project-card__meta-num">{project.queuedCount}</span>
+          <span className="project-card__meta-num">{queuedCount}</span>
           <span className="project-card__meta-label">排队</span>
         </span>
-        {totalRunners === 0 && project.health === "ok" && (
+        {totalRunners === 0 && health === "ok" && (
           <>
             <span className="project-card__meta-sep">·</span>
             <span className="project-card__meta-idle">空闲</span>
@@ -191,7 +212,7 @@ function ProjectCard({ project, onOpen }: { project: DesignProject; onOpen?: (id
       </div>
       <div className="project-card__foot">
         <span className="project-card__source">{sourceLabel}</span>
-        <span className="project-card__time">{project.updatedAt}</span>
+        <span className="project-card__time">{updatedAtLabel}</span>
       </div>
     </button>
   );
@@ -227,7 +248,7 @@ function EmptyActive({ onNew }: { onNew?: () => void }) {
 
 // ─── Helpers ─────────────────────────────────────────────
 
-function healthRank(h: DesignProject["health"]): number {
+function healthRank(h: ProjectHealth): number {
   if (h === "error") return 2;
   if (h === "warn") return 1;
   return 0;

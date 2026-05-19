@@ -24,10 +24,17 @@
  *   - `host-status` (user-wide) and `host-meta` (user-wide) fan out to every
  *     active subscription — each hook interprets them locally.
  *   - `error` fans out (every hook can choose to log).
- *   - List-channel frames (`thread-meta`, `thread-created`, `thread-deleted`,
- *     `device-list-changed`) are not delivered to thread subscribers; future
- *     list-level consumers can attach their own listener via
- *     `onUserFrame()` (not yet exposed — add when needed).
+ *   - SP-3 list-level frames (`project-event`) fan out to every active
+ *     `subscribe-projects` listener; per-project frames (`task-event` for a
+ *     particular projectId) fan out to every `subscribe-project` listener
+ *     for that projectId. Per-task subscribers see the same `task-event`
+ *     frames filtered by their taskId. The cloud is responsible for only
+ *     pushing frames the subscribing user is entitled to see; routing here
+ *     is purely a client-side fan-out optimization.
+ *   - Remaining list-channel frames (`thread-meta`, `thread-created`,
+ *     `thread-deleted`, `device-list-changed`) are not delivered to thread
+ *     subscribers; future list-level consumers can attach their own
+ *     listener via `onUserFrame()` (not yet exposed — add when needed).
  */
 import type { CloudToClient } from "@cogni/contract";
 
@@ -38,6 +45,35 @@ export interface ThreadSubscription {
   threadId: string;
   /** Read on every (re)subscribe so the cloud can catchup just the missed tail. */
   getLastSeq: () => number;
+  onFrame: (frame: CloudToClient) => void;
+}
+
+/**
+ * SP-3 list-level subscriber (the user's whole project list). One frame
+ * `project-event` per change; the hook's reducer applies created / updated /
+ * archived locally.
+ */
+export interface ProjectsSubscription {
+  onFrame: (frame: CloudToClient) => void;
+}
+
+/**
+ * SP-3 per-project subscriber. Receives `task-event` frames whose `task.projectId`
+ * matches `projectId`, plus any user-wide frames (host-status etc).
+ */
+export interface ProjectSubscription {
+  projectId: string;
+  onFrame: (frame: CloudToClient) => void;
+}
+
+/**
+ * SP-3 per-task subscriber. Receives `task-event` frames whose `task.id`
+ * matches `taskId`. The hook layer is responsible for separately subscribing
+ * to the task's `executionThreadId` for the runner event stream (which still
+ * flows on the existing `event` channel via `subscribeThread`).
+ */
+export interface TaskSubscription {
+  taskId: string;
   onFrame: (frame: CloudToClient) => void;
 }
 
@@ -52,6 +88,18 @@ export interface WsClient {
    * unsubscribe function that emits `unsubscribe-thread` and detaches.
    */
   subscribeThread(sub: ThreadSubscription): () => void;
+  /**
+   * Attach a projects-list subscriber. Sends `subscribe-projects` immediately
+   * if the WS is open; otherwise queues it for the next `onopen`. The cloud
+   * deduplicates multiple `subscribe-projects` frames per session (idempotent),
+   * but we still echo `unsubscribe-projects` when the last local listener
+   * detaches so reconnect doesn't carry over stale interest.
+   */
+  subscribeProjects(sub: ProjectsSubscription): () => void;
+  /** Attach a per-project subscriber. Emits `subscribe-project` once per projectId. */
+  subscribeProject(sub: ProjectSubscription): () => void;
+  /** Attach a per-task subscriber. Emits `subscribe-task` once per taskId. */
+  subscribeTask(sub: TaskSubscription): () => void;
   /** Returns true iff the frame could be written to the socket synchronously. */
   send(threadId: string, text: string): boolean;
   resolveFallback(
@@ -75,6 +123,21 @@ export function createWsClient(buildUrl: () => string): WsClient {
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
   const subs = new Map<string, ThreadSubscription>();
+  // SP-3 fan-out sets (parallel to thread `subs`; not keyed because list /
+  // per-project / per-task subscriptions naturally support multiple
+  // simultaneous mounts of the same scope — e.g. Sidebar + ProjectsList both
+  // listen to the projects channel — and we want every mount to receive every
+  // matching frame).
+  const projectsSubs = new Set<ProjectsSubscription>();
+  const projectSubs = new Set<ProjectSubscription>();
+  const taskSubs = new Set<TaskSubscription>();
+  // Per-scope refcount so we send `subscribe-X` exactly once on open and
+  // `unsubscribe-X` only when the last listener detaches. Keyed by the
+  // scope's stable identifier ("__list__" for the list channel, or the
+  // projectId / taskId for per-scope channels).
+  const projectRefcount = new Map<string, number>();
+  const taskRefcount = new Map<string, number>();
+  let projectsRefcount = 0;
   const connectionListeners = new Set<(c: boolean) => void>();
 
   function setConnected(next: boolean) {
@@ -106,13 +169,36 @@ export function createWsClient(buildUrl: () => string): WsClient {
       subs.get(frame.threadId)?.onFrame(frame);
       return;
     }
-    // User-wide and unscoped frames — fan out to every active subscriber.
+    // User-wide and unscoped frames — fan out to every active subscriber
+    // (thread, projects-list, per-project, per-task).
     if (
       frame.t === "host-status" ||
       frame.t === "host-meta" ||
       frame.t === "error"
     ) {
       for (const s of subs.values()) s.onFrame(frame);
+      for (const s of projectsSubs) s.onFrame(frame);
+      for (const s of projectSubs) s.onFrame(frame);
+      for (const s of taskSubs) s.onFrame(frame);
+      return;
+    }
+    // SP-3 project-list frames. Cloud filters by user; every list listener
+    // for this user gets it.
+    if (frame.t === "project-event") {
+      for (const s of projectsSubs) s.onFrame(frame);
+      return;
+    }
+    // SP-3 task frames. Two scopes:
+    //   - Per-project subscribers see every task-event whose `task.projectId`
+    //     matches (so the board reflects new/updated/deleted cards live).
+    //   - Per-task subscribers see only their own `task.id` (the drawer).
+    if (frame.t === "task-event") {
+      for (const s of projectSubs) {
+        if (s.projectId === frame.task.projectId) s.onFrame(frame);
+      }
+      for (const s of taskSubs) {
+        if (s.taskId === frame.task.id) s.onFrame(frame);
+      }
       return;
     }
     // List-channel frames (thread-meta / thread-created / thread-deleted /
@@ -133,6 +219,15 @@ export function createWsClient(buildUrl: () => string): WsClient {
       setConnected(true);
       for (const s of subs.values()) {
         sendFrame({ t: "subscribe-thread", threadId: s.threadId, lastSeq: s.getLastSeq() });
+      }
+      // SP-3 channels — resubscribe each scope exactly once even if multiple
+      // local listeners share it (the refcount maps drive this).
+      if (projectsRefcount > 0) sendFrame({ t: "subscribe-projects" });
+      for (const projectId of projectRefcount.keys()) {
+        sendFrame({ t: "subscribe-project", projectId });
+      }
+      for (const taskId of taskRefcount.keys()) {
+        sendFrame({ t: "subscribe-task", taskId });
       }
     };
 
@@ -185,6 +280,55 @@ export function createWsClient(buildUrl: () => string): WsClient {
       };
     },
 
+    subscribeProjects(sub) {
+      projectsSubs.add(sub);
+      const wasZero = projectsRefcount === 0;
+      projectsRefcount += 1;
+      if (!ws) connect();
+      else if (wasZero) sendFrame({ t: "subscribe-projects" });
+      return () => {
+        if (!projectsSubs.delete(sub)) return;
+        projectsRefcount = Math.max(0, projectsRefcount - 1);
+        if (projectsRefcount === 0) sendFrame({ t: "unsubscribe-projects" });
+      };
+    },
+
+    subscribeProject(sub) {
+      projectSubs.add(sub);
+      const prev = projectRefcount.get(sub.projectId) ?? 0;
+      projectRefcount.set(sub.projectId, prev + 1);
+      if (!ws) connect();
+      else if (prev === 0) sendFrame({ t: "subscribe-project", projectId: sub.projectId });
+      return () => {
+        if (!projectSubs.delete(sub)) return;
+        const remaining = (projectRefcount.get(sub.projectId) ?? 1) - 1;
+        if (remaining <= 0) {
+          projectRefcount.delete(sub.projectId);
+          sendFrame({ t: "unsubscribe-project", projectId: sub.projectId });
+        } else {
+          projectRefcount.set(sub.projectId, remaining);
+        }
+      };
+    },
+
+    subscribeTask(sub) {
+      taskSubs.add(sub);
+      const prev = taskRefcount.get(sub.taskId) ?? 0;
+      taskRefcount.set(sub.taskId, prev + 1);
+      if (!ws) connect();
+      else if (prev === 0) sendFrame({ t: "subscribe-task", taskId: sub.taskId });
+      return () => {
+        if (!taskSubs.delete(sub)) return;
+        const remaining = (taskRefcount.get(sub.taskId) ?? 1) - 1;
+        if (remaining <= 0) {
+          taskRefcount.delete(sub.taskId);
+          sendFrame({ t: "unsubscribe-task", taskId: sub.taskId });
+        } else {
+          taskRefcount.set(sub.taskId, remaining);
+        }
+      };
+    },
+
     send(threadId, text) {
       return sendFrame({ t: "send", threadId, text });
     },
@@ -202,6 +346,12 @@ export function createWsClient(buildUrl: () => string): WsClient {
       closed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       subs.clear();
+      projectsSubs.clear();
+      projectSubs.clear();
+      taskSubs.clear();
+      projectRefcount.clear();
+      taskRefcount.clear();
+      projectsRefcount = 0;
       connectionListeners.clear();
       ws?.close();
       ws = null;

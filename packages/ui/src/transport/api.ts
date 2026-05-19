@@ -1,5 +1,51 @@
-import type { ThreadSummary, ThreadDetail, HostRegistration } from "@cogni/contract";
+import type {
+  ThreadSummary, ThreadDetail, HostRegistration,
+  Project, ProjectTask, TaskRun, MergePolicy,
+  FsBrowseResponse, GitDiffSnapshotResponse,
+} from "@cogni/contract";
 import { createWsClient, type WsClient } from "./ws-client.js";
+
+// ─── SP-3 input shapes for create / patch routes ──────────────────────────
+//
+// These are the request bodies the cloud's `/api/projects` + `/api/tasks`
+// routes accept. The cloud Track C will validate them with its own zod
+// schemas; ApiClient just forwards camelCase JSON.
+
+export interface CreateProjectInput {
+  name: string;
+  description?: string;
+  repoPath: string;
+  defaultHostId: string;
+  mergePolicy?: MergePolicy;
+  testCommand?: string;
+  concurrencyLimit?: number;
+  systemPrompt?: string;
+  /** Ask the host to `git init` if `repoPath` is not already a repo. */
+  initRepo?: boolean;
+}
+
+export interface UpdateProjectInput {
+  name?: string;
+  description?: string | null;
+  mergePolicy?: MergePolicy;
+  testCommand?: string | null;
+  concurrencyLimit?: number;
+  systemPrompt?: string | null;
+  defaultHostId?: string;
+}
+
+export interface CreateTaskInput {
+  title: string;
+  description?: string;
+  priority?: 0 | 1 | 2 | 3 | 4;
+  labels?: string[];
+}
+
+/** The full GET /tasks/:id payload — task + its run history. */
+export interface TaskDetailResponse {
+  task: ProjectTask;
+  runs: TaskRun[];
+}
 
 /**
  * Thrown by `ApiClient.*` methods on a non-2xx cloud response. `status` lets
@@ -164,5 +210,96 @@ export class ApiClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ magic }),
+    });
+
+  // ─── SP-3 Projects ────────────────────────────────────────────────────
+  //
+  // Endpoints below mirror spec §六 ("Cloud HTTP Routes"). All return
+  // camelCase JSON. WS pushes for the same resources (`project-event` /
+  // `task-event`) flow through `wsClient.subscribeProjects` etc; HTTP
+  // here is for first-mount fetch + mutations.
+
+  listProjects = (): Promise<Project[]> =>
+    this.request(`${this.cloudUrl}/api/projects`, { headers: this.authHeaders() });
+
+  createProject = (input: CreateProjectInput): Promise<Project> =>
+    this.request(`${this.cloudUrl}/api/projects`, {
+      method: "POST", headers: this.authHeaders(), body: JSON.stringify(input),
+    });
+
+  getProject = (id: string): Promise<Project> =>
+    this.request(`${this.cloudUrl}/api/projects/${id}`, { headers: this.authHeaders() });
+
+  updateProject = (id: string, patch: UpdateProjectInput): Promise<Project> =>
+    this.request(`${this.cloudUrl}/api/projects/${id}`, {
+      method: "PATCH", headers: this.authHeaders(), body: JSON.stringify(patch),
+    });
+
+  archiveProject = (id: string): Promise<{ ok: true }> =>
+    this.request(`${this.cloudUrl}/api/projects/${id}/archive`, {
+      method: "POST", headers: this.authHeaders(),
+    });
+
+  // ─── SP-3 Project tasks ───────────────────────────────────────────────
+
+  listProjectTasks = (projectId: string): Promise<ProjectTask[]> =>
+    this.request(`${this.cloudUrl}/api/projects/${projectId}/tasks`, {
+      headers: this.authHeaders(),
+    });
+
+  createProjectTask = (projectId: string, input: CreateTaskInput): Promise<ProjectTask> =>
+    this.request(`${this.cloudUrl}/api/projects/${projectId}/tasks`, {
+      method: "POST", headers: this.authHeaders(), body: JSON.stringify(input),
+    });
+
+  getTaskDetail = (taskId: string): Promise<TaskDetailResponse> =>
+    this.request(`${this.cloudUrl}/api/tasks/${taskId}`, { headers: this.authHeaders() });
+
+  /**
+   * Post a user reply to a `needs-input` task. The cloud forwards it to the
+   * task's `executionThreadId` and lifecycle-transitions the task back to
+   * `running` once it lands.
+   */
+  replyToTask = (taskId: string, content: string): Promise<{ ok: true }> =>
+    this.request(`${this.cloudUrl}/api/tasks/${taskId}/reply`, {
+      method: "POST", headers: this.authHeaders(), body: JSON.stringify({ content }),
+    });
+
+  acceptTask = (taskId: string): Promise<{ ok: true }> =>
+    this.request(`${this.cloudUrl}/api/tasks/${taskId}/accept`, {
+      method: "POST", headers: this.authHeaders(),
+    });
+
+  rejectTask = (taskId: string): Promise<{ ok: true }> =>
+    this.request(`${this.cloudUrl}/api/tasks/${taskId}/reject`, {
+      method: "POST", headers: this.authHeaders(),
+    });
+
+  retryTask = (taskId: string): Promise<{ ok: true }> =>
+    this.request(`${this.cloudUrl}/api/tasks/${taskId}/retry`, {
+      method: "POST", headers: this.authHeaders(),
+    });
+
+  cancelTask = (taskId: string): Promise<{ ok: true }> =>
+    this.request(`${this.cloudUrl}/api/tasks/${taskId}/cancel`, {
+      method: "POST", headers: this.authHeaders(),
+    });
+
+  /** GET the worktree's diff against its base branch — drawer "Review" tab. */
+  getTaskDiff = (taskId: string): Promise<GitDiffSnapshotResponse> =>
+    this.request(`${this.cloudUrl}/api/tasks/${taskId}/diff`, {
+      headers: this.authHeaders(),
+    });
+
+  // ─── SP-3 fs-browse (web NewProject Step 0) ───────────────────────────
+  /**
+   * Browse a directory on the given host. The cloud forwards as a `fs-browse`
+   * RPC; only directory entries are returned (no file bodies). Path defaults
+   * to the host's $HOME if omitted.
+   */
+  fsBrowse = (hostId: string, path?: string): Promise<FsBrowseResponse> =>
+    this.request(`${this.cloudUrl}/api/hosts/${hostId}/fs-browse`, {
+      method: "POST", headers: this.authHeaders(),
+      body: JSON.stringify({ path }),
     });
 }

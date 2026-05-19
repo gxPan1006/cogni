@@ -10,7 +10,10 @@
  *   - text events concatenate into one running AssistantText (with caret)
  *   - tool-call + matching tool-result pair into one ToolCallBlock
  *   - error events render inline
- *   - permission-request → PermissionPrompt (SP-3 will wire onAllow/onDeny to API)
+ *   - permission-request blocks are dropped (SP-3 chose to trust the
+ *     sandbox + reviewing-state human review rather than ship a mid-run
+ *     permission UI). The block kind still exists for ChatBlocks consumers
+ *     that want it; Conversation just ignores it now.
  *
  * Connection / host state: surfaced through the composer's status pill —
  * there is no top-of-conversation banner anymore. We compute a
@@ -25,7 +28,7 @@ import { Composer, type ComposerStatus } from "./Composer.js";
 import { HostFallbackCard } from "./HostFallbackCard.js";
 import { NoHostBanner } from "./NoHostBanner.js";
 import {
-  UserMessage, AssistantText, ToolCallBlock, PermissionPrompt,
+  UserMessage, AssistantText, ToolCallBlock,
   aggregateEvents,
 } from "./ChatBlocks.js";
 import "./conversation.css";
@@ -114,15 +117,12 @@ export function Conversation({
               return <ToolCallBlock key={i} name={b.name} input={b.input} result={b.result} status={b.status} />;
             }
             if (b.kind === "permission") {
-              return (
-                <PermissionPrompt
-                  key={i}
-                  toolName={b.name}
-                  what={<code>{JSON.stringify(b.input).slice(0, 120)}</code>}
-                  onAllow={() => { /* SP-3: POST /permissions/:toolId allow=once */ }}
-                  onDeny={() => { /* SP-3: POST /permissions/:toolId deny */ }}
-                />
-              );
+              // SP-3: permission middleware was explicitly dropped (spec §一 YAGNI).
+              // The block exists in the event stream for backwards compatibility
+              // but the UI no longer surfaces it — runner-host runs with
+              // `--dangerously-skip-permissions`, and reviewing-state human
+              // review is the safety net.
+              return null;
             }
             if (b.kind === "error") {
               return (

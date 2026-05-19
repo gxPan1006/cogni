@@ -2,35 +2,43 @@
  * Shell — top-level authenticated layout.
  *
  * Owns: the local runner-host registration on first login, the active thread,
- * the list of threads, and which page is visible in the main slot (chat /
- * welcome / settings). Mounts Sidebar in the rail and the page in the slot.
+ * the active project / task selection, and which page is visible in the
+ * main slot. Mounts Sidebar in the rail and the page in the slot.
  *
- * Changes vs SP-1 spike:
- *   - new `page` state for opening Settings without unmounting the shell
- *   - Sidebar receives `onOpenSettings`
- *   - Composer / Welcome already use the new components — no API change
+ * SP-3 wiring (Track E):
+ *   - `useProjects(api)` replaces `MOCK_PROJECTS`; the sidebar / projects
+ *     list / breadcrumb all read from the live row stream. WS pushes
+ *     (`project-event` kind=created/updated/archived) are reduced into
+ *     local state by the hook.
+ *   - `useProjectBoard(api, activeProjectId)` powers the board view. The
+ *     onNewTask modal calls its `createTask` mutator; the kanban / swarm
+ *     / timeline render the hook's `tasks` directly.
+ *   - `useTaskDetail` is mounted inside <TaskDetail> when a task is open;
+ *     Shell only passes `taskId` + the surrounding context (project, hosts).
  *
- * Phase 2 agents do NOT touch this file — render INTO the sidebar/main slots
- * via Sidebar / Conversation / Welcome / Settings. Escalate if you think this
- * file needs to change.
+ * Visible behaviour:
+ *   - Sidebar shows real projects, with live counters that update when the
+ *     cloud pushes a task-event (running count goes up, needs-input badge
+ *     lights up, archived rows dim into "已归档").
+ *   - 新项目 / 新任务 buttons open their respective modals; submit calls the
+ *     hook mutators which return the created row; Shell navigates into it.
+ *   - Project settings 保存 fires `updateProject`; archive fires
+ *     `archiveProject`. Cloud's WS push refreshes the form via
+ *     `useProjectBoard.project` re-rendering.
  */
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ThreadSummary } from "@cogni/contract";
+import type { ThreadSummary, ProjectTask } from "@cogni/contract";
 import { api, ApiError, type HostInfo } from "./api.js";
-import { Sidebar, Conversation, Welcome, SettingsPage } from "@cogni/ui";
-import { MOCK_PROJECTS } from "./mock.js";
-import { Project } from "./Project.js";
-import { ProjectsList } from "./ProjectsList.js";
-import { ProjectSettings } from "./ProjectSettings.js";
-import { NewProject, type NewProjectDraft } from "./NewProject.js";
-import { NewTask, type NewTaskDraft } from "./NewTask.js";
+import {
+  Sidebar, Conversation, Welcome, SettingsPage,
+  ProjectsList, ProjectBoard, TaskDetail,
+  NewProject, NewTask, ProjectSettings,
+  useProjects, useProjectBoard,
+  type ProjectListItem, type NewProjectDraft, type NewTaskDraft,
+} from "@cogni/ui";
 
 type Page = "chat" | "settings" | "projects" | "project" | "project-settings";
-
-// SP-3 backend isn't done yet — sidebar / project pages read straight from
-// the design mocks. Swap for `useProjects(api)` when /projects ships.
-const projects = MOCK_PROJECTS;
 
 // Decode JWT `payload` (no verification — we trust the token we just received
 // from the cloud and only read `email` / `sub` to populate the sidebar.
@@ -54,8 +62,11 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(null);
   const [hosts, setHosts] = useState<HostInfo[]>([]);
 
-  // SP-3 project state (mock-backed until /projects ships)
+  // SP-3 project state (real, driven by hooks)
+  const projectsHook = useProjects(api);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const board = useProjectBoard(api, activeProjectId ?? "");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
 
@@ -108,7 +119,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   const user = useMemo(() => {
     const claims = decodeJwt(token);
     if (!claims?.email) return undefined;
-    return { name: claims.email.split("@")[0], email: claims.email };
+    return { name: claims.email.split("@")[0]!, email: claims.email };
   }, [token]);
 
   const newChat = async (): Promise<string | null> => {
@@ -131,6 +142,105 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
 
   const openProject = (id: string) => { setActiveProjectId(id); setPage("project"); };
 
+  // SP-3 cards / sidebar need {liveRunners, queuedCount, needsInputCount,
+  // health} alongside each Project row. The SP-3 contract's `Project` row
+  // doesn't carry these — they're aggregates over the user's tasks. Shell
+  // doesn't subscribe to *every* project's tasks (that would be a fan-out
+  // mess), so we render zeros for projects we haven't opened yet, and the
+  // open project's counters come from `board.tasks`. WS pushes for any
+  // project's tasks the Shell is *not* explicitly subscribed to don't
+  // arrive — that's fine; the user will see fresh counters on open.
+  const items = useMemo<ProjectListItem[]>(() => {
+    return projectsHook.projects.map((p) => {
+      const isCurrent = p.id === activeProjectId;
+      const projectTasks: ProjectTask[] = isCurrent ? board.tasks : [];
+      const liveRunners = projectTasks.filter((t) => t.state === "running").length;
+      const queuedCount = projectTasks.filter((t) => t.state === "queued").length;
+      const needsInputCount = projectTasks.filter((t) => t.state === "needs-input").length;
+      const failed = projectTasks.some((t) => t.state === "failed");
+      const health: ProjectListItem["health"] =
+        failed ? "error" :
+        needsInputCount > 0 ? "warn" :
+        "ok";
+      return {
+        project: p,
+        liveRunners,
+        queuedCount,
+        needsInputCount,
+        health,
+        sourceLabel: "—",
+        updatedAtLabel: relativeTime(p.updatedAt),
+      };
+    });
+  }, [projectsHook.projects, activeProjectId, board.tasks]);
+
+  const sidebarProjects = items.map((it) => ({
+    id: it.project.id,
+    name: it.project.name,
+    liveRunners: it.liveRunners,
+    queuedCount: it.queuedCount,
+    needsInputCount: it.needsInputCount,
+    health: it.health,
+    pinned: it.pinned,
+    archived: it.project.archivedAt !== null,
+  }));
+
+  // Modal handlers
+  const handleCreateProject = async (draft: NewProjectDraft) => {
+    try {
+      const created = await projectsHook.createProject({
+        name: draft.name,
+        description: draft.description || undefined,
+        repoPath: draft.repoPath,
+        defaultHostId: draft.defaultHostId,
+        concurrencyLimit: draft.concurrencyLimit,
+        systemPrompt: draft.systemPrompt || undefined,
+        mergePolicy: draft.mergePolicy,
+        initRepo: draft.initRepo,
+      });
+      setNewProjectOpen(false);
+      openProject(created.id);
+    } catch (e) {
+      handleApiError(e);
+    }
+  };
+
+  const handleCreateTask = async (draft: NewTaskDraft) => {
+    if (!activeProjectId) return;
+    try {
+      if (draft.kind === "manual") {
+        await board.createTask({ title: draft.title, description: draft.description || undefined });
+      } else if (draft.kind === "linear") {
+        // SP-3+1 will hit Linear's API. For now we make one placeholder task per pick.
+        await Promise.all(draft.issueIds.map((id) => board.createTask({ title: `Linear ${id}`, description: "" })));
+      } else if (draft.kind === "upload") {
+        await board.createTask({ title: draft.file.name, description: "(从 backlog 文件导入)" });
+      }
+      setNewTaskOpen(false);
+    } catch (e) {
+      handleApiError(e);
+    }
+  };
+
+  const handleUpdateProject = async (patch: Parameters<typeof api.updateProject>[1]) => {
+    if (!activeProjectId) return;
+    try {
+      await api.updateProject(activeProjectId, patch);
+    } catch (e) {
+      handleApiError(e);
+    }
+  };
+  const handleArchiveProject = async () => {
+    if (!activeProjectId) return;
+    try {
+      await projectsHook.archiveProject(activeProjectId);
+      setActiveProjectId(null);
+      setPage("projects");
+    } catch (e) {
+      handleApiError(e);
+    }
+  };
+
   return (
     <div className="layout">
       <Sidebar
@@ -147,7 +257,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
         activeThreadId={activeThreadId}
         onSelect={(id) => { setActiveThreadId(id); setMode("chat"); setPage("chat"); }}
         onNewChat={() => { void newChat(); }}
-        projects={projects}
+        projects={sidebarProjects}
         activeProjectId={activeProjectId}
         onSelectProject={openProject}
         onNewProject={() => setNewProjectOpen(true)}
@@ -162,23 +272,29 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
         )}
         {page === "projects" && (
           <ProjectsList
-            projects={projects}
+            items={items}
             onOpen={openProject}
             onNew={() => setNewProjectOpen(true)}
           />
         )}
         {page === "project" && activeProjectId && (
-          <Project
-            projectId={activeProjectId}
+          <ProjectBoard
+            project={board.project}
+            tasks={board.tasks}
+            hosts={hosts}
             onBack={() => setPage("projects")}
             onNewTask={() => setNewTaskOpen(true)}
             onOpenSettings={() => setPage("project-settings")}
+            onOpenTask={(id) => setActiveTaskId(id)}
           />
         )}
         {page === "project-settings" && activeProjectId && (
           <ProjectSettings
-            projectId={activeProjectId}
+            project={board.project}
+            hosts={hosts}
             onClose={() => setPage("project")}
+            onUpdate={handleUpdateProject}
+            onArchive={handleArchiveProject}
           />
         )}
         {page === "chat" && (
@@ -199,24 +315,41 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
 
       {newProjectOpen && (
         <NewProject
+          hosts={hosts}
           onClose={() => setNewProjectOpen(false)}
-          onCreate={(draft: NewProjectDraft) => {
-            // SP-3: POST /projects then navigate into the new project.
-            console.log("[shell] create project draft", draft);
-            setNewProjectOpen(false);
-          }}
+          onCreate={handleCreateProject}
+          // Desktop has a native folder picker (tauri dialog); no fs-browse RPC here.
         />
       )}
       {newTaskOpen && activeProjectId && (
         <NewTask
           onClose={() => setNewTaskOpen(false)}
-          onCreate={(draft: NewTaskDraft) => {
-            // SP-3: POST /projects/:id/tasks
-            console.log("[shell] create task draft", { projectId: activeProjectId, draft });
-            setNewTaskOpen(false);
-          }}
+          onCreate={handleCreateTask}
+        />
+      )}
+      {activeTaskId && (
+        <TaskDetail
+          api={api}
+          taskId={activeTaskId}
+          project={board.project}
+          hosts={hosts}
+          allTaskIds={board.tasks.map((t) => t.id)}
+          onClose={() => setActiveTaskId(null)}
+          onNavigate={(id) => setActiveTaskId(id)}
         />
       )}
     </div>
   );
+}
+
+function relativeTime(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const diffSec = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (diffSec < 60) return "just now";
+  const mins = Math.floor(diffSec / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }

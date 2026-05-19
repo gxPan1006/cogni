@@ -1,18 +1,25 @@
 /**
- * NewTask — modal with 3 task-source tabs:
- *   - 手动:  title + description
- *   - 从 Linear 拉:  team picker + multi-select issue list (mock)
- *   - 上传 backlog 文件:  drop zone for .md / .csv / .txt
+ * NewTask — modal for filing a task inside a project.
  *
- * No real API. The submit handler hands a draft union back to the parent.
+ * (Shared component lifted from apps/desktop/src/NewTask.tsx; same three
+ * tabs: 手动 / 从 Linear 拉 / 上传 backlog. The Linear + upload tabs remain
+ * UI-only — the SP-3 backend treats every task creation as "manual" and
+ * the cloud route only persists `title` / `description` / `priority` /
+ * `labels`. The full draft is still surfaced via `onCreate` so the host
+ * UI can preserve user intent in the future.)
+ *
+ * Submit returns the draft via onCreate. The host (Shell/App) is expected
+ * to call `useProjectBoard().createTask(...)` for each filed task; the
+ * board's WS subscription paints the new cards.
  */
 import { useState } from "react";
-import { Icon } from "@cogni/ui";
+import { Icon } from "../icons.js";
 import "./new-task.css";
 
 type Tab = "manual" | "linear" | "upload";
 
 type LinearIssue = { id: string; ref: string; title: string };
+// Placeholder content — Linear OAuth is SP-3+1. Keeps the visual demo identical.
 const MOCK_LINEAR_ISSUES: LinearIssue[] = [
   { id: "li1", ref: "COG-130", title: "Sync engine: reconnect with lastSeq replay" },
   { id: "li2", ref: "COG-131", title: "Sidebar: project mode list view" },
@@ -32,7 +39,7 @@ export function NewTask({
   onCreate,
 }: {
   onClose: () => void;
-  onCreate?: (draft: NewTaskDraft) => void;
+  onCreate?: (draft: NewTaskDraft) => void | Promise<void>;
 }) {
   const [tab, setTab] = useState<Tab>("manual");
 
@@ -56,9 +63,9 @@ export function NewTask({
 
   const submit = () => {
     if (!canSubmit) return;
-    if (tab === "manual") onCreate?.({ kind: "manual", title, description });
-    if (tab === "linear") onCreate?.({ kind: "linear", team, issueIds: Array.from(picked) });
-    if (tab === "upload" && file) onCreate?.({ kind: "upload", file });
+    if (tab === "manual") void onCreate?.({ kind: "manual", title, description });
+    if (tab === "linear") void onCreate?.({ kind: "linear", team, issueIds: Array.from(picked) });
+    if (tab === "upload" && file) void onCreate?.({ kind: "upload", file });
   };
 
   return (
