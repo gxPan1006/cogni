@@ -493,13 +493,19 @@ contract + shared + runner-host + ui + desktop + web + apps/claude-watch).
 
 ### Next candidates
 
-- Apply the same TokenStore pattern to `routes/auth.ts` OAuth `pending` Map
-  (currently still in-memory; was punted out of Track D scope).
-- Drop the `--no-file-parallelism` flag from CI now that Track B fixed the
-  underlying race — let CI run files in parallel for speed.
+- ~~Apply TokenStore pattern to `routes/auth.ts` OAuth `pending` Map~~ —
+  done in `2061cf1` (2026-05-19). 10-min TTL, lazy-evict-on-get + 5-min
+  sweep, same pattern as `routes/email.ts`.
+- ~~Drop `--no-file-parallelism` flag from CI~~ — done in `2061cf1`
+  (2026-05-19). Validated locally with 5/5 parallel vitest runs all green
+  (26/26 each) before pushing. Track B's listen-bind fix is doing its job.
 - Wire a Redis-backed TokenStore impl + multi-node cogni-cloud (SP-2+1 work).
 - Surface `/healthz` to whatever uptime monitor we eventually pick (CF
   Workers, Better Stack, etc.) and wire alerting.
+- T36 dogfood scenarios 3/4/5/6/7 — need physical Mac (desktop offline
+  queue, desktop reconnect catchup, two-desktop fan-out, web↔desktop
+  fan-out, JWT revocation propagation). 1/2/8/9 already covered by
+  DB-query + codex-handoff browser automation.
 
 ---
 
