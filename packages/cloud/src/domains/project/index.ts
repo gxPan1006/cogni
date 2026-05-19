@@ -38,7 +38,7 @@ import {
   type CreateTaskInput,
   type UpdateProjectPatch,
 } from "../../db/projects.js";
-import { appendMessage, touchThread } from "../../db/threads.js";
+import { createThread, appendMessage, touchThread } from "../../db/threads.js";
 import { closeRunnerSession, getLatestSessionForThread } from "../../db/sessions.js";
 import type { AnyDb } from "../../db/users.js";
 import type { ClientHub } from "../../client-hub.js";
@@ -141,7 +141,25 @@ export class ProjectDomain {
   // ─── Tasks ────────────────────────────────────────────────────────────────
 
   async createTask(input: CreateTaskInput): Promise<ProjectTask> {
-    const task = await dbCreateTask(this.deps.db, input);
+    // Every task owns one thread — the orchestrator's runner_session streams
+    // events into it, and the drawer's <ChatBlocks> subscribes to it. Created
+    // up-front (not lazily at dispatch time) so:
+    //   1. the drawer can render an empty timeline immediately on click, and
+    //   2. the orchestrator's dispatch loop can rely on `executionThreadId`
+    //      being non-null (it skips tasks that lack one).
+    // Thread title = task title so the chat sidebar / Recents lists show
+    // something meaningful if the user clicks through from there.
+    const project = await dbGetProject(this.deps.db, input.projectId);
+    if (!project) throw new Error(`project ${input.projectId} not found`);
+    const thread = await createThread(this.deps.db, {
+      userId: project.userId,
+      tenantId: project.tenantId,
+      title: input.title,
+    });
+    const task = await dbCreateTask(this.deps.db, {
+      ...input,
+      executionThreadId: thread.id,
+    });
     this.deps.clients.broadcastProject(task.projectId, {
       t: "task-event",
       kind: "created",

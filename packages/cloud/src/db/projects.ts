@@ -213,6 +213,14 @@ export interface CreateTaskInput {
   orderIndex?: string;
   /** Initial state — almost always omitted (defaults to "queued"). */
   state?: TaskState;
+  /**
+   * Thread the runner's event stream gets written into. ProjectDomain creates
+   * a fresh thread for every task during `createTask` (so the drawer's
+   * embedded `<ChatBlocks>` has somewhere to subscribe before the runner
+   * starts emitting). Required for dispatch — the orchestrator skips tasks
+   * with no executionThreadId.
+   */
+  executionThreadId?: string;
 }
 
 export async function createTask(db: AnyDb, input: CreateTaskInput): Promise<ProjectTask> {
@@ -240,6 +248,7 @@ export async function createTask(db: AnyDb, input: CreateTaskInput): Promise<Pro
         labels: input.labels ?? [],
         orderIndex,
         adapter: input.adapter ?? null,
+        executionThreadId: input.executionThreadId ?? null,
       })
       .returning();
     return rowToTask(row!);
