@@ -459,6 +459,42 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
     }
   });
 
+  // ─── SP-4 hard-delete (task + project) ───────────────────────────────────
+  // The workspace-chat orchestrator reaches these via the Host-token path;
+  // the UI's per-card / per-project menu reaches them with a Bearer JWT.
+
+  app.delete("/api/tasks/:taskId", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const owned = await ownedTask(deps, c.req.param("taskId"), userId, tenantId);
+    if (!owned) return c.json({ error: "not found" }, 404);
+    if (!deps.projectDomain) {
+      return c.json({ error: "project domain unavailable" }, 503);
+    }
+    try {
+      await deps.projectDomain.deleteTask(owned.task.id);
+      return c.json({ ok: true });
+    } catch (err) {
+      const { status, body } = domainErrorResponse(err);
+      return c.json(body, status);
+    }
+  });
+
+  app.delete("/api/projects/:id", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const project = await ownedProject(deps, c.req.param("id"), userId, tenantId);
+    if (!project) return c.json({ error: "not found" }, 404);
+    if (!deps.projectDomain) {
+      return c.json({ error: "project domain unavailable" }, 503);
+    }
+    try {
+      await deps.projectDomain.deleteProject(project.id);
+      return c.json({ ok: true });
+    } catch (err) {
+      const { status, body } = domainErrorResponse(err);
+      return c.json(body, status);
+    }
+  });
+
   app.get("/api/tasks/:taskId/diff", async (c) => {
     const { userId, tenantId } = c.get("claims");
     const owned = await ownedTask(deps, c.req.param("taskId"), userId, tenantId);

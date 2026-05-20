@@ -30,6 +30,8 @@ function makeProjectDomainMock(): {
     rejectTask: ReturnType<typeof vi.fn>;
     retryTask: ReturnType<typeof vi.fn>;
     cancelTask: ReturnType<typeof vi.fn>;
+    deleteTask: ReturnType<typeof vi.fn>;
+    deleteProject: ReturnType<typeof vi.fn>;
     getTaskDiff: ReturnType<typeof vi.fn>;
     fsBrowse: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
@@ -45,6 +47,8 @@ function makeProjectDomainMock(): {
     rejectTask: vi.fn(),
     retryTask: vi.fn(),
     cancelTask: vi.fn(),
+    deleteTask: vi.fn(),
+    deleteProject: vi.fn(),
     getTaskDiff: vi.fn(),
     fsBrowse: vi.fn(),
     dispose: vi.fn(),
@@ -647,6 +651,119 @@ describe("auth", () => {
   it("401 without Bearer token", async () => {
     const { app, close } = await setup();
     const res = await app.request("/api/projects");
+    expect(res.status).toBe(401);
+    await close();
+  });
+});
+
+// ─── SP-4 DELETE routes ──────────────────────────────────────────────────────
+
+describe("DELETE /api/tasks/:taskId", () => {
+  it("removes the task (200) and delegates to projectDomain.deleteTask", async () => {
+    const { db, user, host, fns, req, close } = await setup();
+    const project = await dbCreateProject(db, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      name: "P",
+      repoPath: "/repos/p",
+      defaultHostId: host.hostId,
+    });
+    const task = await dbCreateTask(db, { projectId: project.id, title: "t" });
+    fns.deleteTask.mockResolvedValue(undefined);
+    const res = await req(`/api/tasks/${task.id}`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(fns.deleteTask).toHaveBeenCalledWith(task.id);
+    await close();
+  });
+
+  it("404 for another user's task", async () => {
+    const { db, fns, req, close } = await setup();
+    const bob = await findOrCreateUserByEmail(db, "bob@x.com");
+    const bobHost = await createHost(db, { userId: bob.id, tenantId: bob.tenantId, name: "Bob" });
+    const bobProject = await dbCreateProject(db, {
+      tenantId: bob.tenantId,
+      userId: bob.id,
+      name: "Bob",
+      repoPath: "/repos/bob",
+      defaultHostId: bobHost.hostId,
+    });
+    const bobTask = await dbCreateTask(db, { projectId: bobProject.id, title: "t" });
+    const res = await req(`/api/tasks/${bobTask.id}`, { method: "DELETE" });
+    expect(res.status).toBe(404);
+    expect(fns.deleteTask).not.toHaveBeenCalled();
+    await close();
+  });
+});
+
+describe("DELETE /api/projects/:id", () => {
+  it("removes the project (200) and delegates to projectDomain.deleteProject", async () => {
+    const { db, user, host, fns, req, close } = await setup();
+    const project = await dbCreateProject(db, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      name: "P",
+      repoPath: "/repos/p",
+      defaultHostId: host.hostId,
+    });
+    fns.deleteProject.mockResolvedValue(undefined);
+    const res = await req(`/api/projects/${project.id}`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(fns.deleteProject).toHaveBeenCalledWith(project.id);
+    await close();
+  });
+
+  it("404 for another user's project", async () => {
+    const { db, fns, req, close } = await setup();
+    const bob = await findOrCreateUserByEmail(db, "bob@x.com");
+    const bobHost = await createHost(db, { userId: bob.id, tenantId: bob.tenantId, name: "Bob" });
+    const bobProject = await dbCreateProject(db, {
+      tenantId: bob.tenantId,
+      userId: bob.id,
+      name: "Bob",
+      repoPath: "/repos/bob",
+      defaultHostId: bobHost.hostId,
+    });
+    const res = await req(`/api/projects/${bobProject.id}`, { method: "DELETE" });
+    expect(res.status).toBe(404);
+    expect(fns.deleteProject).not.toHaveBeenCalled();
+    await close();
+  });
+});
+
+// ─── SP-4 Host-token auth ────────────────────────────────────────────────────
+
+describe("Authorization: Host <token>", () => {
+  it("lets a registered host act as its owning user", async () => {
+    const { db, app, user, host, fns, close } = await setup();
+    const project = await dbCreateProject(db, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      name: "P",
+      repoPath: "/repos/p",
+      defaultHostId: host.hostId,
+    });
+    fns.createTask.mockResolvedValue({ id: "t1", title: "via host" });
+    const res = await app.request(`/api/projects/${project.id}/tasks`, {
+      method: "POST",
+      headers: {
+        Authorization: `Host ${host.registrationToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title: "via host" }),
+    });
+    expect(res.status).toBe(201);
+    expect(fns.createTask).toHaveBeenCalledTimes(1);
+    await close();
+  });
+
+  it("rejects an unknown Host token with 401", async () => {
+    const { app, close } = await setup();
+    const res = await app.request(`/api/projects`, {
+      method: "GET",
+      headers: { Authorization: "Host nope" },
+    });
     expect(res.status).toBe(401);
     await close();
   });
