@@ -14,6 +14,8 @@ export type ClaudeRunner = (params: {
   mcpConfigPath?: string;
   /** SP-4: tool allowlist passed as a single comma-joined `--allowed-tools`. */
   allowedTools?: string[];
+  /** Chat model id passed as `--model <id>`; absent ⇒ CLI default. */
+  model?: string;
 }) => AsyncIterable<string>;
 
 const CAPABILITIES: RunnerCapability[] = ["streaming", "session-resume", "tool-events"];
@@ -37,7 +39,7 @@ const CAPABILITIES: RunnerCapability[] = ["streaming", "session-resume", "tool-e
  * stdout stays an unbuffered Readable we can drive with `readline`, while stderr
  * is still buffered so a non-zero exit can report a useful message.
  */
-export const defaultClaudeRunner: ClaudeRunner = async function* ({ cwd, message, resumeId, appendSystemPrompt, mcpConfigPath, allowedTools }) {
+export const defaultClaudeRunner: ClaudeRunner = async function* ({ cwd, message, resumeId, appendSystemPrompt, mcpConfigPath, allowedTools, model }) {
   const args = [
     "--print",
     "--output-format", "stream-json",
@@ -46,6 +48,7 @@ export const defaultClaudeRunner: ClaudeRunner = async function* ({ cwd, message
     "--permission-mode", "bypassPermissions",
     "--dangerously-skip-permissions",
   ];
+  if (model) args.push("--model", model);
   if (resumeId) args.push("--resume", resumeId);
   // SP-4: orchestrator dispatches mount the cogni stdio MCP server and
   // restrict the runner to its tools. Claude Code takes one comma-joined
@@ -87,7 +90,7 @@ class ClaudeCodeSession implements RunnerSessionHandle {
     private readonly runner: ClaudeRunner,
     private readonly cwd: string,
     resumeId: string | null,
-    private readonly opts: { appendSystemPrompt?: string; mcpConfigPath?: string; allowedTools?: string[] } = {},
+    private readonly opts: { appendSystemPrompt?: string; mcpConfigPath?: string; allowedTools?: string[]; model?: string } = {},
   ) {
     this._runnerSessionId = resumeId;
   }
@@ -104,6 +107,7 @@ class ClaudeCodeSession implements RunnerSessionHandle {
         appendSystemPrompt: this.opts.appendSystemPrompt,
         mcpConfigPath: this.opts.mcpConfigPath,
         allowedTools: this.opts.allowedTools,
+        model: this.opts.model,
       })) {
         for (const event of translateLine(line)) {
           if (event.type === "session-id") this._runnerSessionId = event.id;
@@ -132,6 +136,7 @@ export class ClaudeCodeAdapter implements RunnerAdapter {
       appendSystemPrompt: opts.appendSystemPrompt,
       mcpConfigPath: opts.mcpConfigPath,
       allowedTools: opts.allowedTools,
+      model: opts.model,
     });
   }
   async resumeSession(runnerSessionId: string, opts: StartSessionOpts): Promise<RunnerSessionHandle> {
@@ -139,6 +144,7 @@ export class ClaudeCodeAdapter implements RunnerAdapter {
       appendSystemPrompt: opts.appendSystemPrompt,
       mcpConfigPath: opts.mcpConfigPath,
       allowedTools: opts.allowedTools,
+      model: opts.model,
     });
   }
 }

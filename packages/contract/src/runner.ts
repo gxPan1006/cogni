@@ -34,6 +34,8 @@ export interface StartSessionOpts {
   allowedTools?: string[];
   /** SP-4: extra system-prompt text (e.g. orchestrator preamble). Passed as `--append-system-prompt`. */
   appendSystemPrompt?: string;
+  /** Chat model id (a CHAT_MODELS id). Passed as `--model <id>`; absent ⇒ CLI default. */
+  model?: string;
 }
 
 export interface RunnerSessionHandle {

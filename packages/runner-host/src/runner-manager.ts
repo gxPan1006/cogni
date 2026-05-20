@@ -35,6 +35,8 @@ export interface DispatchInput {
    * <cwd>/.cogni-uploads/ before the runner starts. Absent for turns with none.
    */
   attachments?: { name: string }[];
+  /** Chat model id (a CHAT_MODELS id) → `claude --model <id>`. Absent ⇒ CLI default. */
+  model?: string;
 }
 
 /** Holds registered adapters + live session handles, runs one turn per dispatch. */
@@ -95,8 +97,9 @@ export class RunnerManager {
           mcpConfigPath: ensureCogniMcpConfig(),
           allowedTools: [...COGNI_ALLOWED_TOOLS],
           ...(input.appendSystemPrompt ? { appendSystemPrompt: input.appendSystemPrompt } : {}),
+          ...(input.model ? { model: input.model } : {}),
         }
-      : { cwd };
+      : { cwd, ...(input.model ? { model: input.model } : {}) };
 
     let handle = this.sessions.get(input.sessionId);
     if (!handle) {

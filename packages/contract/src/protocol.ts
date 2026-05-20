@@ -18,6 +18,20 @@ export const attachmentSchema = z.object({
 });
 export type Attachment = z.infer<typeof attachmentSchema>;
 
+/**
+ * Curated Claude model list for the composer's model picker. Claude Code's CLI
+ * exposes no model-enumeration API, so we ship the known current tiers; the
+ * chosen `id` rides the `send` → `dispatch` frames and the runner-host adapter
+ * passes it as `claude --model <id>`. Keep `id`s as the CLI-accepted aliases.
+ */
+export const CHAT_MODELS = [
+  { id: "claude-opus-4-7", label: "Claude Opus 4.7" },
+  { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+  { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+] as const;
+export type ChatModelId = (typeof CHAT_MODELS)[number]["id"];
+export const DEFAULT_CHAT_MODEL: ChatModelId = "claude-opus-4-7";
+
 /** One persisted chat message — same shape as the HTTP `getThread` row, so the
  *  client treats a WS `thread-snapshot` and an HTTP reload interchangeably. */
 export const messageViewSchema = z.object({
@@ -94,6 +108,11 @@ export const cloudToHostSchema = z.discriminatedUnion("t", [
      * turns with no attachments.
      */
     attachments: z.array(attachmentSchema).optional(),
+    /**
+     * Chat model the user picked in the composer (a CHAT_MODELS id). The host
+     * passes it as `claude --model <id>`; absent ⇒ the CLI's default model.
+     */
+    model: z.string().optional(),
   }),
   // SP-3 host RPC request envelope. The cloud assigns `rpcId`; the host
   // echoes it on the `host-rpc-response` frame. `request` is the typed
@@ -120,6 +139,8 @@ export const clientToCloudSchema = z.discriminatedUnion("t", [
     // board). The cloud folds it into the runner's --append-system-prompt so
     // the model knows which card "this" / "改一下" refers to.
     taskId: z.string().optional(),
+    /** Chat model the user picked in the composer (a CHAT_MODELS id). */
+    model: z.string().optional(),
   }),
   // SP-2
   z.object({ t: z.literal("subscribe-list") }),
