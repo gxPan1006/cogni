@@ -67,4 +67,16 @@ if (process.argv.includes("mcp-serve")) {
     }),
   );
   logger.info({ hostId: config.hostId }, "runner host daemon started");
+
+  // Kill any warm `claude` processes on shutdown so they don't outlive the
+  // daemon as orphans.
+  let shuttingDown = false;
+  const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info({ signal }, "shutting down — closing runner sessions");
+    void manager.closeAll().finally(() => process.exit(0));
+  };
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 }

@@ -58,7 +58,7 @@ export function Conversation({
   hostName?: string;
 }) {
   const {
-    messages, events, loading, hostOnline, connected, send, stalled, retry,
+    messages, events, loading, hostOnline, connected, send, prewarm, stalled, retry,
     pendingFallback, pendingNoHost, resolveFallback,
   } = useThreadStream(api, threadId);
   const [draft, setDraft] = useState("");
@@ -184,6 +184,7 @@ export function Conversation({
         draft={draft}
         setDraft={setDraft}
         onSubmit={submit}
+        onPrewarm={() => prewarm(model)}
         disabled={!connected || pendingFallback !== null || pendingNoHost !== null}
         status={status}
         uploads={uploads}

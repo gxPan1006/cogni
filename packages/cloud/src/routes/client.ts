@@ -3,7 +3,6 @@ import type { UpgradeWebSocket } from "hono/ws";
 import { clientToCloudSchema, type RunnerEvent } from "@cogni/contract";
 import type { CloudToClient } from "@cogni/contract";
 import { randomUUID } from "node:crypto";
-import { eq, desc } from "drizzle-orm";
 import { logger } from "@cogni/shared";
 import { z } from "zod";
 import {
@@ -11,7 +10,6 @@ import {
   updateThreadTitle, softDeleteThread, getThreadKind,
 } from "../db/threads.js";
 import { listEventsSince, getLatestSessionForThread } from "../db/sessions.js";
-import { events as eventsTable } from "../db/schema.js";
 import { getAuthSession, touchAuthSession } from "../db/auth-sessions.js";
 import { findHostByToken } from "../db/hosts.js";
 import { getProject, getTask } from "../db/projects.js";
@@ -300,7 +298,11 @@ export function registerClientRoutes(
               }
 
               // SP-2 sync variants
-              else if (msg.t === "subscribe-list") {
+              else if (msg.t === "ping") {
+                // Heartbeat: bounce a pong so the client keeps the socket alive
+                // and the proxy/NAT tunnel stays warm (see ws-client heartbeat).
+                deps.clients.sendToConn(clientId, { t: "pong" });
+              } else if (msg.t === "subscribe-list") {
                 deps.clients.subscribeList(clientId);
               } else if (msg.t === "subscribe-thread") {
                 if (!(await threadBelongsToUser(deps.db, msg.threadId, claims.userId))) {
@@ -311,6 +313,20 @@ export function registerClientRoutes(
                 await streamCatchup(deps, clientId, msg.threadId, msg.lastSeq ?? 0);
               } else if (msg.t === "unsubscribe-thread") {
                 deps.clients.unsubscribeThread(clientId, msg.threadId);
+              } else if (msg.t === "prewarm") {
+                if (!(await threadBelongsToUser(deps.db, msg.threadId, claims.userId))) return;
+                // Only ordinary chat threads prewarm here. Workspace
+                // (orchestrator) threads spawn with --mcp-config + a tool
+                // allowlist, so a plain prewarmed process would be the wrong
+                // kind — leave those to their normal dispatch.
+                const kind = await getThreadKind(deps.db, msg.threadId);
+                if (kind !== "workspace") {
+                  await deps.chat.handleClientPrewarm({
+                    userId: claims.userId,
+                    threadId: msg.threadId,
+                    model: msg.model,
+                  });
+                }
               } else if (msg.t === "resolve-fallback") {
                 await deps.chat.handleResolveFallback({
                   userId: claims.userId,
@@ -392,33 +408,27 @@ async function streamCatchup(
   // cold connection and pays a full ~1s TLS handshake, whereas this WS is
   // already warm. On reconnects (lastSeq > 0) the client still holds its
   // messages, so we skip the snapshot and only replay the missed event tail.
-  if (lastSeq === 0) {
-    const detail = await getThreadDetail(deps.db, threadId);
-    if (detail) {
-      deps.clients.sendToConn(clientId, {
-        t: "thread-snapshot", threadId, messages: detail.messages,
-      });
-    }
+  // One round-trip: the cold-open message snapshot and the missed event tail
+  // are independent reads, so fetch them in parallel instead of three sequential
+  // server→DB hops. (Previously: getThreadDetail, then a separate max(seq)
+  // precheck, then listEventsSince.) On reconnects (lastSeq > 0) the client
+  // already holds its messages, so we skip the snapshot.
+  const [detail, rows] = await Promise.all([
+    lastSeq === 0 ? getThreadDetail(deps.db, threadId) : Promise.resolve(null),
+    listEventsSince(deps.db, threadId, lastSeq),
+  ]);
+  if (detail) {
+    deps.clients.sendToConn(clientId, {
+      t: "thread-snapshot", threadId, messages: detail.messages,
+    });
   }
-
-  // Cheap pre-check to avoid loading 50k rows just to bail.
-  const top = await deps.db
-    .select({ s: eventsTable.seq })
-    .from(eventsTable)
-    .where(eq(eventsTable.threadId, threadId))
-    .orderBy(desc(eventsTable.seq))
-    .limit(1);
-  const latestSeq = top[0]?.s ?? 0;
-  const missingCount = Math.max(0, latestSeq - lastSeq);
-  if (missingCount > MAX_CATCHUP) {
+  // listEventsSince returns rows ascending by seq; the tail's last seq is the
+  // newest the client now has (or its current position if the tail is empty).
+  const latestSeq = rows.length > 0 ? rows[rows.length - 1]!.seq : lastSeq;
+  if (rows.length > MAX_CATCHUP) {
     deps.clients.sendToConn(clientId, { t: "catchup-too-long", threadId, latestSeq });
     return;
   }
-  if (missingCount === 0) {
-    deps.clients.sendToConn(clientId, { t: "catchup-complete", threadId, latestSeq });
-    return;
-  }
-  const rows = await listEventsSince(deps.db, threadId, lastSeq);
   for (const r of rows) {
     deps.clients.sendToConn(clientId, {
       t: "event", threadId, seq: r.seq, event: r.payload as RunnerEvent,

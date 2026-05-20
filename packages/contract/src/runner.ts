@@ -41,8 +41,20 @@ export interface StartSessionOpts {
 export interface RunnerSessionHandle {
   /** The runner's own session id once known (Claude's `session_id`); null until first event. */
   readonly runnerSessionId: string | null;
+  /**
+   * True once the underlying runner process has exited and the handle must be
+   * discarded (so the next dispatch spawns a fresh one). Adapters that don't
+   * hold a persistent process leave this undefined — the handle is never evicted.
+   */
+  readonly closed?: boolean;
   /** Send one user message; yields events until the turn ends with `done` or `error`. */
   send(message: string): AsyncIterable<RunnerEvent>;
+  /**
+   * Prewarm the underlying runner process before the first `send`, so its cold
+   * start is paid ahead of the user's first message. Optional: adapters that
+   * spawn lazily per turn don't implement it.
+   */
+  warmup?(): Promise<void>;
   /** Idempotent; resolves once the underlying runner process has exited. */
   close(): Promise<void>;
 }

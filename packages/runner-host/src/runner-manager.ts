@@ -39,10 +39,37 @@ export interface DispatchInput {
   model?: string;
 }
 
+/**
+ * Subset of a dispatch needed to spawn the runner process ahead of the first
+ * turn. No `message` — prewarm only boots the process; the prompt comes later.
+ */
+export interface PrewarmInput {
+  sessionId: string;
+  threadId: string;
+  adapter: string;
+  runnerSessionId: string | null;
+  workspacePath?: string;
+  orchestrator?: boolean;
+  appendSystemPrompt?: string;
+  model?: string;
+}
+
+/**
+ * Max concurrent warm session handles (each may wrap a live `claude` process).
+ * Prewarm + warm reuse keep processes alive across turns, so without a bound a
+ * user opening many fresh chats (or abandoning prewarmed ones) would pile up
+ * processes. On overflow the least-recently-used handle is closed; its next
+ * dispatch simply respawns (or `--resume`s) — no correctness loss, just a cold
+ * start for that session again.
+ */
+const MAX_WARM_SESSIONS = 8;
+
 /** Holds registered adapters + live session handles, runs one turn per dispatch. */
 export class RunnerManager {
   private adapters = new Map<string, RunnerAdapter>();
-  private sessions = new Map<string, RunnerSessionHandle>(); // cloud sessionId → handle
+  // cloud sessionId → handle. Insertion order is the LRU order: `touch()`
+  // re-inserts a session as most-recently-used; overflow evicts from the front.
+  private sessions = new Map<string, RunnerSessionHandle>();
 
   register(adapter: RunnerAdapter): void {
     this.adapters.set(adapter.id, adapter);
@@ -101,13 +128,7 @@ export class RunnerManager {
         }
       : { cwd, ...(input.model ? { model: input.model } : {}) };
 
-    let handle = this.sessions.get(input.sessionId);
-    if (!handle) {
-      handle = input.runnerSessionId
-        ? await adapter.resumeSession(input.runnerSessionId, opts)
-        : await adapter.startSession(opts);
-      this.sessions.set(input.sessionId, handle);
-    }
+    const handle = await this.getOrCreateHandle(input, adapter, opts);
     try {
       for await (const event of handle.send(input.message)) onEvent(event);
     } catch (err) {
@@ -116,5 +137,86 @@ export class RunnerManager {
       // dispatch — that would strand the cloud-side session in `running`.
       onEvent({ type: "error", code: "adapter_threw", message: String(err) });
     }
+    // Warm-process adapters mark `closed` once their persistent process exits.
+    // Evict so the next dispatch spawns (or `--resume`s) a fresh one instead of
+    // reusing a dead handle that would only yield errors.
+    if (handle.closed) this.sessions.delete(input.sessionId);
+  }
+
+  /**
+   * SP follow-up (prewarm): spawn the runner process for `sessionId` ahead of
+   * the first dispatch so its cold start is paid while the user is still
+   * composing. Idempotent — a no-op if a handle already exists or the adapter
+   * doesn't support warmup. Errors are swallowed: prewarm is best-effort and
+   * must never break the (later) real dispatch.
+   */
+  async prewarm(input: PrewarmInput): Promise<void> {
+    const adapter = this.adapters.get(input.adapter);
+    if (!adapter) return;
+    if (this.sessions.has(input.sessionId)) return;
+    const cwd = input.workspacePath ?? threadScratchDir(input.threadId);
+    try {
+      if (!input.workspacePath) await mkdir(cwd, { recursive: true });
+      const opts: StartSessionOpts = input.orchestrator
+        ? {
+            cwd,
+            mcpConfigPath: ensureCogniMcpConfig(),
+            allowedTools: [...COGNI_ALLOWED_TOOLS],
+            ...(input.appendSystemPrompt ? { appendSystemPrompt: input.appendSystemPrompt } : {}),
+            ...(input.model ? { model: input.model } : {}),
+          }
+        : { cwd, ...(input.model ? { model: input.model } : {}) };
+      const handle = input.runnerSessionId
+        ? await adapter.resumeSession(input.runnerSessionId, opts)
+        : await adapter.startSession(opts);
+      this.cacheSet(input.sessionId, handle);
+      await handle.warmup?.();
+    } catch {
+      // best-effort; the real dispatch will spawn lazily if this failed.
+    }
+  }
+
+  /** Get the cached handle for a session, or create one. Evicts dead handles first. */
+  private async getOrCreateHandle(
+    input: DispatchInput,
+    adapter: RunnerAdapter,
+    opts: StartSessionOpts,
+  ): Promise<RunnerSessionHandle> {
+    const cached = this.sessions.get(input.sessionId);
+    if (cached && !cached.closed) {
+      this.touch(input.sessionId, cached);
+      return cached;
+    }
+    const handle = input.runnerSessionId
+      ? await adapter.resumeSession(input.runnerSessionId, opts)
+      : await adapter.startSession(opts);
+    this.cacheSet(input.sessionId, handle);
+    return handle;
+  }
+
+  /** Mark a session most-recently-used (re-insert at the back of the Map). */
+  private touch(sessionId: string, handle: RunnerSessionHandle): void {
+    this.sessions.delete(sessionId);
+    this.sessions.set(sessionId, handle);
+  }
+
+  /** Insert a handle as most-recently-used, evicting LRU handles past the cap. */
+  private cacheSet(sessionId: string, handle: RunnerSessionHandle): void {
+    this.sessions.delete(sessionId);
+    this.sessions.set(sessionId, handle);
+    while (this.sessions.size > MAX_WARM_SESSIONS) {
+      const oldest = this.sessions.keys().next().value as string | undefined;
+      if (oldest === undefined || oldest === sessionId) break;
+      const victim = this.sessions.get(oldest);
+      this.sessions.delete(oldest);
+      void victim?.close().catch(() => {});
+    }
+  }
+
+  /** Kill every live session handle. Called on host shutdown. */
+  async closeAll(): Promise<void> {
+    const handles = [...this.sessions.values()];
+    this.sessions.clear();
+    await Promise.all(handles.map((h) => h.close().catch(() => {})));
   }
 }

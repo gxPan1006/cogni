@@ -118,6 +118,103 @@ describe("RunnerManager", () => {
   });
 });
 
+describe("RunnerManager warm-process lifecycle", () => {
+  // Adapter whose handles track spawn count, closed state, warmup, and close.
+  function warmAdapter(opts: { closedAfterTurn?: boolean } = {}) {
+    const state = { spawns: 0, warmups: 0, closes: 0 };
+    const make = (resumeId: string | null): RunnerSessionHandle => {
+      let closed = false;
+      return {
+        get runnerSessionId() { return resumeId; },
+        get closed() { return closed; },
+        async warmup() { state.warmups += 1; },
+        async *send() {
+          yield { type: "text", text: "hi" } as const;
+          yield { type: "done" } as const;
+          if (opts.closedAfterTurn) closed = true;
+        },
+        async close() { state.closes += 1; closed = true; },
+      };
+    };
+    const adapter: RunnerAdapter = {
+      id: "claude-code",
+      capabilities: ["streaming"],
+      startSession: vi.fn(async () => { state.spawns += 1; return make(null); }),
+      resumeSession: vi.fn(async (id: string) => { state.spawns += 1; return make(id); }),
+    };
+    return { adapter, state };
+  }
+
+  it("reuses one handle across dispatches of the same session", async () => {
+    const { adapter, state } = warmAdapter();
+    const mgr = new RunnerManager();
+    mgr.register(adapter);
+    const d = { sessionId: "s1", threadId: "t1", adapter: "claude-code", runnerSessionId: null, message: "go" };
+    await mgr.dispatch(d, () => {});
+    await mgr.dispatch(d, () => {});
+    expect(state.spawns).toBe(1);
+  });
+
+  it("evicts a handle that closed during its turn, re-spawning on the next dispatch", async () => {
+    const { adapter, state } = warmAdapter({ closedAfterTurn: true });
+    const mgr = new RunnerManager();
+    mgr.register(adapter);
+    const d = { sessionId: "s1", threadId: "t1", adapter: "claude-code", runnerSessionId: null, message: "go" };
+    await mgr.dispatch(d, () => {});
+    await mgr.dispatch(d, () => {});
+    expect(state.spawns).toBe(2);
+  });
+
+  it("prewarm() spawns + warms the process, and the later dispatch reuses it", async () => {
+    const { adapter, state } = warmAdapter();
+    const mgr = new RunnerManager();
+    mgr.register(adapter);
+    await mgr.prewarm({ sessionId: "s1", threadId: "t1", adapter: "claude-code", runnerSessionId: null });
+    expect(state.spawns).toBe(1);
+    expect(state.warmups).toBe(1);
+    await mgr.dispatch({ sessionId: "s1", threadId: "t1", adapter: "claude-code", runnerSessionId: null, message: "go" }, () => {});
+    expect(state.spawns).toBe(1); // dispatch reused the prewarmed handle
+  });
+
+  it("prewarm() is a no-op when a handle already exists", async () => {
+    const { adapter, state } = warmAdapter();
+    const mgr = new RunnerManager();
+    mgr.register(adapter);
+    await mgr.prewarm({ sessionId: "s1", threadId: "t1", adapter: "claude-code", runnerSessionId: null });
+    await mgr.prewarm({ sessionId: "s1", threadId: "t1", adapter: "claude-code", runnerSessionId: null });
+    expect(state.spawns).toBe(1);
+  });
+
+  it("caps concurrent warm handles, evicting the least-recently-used", async () => {
+    const { adapter, state } = warmAdapter();
+    const mgr = new RunnerManager();
+    mgr.register(adapter);
+    // 8 is the cap; prewarm 9 distinct sessions → the first (LRU) is evicted.
+    for (let i = 0; i < 9; i++) {
+      await mgr.prewarm({ sessionId: `s${i}`, threadId: `t${i}`, adapter: "claude-code", runnerSessionId: null });
+    }
+    expect(state.spawns).toBe(9);
+    expect(state.closes).toBe(1); // exactly one LRU victim closed
+    // s0 was evicted → dispatching it re-spawns; s8 is still warm → reused.
+    await mgr.dispatch({ sessionId: "s0", threadId: "t0", adapter: "claude-code", runnerSessionId: null, message: "go" }, () => {});
+    expect(state.spawns).toBe(10);
+    await mgr.dispatch({ sessionId: "s8", threadId: "t8", adapter: "claude-code", runnerSessionId: null, message: "go" }, () => {});
+    expect(state.spawns).toBe(10); // s8 reused, no new spawn
+  });
+
+  it("closeAll() closes every live handle and clears the cache", async () => {
+    const { adapter, state } = warmAdapter();
+    const mgr = new RunnerManager();
+    mgr.register(adapter);
+    await mgr.prewarm({ sessionId: "s1", threadId: "t1", adapter: "claude-code", runnerSessionId: null });
+    await mgr.closeAll();
+    expect(state.closes).toBe(1);
+    // a dispatch after closeAll spawns fresh
+    await mgr.dispatch({ sessionId: "s1", threadId: "t1", adapter: "claude-code", runnerSessionId: null, message: "go" }, () => {});
+    expect(state.spawns).toBe(2);
+  });
+});
+
 function attachmentAdapter(): RunnerAdapter {
   const handle: RunnerSessionHandle = {
     runnerSessionId: null,

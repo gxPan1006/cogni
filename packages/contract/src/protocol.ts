@@ -114,6 +114,18 @@ export const cloudToHostSchema = z.discriminatedUnion("t", [
      */
     model: z.string().optional(),
   }),
+  // Prewarm: spawn the runner process for `sessionId` ahead of the first
+  // dispatch so its ~1.9s CLI cold start is paid while the user is still
+  // composing. Carries no `message` — the prompt arrives on the later
+  // `dispatch`, which reuses the same `sessionId` (and thus the warm process).
+  z.object({
+    t: z.literal("prewarm"),
+    sessionId: z.string(),
+    threadId: z.string(),
+    adapter: z.string(),
+    runnerSessionId: z.string().nullable(),
+    model: z.string().optional(),
+  }),
   // SP-3 host RPC request envelope. The cloud assigns `rpcId`; the host
   // echoes it on the `host-rpc-response` frame. `request` is the typed
   // method+params union from host-protocol.ts.
@@ -142,6 +154,17 @@ export const clientToCloudSchema = z.discriminatedUnion("t", [
     /** Chat model the user picked in the composer (a CHAT_MODELS id). */
     model: z.string().optional(),
   }),
+  // Prewarm hint: the user opened a fresh chat / started composing on a thread.
+  // The cloud spawns the runner process ahead of the first `send` so the first
+  // token isn't gated on the CLI cold start. Idempotent + best-effort — safe to
+  // send (debounced) on composer focus / first keystroke. Ignored for threads
+  // with no online host.
+  z.object({ t: z.literal("prewarm"), threadId: z.string(), model: z.string().optional() }),
+  // Heartbeat: keeps the WS — and the proxy/NAT tunnel it rides — warm so the
+  // first frame after an idle pause isn't slow, and lets the client detect a
+  // silently half-dead socket fast (no `pong` back ⇒ reconnect). Cloud replies
+  // with `pong`.
+  z.object({ t: z.literal("ping") }),
   // SP-2
   z.object({ t: z.literal("subscribe-list") }),
   z.object({ t: z.literal("subscribe-thread"), threadId: z.string(), lastSeq: z.number().optional() }),
@@ -178,6 +201,9 @@ export const cloudToClientSchema = z.discriminatedUnion("t", [
   }),
   z.object({ t: z.literal("host-status"), online: z.boolean() }),
   z.object({ t: z.literal("error"), message: z.string() }),
+  // Heartbeat reply to the client's `ping` (see clientToCloud). Carries no data —
+  // its arrival is the liveness signal the client uses to keep/declare the socket.
+  z.object({ t: z.literal("pong") }),
   // SP-2 sync
   // Cold-open message history pushed over the same WS as the event catchup, so
   // the client skips a separate (and often cold, ~1s) HTTP getThread on click.

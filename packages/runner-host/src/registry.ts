@@ -97,6 +97,16 @@ export function connectToCloud(
           const msg = parsed.data;
           if (msg.t === "dispatch") {
             await handleDispatch(manager, msg, send);
+          } else if (msg.t === "prewarm") {
+            // Best-effort: spawn the runner process now so the first dispatch
+            // (same sessionId) reuses a warm process instead of cold-starting.
+            await manager.prewarm({
+              sessionId: msg.sessionId,
+              threadId: msg.threadId,
+              adapter: msg.adapter,
+              runnerSessionId: msg.runnerSessionId,
+              ...(msg.model ? { model: msg.model } : {}),
+            });
           } else if (msg.t === "host-rpc-request" && rpcHandler) {
             // SP-3: unwrap envelope → dispatch → re-wrap with the same
             // rpcId so the cloud's in-flight RPC table resolves correctly

@@ -362,6 +362,15 @@ export function useThreadStream(api: ApiClient, threadId: string) {
 
   const dismissNoHost = () => setPendingNoHost(null);
 
+  // Prewarm hint: the user focused the composer / is about to type. Tells the
+  // cloud to spawn the runner process now so the first token isn't gated on the
+  // ~1.9s CLI cold start. Best-effort + idempotent cloud-side; no-op while the
+  // socket is down or no host is online (the send path handles those anyway).
+  const prewarm = (model?: string) => {
+    if (!connected || !hostOnline) return;
+    api.wsClient.prewarm(threadId, model);
+  };
+
   return {
     messages,
     events,
@@ -369,6 +378,7 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     hostOnline,
     connected,
     send,
+    prewarm,
     stalled,
     retry,
     pendingFallback,

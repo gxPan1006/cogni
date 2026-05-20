@@ -67,6 +67,7 @@ export function Composer({
   draft,
   setDraft,
   onSubmit,
+  onPrewarm,
   disabled,
   status,
   placeholder,
@@ -78,6 +79,12 @@ export function Composer({
   draft: string;
   setDraft: (v: string) => void;
   onSubmit: () => void;
+  /**
+   * Fired when the user focuses the composer (intent to type). The caller uses
+   * it to prewarm the runner process so the first token isn't gated on the CLI
+   * cold start. Cheap + idempotent downstream, so firing on every focus is fine.
+   */
+  onPrewarm?: () => void;
   disabled?: boolean;
   /** Pill above the textarea. Omit to hide the pill entirely. */
   status?: ComposerStatus;
@@ -143,6 +150,7 @@ export function Composer({
           placeholder={disabled ? "等待重连…" : (placeholder ?? "想聊点什么?")}
           rows={1}
           disabled={disabled}
+          onFocus={onPrewarm ? () => onPrewarm() : undefined}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {

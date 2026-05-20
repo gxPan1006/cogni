@@ -40,6 +40,13 @@ import type { CloudToClient } from "@cogni/contract";
 
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 15_000;
+// Heartbeat: ping cadence is well under typical NAT / proxy idle cutoffs so the
+// socket — and the tunnel it rides — never goes cold (a cold tunnel makes the
+// first frame after a pause ~2x slower). If no `pong` comes back within the
+// timeout the socket is silently dead; we force a reconnect instead of letting
+// the next user action stall on it.
+const HEARTBEAT_MS = 25_000;
+const HEARTBEAT_TIMEOUT_MS = 60_000;
 
 export interface ThreadSubscription {
   threadId: string;
@@ -116,6 +123,13 @@ export interface WsClient {
   subscribeList(sub: ListSubscription): () => void;
   /** Returns true iff the frame could be written to the socket synchronously. */
   send(threadId: string, text: string, attachments?: { name: string; size: number }[], taskId?: string, model?: string): boolean;
+  /**
+   * Hint that the user opened/started composing on this thread, so the cloud
+   * can spawn the runner process ahead of the first `send` (hides the CLI cold
+   * start). Best-effort + idempotent on the cloud — safe to call (debounced) on
+   * composer focus / first keystroke.
+   */
+  prewarm(threadId: string, model?: string): boolean;
   resolveFallback(
     pendingMessageId: string,
     action: "switch" | "cancel",
@@ -388,6 +402,10 @@ export function createWsClient(buildUrl: () => string): WsClient {
         ...(taskId ? { taskId } : {}),
         ...(model ? { model } : {}),
       });
+    },
+
+    prewarm(threadId, model) {
+      return sendFrame({ t: "prewarm", threadId, ...(model ? { model } : {}) });
     },
 
     resolveFallback(pendingMessageId, action, targetHostId) {

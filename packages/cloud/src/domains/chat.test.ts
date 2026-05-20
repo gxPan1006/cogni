@@ -282,4 +282,58 @@ describe("ChatDomain (SP-2 state machine)", () => {
     expect(after?.status).toBe("failed");
     await close();
   });
+
+  it("prewarm: opens a session (without marking running) + sends a prewarm frame to the host", async () => {
+    const { db, close } = await makeTestDb();
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
+    const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
+    const reg = await createHost(db, { userId: u.id, tenantId: u.tenantId, name: "Mac" });
+    const router = new HostRouter();
+    const hostSend = vi.fn();
+    router.register({ hostId: reg.hostId, userId: u.id, send: hostSend });
+    const chat = new ChatDomain(db, router, new ClientHub());
+
+    await chat.handleClientPrewarm({ userId: u.id, threadId: thread.id, model: "claude-x" });
+
+    const frame = hostSend.mock.calls[0]![0];
+    expect(frame).toMatchObject({ t: "prewarm", threadId: thread.id, runnerSessionId: null, model: "claude-x" });
+    // a session now exists for the thread, and the later send reuses that same id
+    const active = await getCurrentActiveSession(db, thread.id);
+    expect(active?.id).toBe(frame.sessionId);
+    expect(active?.status).not.toBe("running"); // prewarm must not show "thinking"
+    await close();
+  });
+
+  it("prewarm then send reuse the SAME sessionId (so the warm process is the one used)", async () => {
+    const { db, close } = await makeTestDb();
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
+    const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
+    const reg = await createHost(db, { userId: u.id, tenantId: u.tenantId, name: "Mac" });
+    const router = new HostRouter();
+    const hostSend = vi.fn();
+    router.register({ hostId: reg.hostId, userId: u.id, send: hostSend });
+    const chat = new ChatDomain(db, router, new ClientHub());
+
+    await chat.handleClientPrewarm({ userId: u.id, threadId: thread.id });
+    await chat.handleClientSend({ userId: u.id, threadId: thread.id, content: "hi", sourceClientId: "c1" });
+
+    const prewarm = hostSend.mock.calls.find((c) => c[0]?.t === "prewarm")![0];
+    const dispatch = hostSend.mock.calls.find((c) => c[0]?.t === "dispatch")![0];
+    expect(dispatch.sessionId).toBe(prewarm.sessionId);
+    await close();
+  });
+
+  it("prewarm: no online host → no frame, no session opened", async () => {
+    const { db, close } = await makeTestDb();
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
+    const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
+    await createHost(db, { userId: u.id, tenantId: u.tenantId, name: "Mac" }); // registered but offline
+    const router = new HostRouter(); // no host connected
+    const chat = new ChatDomain(db, router, new ClientHub());
+
+    await chat.handleClientPrewarm({ userId: u.id, threadId: thread.id });
+
+    expect(await getCurrentActiveSession(db, thread.id)).toBeNull();
+    await close();
+  });
 });

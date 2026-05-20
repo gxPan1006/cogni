@@ -149,6 +149,54 @@ export class ChatDomain {
     });
   }
 
+  /**
+   * Prewarm: the user opened a fresh chat / started composing. Spawn the
+   * runner process on the target host ahead of the first `send`, so the first
+   * token isn't gated on the ~1.9s CLI cold start. Best-effort and idempotent:
+   *
+   *  - No online host → silently no-op (the eventual send shows the
+   *    no-host-online prompt as usual).
+   *  - Reuses the thread's current session if one exists (same sessionId the
+   *    later dispatch will reuse → the warm process is the one that gets used),
+   *    otherwise opens one WITHOUT marking it `running` (no "thinking" UI).
+   *  - Safe to call repeatedly (debounced keystrokes): `manager.prewarm` on the
+   *    host is a no-op once a process exists for the session.
+   */
+  async handleClientPrewarm(input: { userId: string; threadId: string; model?: string }): Promise<void> {
+    const { userId, threadId, model } = input;
+    const onlineHosts = this.hosts.getOnlineHostsForUser(userId);
+    if (onlineHosts.length === 0) return;
+
+    const latest = await getLatestSessionForThread(this.db, threadId);
+    // Pick the same host the send path would: the thread's current host if it's
+    // online, else the most-recently-active online host (matches handleClientSend).
+    const preferredOnline = latest?.hostId
+      ? onlineHosts.find((h) => h.hostId === latest.hostId)
+      : undefined;
+    const hostId = preferredOnline?.hostId ?? onlineHosts[0]?.hostId;
+    if (!hostId) return;
+
+    const reusable = latest && latest.hostId === hostId && latest.status !== "closed";
+    const session = reusable
+      ? latest
+      : await openRunnerSession(this.db, { threadId, hostId, adapter: ADAPTER });
+
+    const conn = this.hosts.getHostByIdForUser(userId, hostId);
+    if (!conn) return;
+    try {
+      conn.send({
+        t: "prewarm",
+        sessionId: session.id,
+        threadId,
+        adapter: ADAPTER,
+        runnerSessionId: session.runnerSessionId,
+        ...(model ? { model } : {}),
+      });
+    } catch {
+      // best-effort; the real send will spawn lazily if this didn't land.
+    }
+  }
+
   async handleResolveFallback(input: {
     userId: string;
     pendingMessageId: string;
