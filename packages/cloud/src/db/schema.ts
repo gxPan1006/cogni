@@ -226,3 +226,23 @@ export const taskRuns = pgTable("task_runs", {
 }, (t) => ({
   byTask: index("task_runs_task_idx").on(t.taskId),
 }));
+
+/**
+ * One card in a task's comment feed. `author='worker'` rows are handoff notes
+ * captured at a transition; `author='user'` rows are inert human notes that
+ * are injected into the runner context only when a later run consumes them
+ * (`consumed_by_run_id` stamped at that point).
+ */
+export const taskComments = pgTable("task_comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  taskId: uuid("task_id").notNull().references(() => projectTasks.id, { onDelete: "cascade" }),
+  author: text("author").notNull(),
+  body: text("body").notNull(),
+  state: text("state").notNull(),
+  runnerSessionId: uuid("runner_session_id").references(() => runnerSessions.id),
+  consumedByRunId: uuid("consumed_by_run_id").references(() => taskRuns.id),
+  authorUserId: uuid("author_user_id").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  byTaskCreated: index("task_comments_task_created_idx").on(t.taskId, t.createdAt),
+}));

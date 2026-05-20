@@ -5,6 +5,7 @@ import {
   projectTaskSchema,
   projectEventKindSchema,
   taskEventKindSchema,
+  taskCommentSchema,
 } from "./project.js";
 import { hostRpcRequestSchema, hostRpcResponseSchema } from "./host-protocol.js";
 
@@ -254,6 +255,14 @@ export const cloudToClientSchema = z.discriminatedUnion("t", [
     t: z.literal("task-event"),
     kind: taskEventKindSchema,
     task: projectTaskSchema,
+  }),
+  // SP-3 task comment feed (主页面). Routed to per-task subscribers only —
+  // the board does not render comments. `kind: "deleted"` carries the row
+  // whose `id` was removed.
+  z.object({
+    t: z.literal("task-comment"),
+    kind: z.enum(["created", "deleted"]),
+    comment: taskCommentSchema,
   }),
 ]);
 export type CloudToClient = z.infer<typeof cloudToClientSchema>;

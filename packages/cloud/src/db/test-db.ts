@@ -94,6 +94,18 @@ CREATE TABLE task_runs (
   error_message text
 );
 CREATE INDEX task_runs_task_idx ON task_runs(task_id);
+CREATE TABLE task_comments (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references project_tasks(id) on delete cascade,
+  author text not null,
+  body text not null,
+  state text not null,
+  runner_session_id uuid references runner_sessions(id),
+  consumed_by_run_id uuid references task_runs(id),
+  author_user_id uuid references users(id),
+  created_at timestamp not null default now()
+);
+CREATE INDEX task_comments_task_created_idx ON task_comments(task_id, created_at);
 `;
 
 export async function makeTestDb() {

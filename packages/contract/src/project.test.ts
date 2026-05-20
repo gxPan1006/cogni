@@ -7,6 +7,8 @@ import {
   taskStateSchema,
   prioritySchema,
   taskExitReasonSchema,
+  taskCommentSchema,
+  TASK_COMMENT_AUTHORS,
 } from "./project.js";
 import { clientToCloudSchema, cloudToClientSchema } from "./protocol.js";
 import {
@@ -396,5 +398,39 @@ describe("HostRpc envelope dispatch", () => {
         error: { code: "x", message: "y" },
       }).success,
     ).toBe(false);
+  });
+
+  it("taskCommentSchema round-trips a worker comment", () => {
+    const c = {
+      id: "c1", taskId: "t1", author: "worker" as const,
+      body: "done: wrote snake.html", state: "done" as const,
+      runnerSessionId: "rs1", consumedByRunId: null, authorUserId: null,
+      createdAt: "2026-05-21T00:00:00.000Z",
+    };
+    expect(taskCommentSchema.parse(c)).toEqual(c);
+  });
+
+  it("taskCommentSchema rejects an unknown author", () => {
+    expect(() => taskCommentSchema.parse({
+      id: "c1", taskId: "t1", author: "robot", body: "x", state: "done",
+      runnerSessionId: null, consumedByRunId: null, authorUserId: null,
+      createdAt: "2026-05-21T00:00:00.000Z",
+    })).toThrow();
+  });
+
+  it("exposes the comment author union", () => {
+    expect(TASK_COMMENT_AUTHORS).toEqual(["worker", "user"]);
+  });
+
+  it("parses a task-comment frame", () => {
+    const parsed = cloudToClientSchema.parse({
+      t: "task-comment", kind: "created",
+      comment: {
+        id: "c1", taskId: "t1", author: "user", body: "ship it",
+        state: "done", runnerSessionId: null, consumedByRunId: null,
+        authorUserId: "u1", createdAt: "2026-05-21T00:00:00.000Z",
+      },
+    });
+    expect(parsed.t).toBe("task-comment");
   });
 });

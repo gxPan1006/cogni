@@ -240,6 +240,47 @@ export const taskRunSchema: z.ZodType<TaskRun> = z.object({
   errorMessage: z.string().nullable(),
 });
 
+// ─── TaskComment ──────────────────────────────────────────────────────────
+
+/**
+ * A card in a task's comment feed (主页面).
+ *
+ *  - `author: "worker"` — a handoff note the runner emitted at a transition.
+ *    `state` is the task state it was tagged with ("done" / "reviewing" /
+ *    "needs-input"); `runnerSessionId` links it to the run that produced it.
+ *  - `author: "user"` — an inert supplementary note. It does NOT drive the
+ *    runner on its own; it is injected into the runner's context only when the
+ *    task is next (re)dispatched, at which point `consumedByRunId` is stamped
+ *    with the `task_runs.id` that carried it. `authorUserId` records who wrote it.
+ */
+export const TASK_COMMENT_AUTHORS = ["worker", "user"] as const;
+export type TaskCommentAuthor = (typeof TASK_COMMENT_AUTHORS)[number];
+export const taskCommentAuthorSchema = z.enum(TASK_COMMENT_AUTHORS);
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  author: TaskCommentAuthor;
+  body: string;
+  state: TaskState;
+  runnerSessionId: string | null;
+  consumedByRunId: string | null;
+  authorUserId: string | null;
+  createdAt: string;
+}
+
+export const taskCommentSchema: z.ZodType<TaskComment> = z.object({
+  id: z.string(),
+  taskId: z.string(),
+  author: taskCommentAuthorSchema,
+  body: z.string(),
+  state: taskStateSchema,
+  runnerSessionId: z.string().nullable(),
+  consumedByRunId: z.string().nullable(),
+  authorUserId: z.string().nullable(),
+  createdAt: z.string(),
+});
+
 // ─── Event-kind unions used by WS push payloads ─────────────────────────────
 
 export const PROJECT_EVENT_KINDS = ["created", "updated", "archived", "deleted"] as const;
