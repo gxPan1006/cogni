@@ -608,3 +608,56 @@ this follow-up finally aligns code with plan.
 - Linear 集成(SP-3+1 单独 epic)
 - 端到端真机演练:跑通 "新建项目 → 创建第一个 task → runner 启动 → reviewing → accept → merge to main" 完整链路
 
+
+## SP-3 真机 dogfood + 部署 + follow-up — 2026-05-20
+
+SP-3 扇出合 main 后,第一次把整条链路部署到生产 + 在真机(用户 Mac runner-host + prod cloud + Neon)端到端跑通"建项目 → 新任务 → runner 干活 → reviewing → Accept → merge"。**单测全绿 ≠ 真机能跑** —— 单测里所有 host RPC 都是 mock,真机暴露了 5 个集成 bug,全部修复并部署。
+
+### 部署链路(全套)
+
+| 层 | 操作 | 备注 |
+|---|---|---|
+| Cloud (`cloud.ai-cognit.com`) | prod-cognit 上 `git pull` + `pnpm build` + `systemctl restart cogni-cloud` | systemd service,跑 `node dist/main.js` |
+| Neon DB | `drizzle-kit push`(用 .env 抠出的 DATABASE_URL,因为 .env 含 `<>` 无法 `source`) | 增量加 projects/project_tasks/task_runs + runner_sessions.task_id |
+| Web (`chat.ai-cognit.com`) | `pnpm --filter web build` + `rsync apps/web/dist → /var/www/chat` + chown www-data | nginx 静态托管 |
+| Runner-host | 用户 Mac 上 `pnpm build` + 写 `~/.cogni/host.json`(从 prod DB 直接造 host 记录拿 registrationToken)+ 起 daemon | 后改 launchd 持久化(见 #4) |
+
+### 真机暴露的 5 个 bug(单测都没抓到)
+
+| # | commit | bug | 为什么单测没抓到 |
+|---|---|---|---|
+| 1 | `6f703f3` | worktreePath 拼接漏斜杠 `${repoPath}.worktrees` | 我给 Track B 的 prompt 字符串就漏了斜杠,orchestrator.test.ts 的 fixture 也用同样错误形式 → 测试"绿"但跟真机一样错 |
+| 2 | `203f58b` | createTask 没创 thread → orchestrator 永 skip dispatch | 单测的 fixture 手动 `updateTaskState(executionThreadId)` 预填了,绕过了 createTask 的真实路径 |
+| 3 | `93bdddc` | gitWorktreeCreate 不幂等 | 单测不会模拟"WS 在 RPC ack 前断开 → cloud retry"这种时序 |
+| 4 | `35e366c` | dispatch frame 没带 workspacePath → claude 跑在 `~/.cogni/threads/<id>` 而非 worktree | 单测只 assert dispatch frame 发出去了,没人验证 host 端 RunnerManager 真正用的 cwd |
+| 5 | `96432e5` | reconcile 没有 running→reviewing 桥 → 完成的 task 卡 running | `handleRunnerDoneForTask` 有单测,但"谁调用它"没测;ChatDomain 不知 task,orchestrator reconcile 漏了这桥 |
+
+**调试方法**:全靠两端 log 对照 —— `journalctl -u cogni-cloud -f`(cloud orchestrator tick 每 5s 报错)+ `~/.cogni/runner-host.log`(host RPC handler)。每个 bug 都是"cloud 报一个 HostRpcError 或卡某状态 → 看 host 实际执行 → 定位拼接/时序/字段问题"。
+
+### Incident:`git add <whole-file>` 误带用户 WIP(prod build 挂 6 分钟)
+
+做 follow-up #1B/#2 时,我 `git add packages/cloud/src/domains/chat.ts`。当时**工作树里 chat.ts 含用户正在做的 auto-title WIP**(引用了 `updateThreadTitle`/`getFirstTurnIfDefaultTitle`,这俩 helper 在 `threads.ts` WIP 里、还没 commit)。我的 `git add` 把整个 chat.ts(含 WIP 引用)stage 上去,但没带 threads.ts → push 后 prod 拉到的 main 上 chat.ts 引用了不存在的 export → `git reset --hard` 回滚 + 重 build 才恢复。期间还踩到 **tsbuildinfo 缓存导致 tsc 不 emit dist** 的坑(`find packages -name '*.tsbuildinfo' -delete` 才解)。用户在此期间自己把 auto-title WIP 补 commit 了(`f5d2496`),救了场。
+
+**教训(已固化为习惯)**:
+- [ ] commit 前永远 `git add <精确文件列表>`,不 `git add .` / 不 `git add <可能含 WIP 的文件>`
+- [ ] commit 前永远 `git diff --cached --stat` 自检,确认暂存区 = 预期改动,没有意外文件
+- [ ] 在用户有 WIP 的工作树里改文件,先 `git status` 看哪些文件本来就是 dirty;改这些文件时格外小心,只 stage 自己的 hunk(`git add -p`)
+- [ ] prod 部署 build 失败时,先 `rm -rf dist + find -name '*.tsbuildinfo' -delete` 再重 build(增量缓存会骗你)
+- [ ] drizzle-kit / node 读 prod .env 时,`.env` 含 `<>` 等特殊字符无法 `source` —— 用 `grep '^KEY=' .env | cut -d= -f2-` 抠单个值
+
+### Follow-up(同日做完,来自 tbd.md)
+
+| 项 | commit | 内容 |
+|---|---|---|
+| #1B | `f9b4577` | project.systemPrompt + FILE_COMMIT_RULES 前缀注入 dispatch message,让 claude 真写文件 + git commit(不再 plan-mode 贴代码) |
+| #2 | `f9b4577` | AskUserQuestion tool-call → ChatDomain hook → ProjectDomain transition running→needs-input,卡片自动进"等待输入"列 |
+| #6 | (DB) | soft-remove 用户 3 个废弃 "My Computer" host 行 |
+| #3a | `2e0adaa` | merge/reject/cancel 后删 task branch —— 删除时机从 gitMergeToMain(worktree 还占用 branch → 必失败)移到 gitWorktreeRemove 之后(branch 已自由) |
+| #4 | `3ffd88c` | runner-host launchd 持久化(KeepAlive 自拉 + RunAtLoad),真机验证 kill -9 后 5s 自动重启 |
+
+### 仍 open(SP-3+1 候选)
+
+- #3b 推到 remote(git push)开关 + ProjectSettings UI
+- #5 改 mergePolicy 后立即 drain 队列(当前等下次 5s tick)
+- AskUserQuestion 的多选项渲染(当前只取第一个 question text 进 needs_input_what)
+- ProjectDomain 输入类型升到 contract 层(避免 cloud 端重复定义 interface,见 SP-3 扇出整合期 server.ts 双 interface 问题)
