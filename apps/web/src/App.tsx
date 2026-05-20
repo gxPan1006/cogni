@@ -357,7 +357,7 @@ function WebShell({ page }: { page: Page }) {
         projects={sidebarProjects}
         activeProjectId={params.projectId ?? null}
         onSelectProject={(id) => nav(`/projects/${id}`)}
-        onNewProject={() => setNewProjectOpen(true)}
+        onNewProject={() => { void refreshHosts(); setNewProjectOpen(true); }}
         onPrefetchProject={api.prefetchProject}
         onLogout={logout}
         onOpenSettings={() => nav("/settings")}
@@ -390,7 +390,7 @@ function WebShell({ page }: { page: Page }) {
             items={items}
             loading={projectsHook.loading}
             onOpen={(id) => nav(`/projects/${id}`)}
-            onNew={() => setNewProjectOpen(true)}
+            onNew={() => { void refreshHosts(); setNewProjectOpen(true); }}
             onPrefetch={api.prefetchProject}
           />
         )}

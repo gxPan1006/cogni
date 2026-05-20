@@ -310,7 +310,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
         projects={sidebarProjects}
         activeProjectId={activeProjectId}
         onSelectProject={openProject}
-        onNewProject={() => setNewProjectOpen(true)}
+        onNewProject={() => { void refreshHosts(); setNewProjectOpen(true); }}
         onPrefetchProject={api.prefetchProject}
         onLogout={onLogout}
         onOpenSettings={() => setPage("settings")}
@@ -326,7 +326,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
             items={items}
             loading={projectsHook.loading}
             onOpen={openProject}
-            onNew={() => setNewProjectOpen(true)}
+            onNew={() => { void refreshHosts(); setNewProjectOpen(true); }}
             onPrefetch={api.prefetchProject}
           />
         )}

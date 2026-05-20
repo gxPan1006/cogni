@@ -76,6 +76,17 @@ export function NewProject({
   // Pre-fill the repo path from the selected host's projects-root while the
   // user hasn't touched it: <root>/<sanitized name>. Recomputes as they type
   // the name or switch hosts; stops once they edit the path themselves.
+  // As the (async) host list loads or refreshes, keep a valid host selected —
+  // prefer an online one so its projects-root is fresh. Without this, a modal
+  // mounted before hosts arrived keeps defaultHostId="" and never pre-fills.
+  // Respects a manual pick: only re-selects when the current one is empty/gone.
+  useEffect(() => {
+    if (hosts.length === 0) return;
+    if (defaultHostId && hosts.some((h) => h.id === defaultHostId)) return;
+    const pick = hosts.find((h) => h.status === "online") ?? hosts[0];
+    if (pick) setDefaultHostId(pick.id);
+  }, [hosts, defaultHostId]);
+
   const selectedHost = hosts.find((h) => h.id === defaultHostId);
   useEffect(() => {
     if (pathDirty) return;
