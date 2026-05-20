@@ -54,6 +54,7 @@ import type {
   FsBrowseResponse,
   ReadFileResponse,
   GitDiffSnapshotResponse,
+  Attachment,
 } from "@cogni/contract";
 import type { ChatDomain } from "../chat.js";
 import { HostRpcClient, HostRpcError, type HostRpcLogger } from "./host-rpc.js";
@@ -204,6 +205,14 @@ export class ProjectDomain {
     userId: string;
     content: string;
     sourceClientId: string;
+    /**
+     * Files the user attached to this reply (already staged on the host under
+     * the task's executionThreadId via POST /api/tasks/:id/uploads). Forwarded
+     * to ChatDomain.handleClientSend, which prepends the .cogni-uploads/
+     * preamble + carries them on the dispatch frame so the host materializes
+     * them into the task's worktree cwd before the runner turn.
+     */
+    attachments?: Attachment[];
   }): Promise<ProjectTask> {
     const task = await dbGetTask(this.deps.db, input.taskId);
     if (!task) throw new Error(`task ${input.taskId} not found`);
@@ -227,6 +236,7 @@ export class ProjectDomain {
       threadId: task.executionThreadId,
       content: input.content,
       sourceClientId: input.sourceClientId,
+      ...(input.attachments && input.attachments.length > 0 ? { attachments: input.attachments } : {}),
     });
 
     return updated;

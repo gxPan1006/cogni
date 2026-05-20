@@ -213,6 +213,9 @@
   line-height: 1.5;
   margin-bottom: 12px;
 }
+.td-needs__reply {
+  margin-bottom: 12px;
+}
 .td-needs__actions {
   display: flex; gap: 8px; flex-wrap: wrap;
 }

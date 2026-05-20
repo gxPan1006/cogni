@@ -1,7 +1,7 @@
 import type {
   ThreadSummary, ThreadDetail, HostRegistration,
   Project, ProjectTask, TaskRun, MergePolicy,
-  FsBrowseResponse, GitDiffSnapshotResponse,
+  FsBrowseResponse, GitDiffSnapshotResponse, Attachment,
 } from "@cogni/contract";
 import { createWsClient, type WsClient } from "./ws-client.js";
 import { ClientCache } from "./cache.js";
@@ -360,9 +360,16 @@ export class ApiClient {
    * task's `executionThreadId` and lifecycle-transitions the task back to
    * `running` once it lands.
    */
-  replyToTask = (taskId: string, content: string): Promise<{ ok: true }> =>
+  replyToTask = (
+    taskId: string,
+    content: string,
+    attachments?: Attachment[],
+  ): Promise<{ ok: true }> =>
     this.request(`${this.cloudUrl}/api/tasks/${taskId}/reply`, {
-      method: "POST", headers: this.authHeaders(), body: JSON.stringify({ content }),
+      method: "POST", headers: this.authHeaders(),
+      body: JSON.stringify(
+        attachments && attachments.length > 0 ? { content, attachments } : { content },
+      ),
     });
 
   acceptTask = (taskId: string): Promise<{ ok: true }> =>
@@ -448,7 +455,34 @@ export class ApiClient {
     file: File,
     onProgress?: (fraction: number) => void,
   ): Promise<{ name: string; size: number }> {
-    const url = `${this.cloudUrl}/api/threads/${threadId}/uploads`;
+    return this.uploadTo(`${this.cloudUrl}/api/threads/${threadId}/uploads`, file, onProgress);
+  }
+
+  /**
+   * Upload one file as context for a task reply. Streams to the task's host and
+   * stages it under the task's executionThreadId; the next reply names it in
+   * `attachments` so the host materializes it into the worktree before the
+   * runner turn. Same XHR/progress contract as {@link uploadFile}.
+   */
+  uploadTaskFile(
+    taskId: string,
+    file: File,
+    onProgress?: (fraction: number) => void,
+  ): Promise<{ name: string; size: number }> {
+    return this.uploadTo(`${this.cloudUrl}/api/tasks/${taskId}/uploads`, file, onProgress);
+  }
+
+  /**
+   * Shared XHR upload body for thread + task uploads. Uses XHR (not fetch) so
+   * we get `upload.onprogress` for the composer's per-file progress bar.
+   * Resolves with the host's final (de-duped) name + size; rejects with
+   * ApiError on non-2xx (e.g. 409 host offline, 502 host write failed).
+   */
+  private uploadTo(
+    url: string,
+    file: File,
+    onProgress?: (fraction: number) => void,
+  ): Promise<{ name: string; size: number }> {
     const token = this.cfg.getToken();
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();

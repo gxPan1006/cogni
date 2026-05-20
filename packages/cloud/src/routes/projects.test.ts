@@ -4,6 +4,7 @@ import { findOrCreateUserByEmail } from "../db/users.js";
 import { createHost } from "../db/hosts.js";
 import { createAuthSession } from "../db/auth-sessions.js";
 import { createProject as dbCreateProject, createTask as dbCreateTask } from "../db/projects.js";
+import { createThread as dbCreateThread } from "../db/threads.js";
 import { HostRouter } from "../host-router.js";
 import { ClientHub } from "../client-hub.js";
 import { ChatDomain } from "../domains/chat.js";
@@ -450,6 +451,7 @@ async function makeProjectAndTask(
   user: { id: string; tenantId: string },
   hostId: string,
   state: ProjectTask["state"],
+  opts: { withExecutionThread?: boolean } = {},
 ): Promise<{ projectId: string; task: ProjectTask }> {
   const project = await dbCreateProject(db, {
     tenantId: user.tenantId,
@@ -458,10 +460,16 @@ async function makeProjectAndTask(
     repoPath: "/repos/alpha",
     defaultHostId: hostId,
   });
+  let executionThreadId: string | undefined;
+  if (opts.withExecutionThread) {
+    const thread = await dbCreateThread(db, { userId: user.id, tenantId: user.tenantId });
+    executionThreadId = thread.id;
+  }
   const task = await dbCreateTask(db, {
     projectId: project.id,
     title: "T",
     state,
+    ...(executionThreadId ? { executionThreadId } : {}),
   });
   return { projectId: project.id, task };
 }
@@ -515,6 +523,47 @@ describe("POST /api/tasks/:taskId/reply", () => {
     await close();
   });
 
+  it("forwards reply attachments to projectDomain.replyToTask", async () => {
+    const { db, user, host, fns, req, close } = await setup();
+    const { task } = await makeProjectAndTask(db, user, host.hostId, "needs-input");
+    fns.replyToTask.mockResolvedValue(undefined);
+    const res = await req(`/api/tasks/${task.id}/reply`, {
+      method: "POST",
+      body: JSON.stringify({
+        content: "use this spec",
+        attachments: [{ name: "spec.pdf", size: 1234 }],
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(fns.replyToTask).toHaveBeenCalledWith({
+      taskId: task.id,
+      userId: user.id,
+      content: "use this spec",
+      sourceClientId: "rest:reply",
+      attachments: [{ name: "spec.pdf", size: 1234 }],
+    });
+    await close();
+  });
+
+  it("omits attachments when none are sent (backward compatible)", async () => {
+    const { db, user, host, fns, req, close } = await setup();
+    const { task } = await makeProjectAndTask(db, user, host.hostId, "needs-input");
+    fns.replyToTask.mockResolvedValue(undefined);
+    await req(`/api/tasks/${task.id}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ content: "no files" }),
+    });
+    expect(fns.replyToTask).toHaveBeenCalledWith({
+      taskId: task.id,
+      userId: user.id,
+      content: "no files",
+      sourceClientId: "rest:reply",
+    });
+    // No `attachments` key when the reply carried none.
+    expect(fns.replyToTask.mock.calls[0]![0]).not.toHaveProperty("attachments");
+    await close();
+  });
+
   it("409 invalid-state when task isn't in needs-input", async () => {
     const { db, user, host, fns, req, close } = await setup();
     const { task } = await makeProjectAndTask(db, user, host.hostId, "running");
@@ -525,6 +574,53 @@ describe("POST /api/tasks/:taskId/reply", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: "invalid-state", currentState: "running" });
     expect(fns.replyToTask).not.toHaveBeenCalled();
+    await close();
+  });
+});
+
+describe("POST /api/tasks/:taskId/uploads", () => {
+  it("409 task not started when the task has no executionThreadId", async () => {
+    const { db, user, host, req, close } = await setup();
+    const { task } = await makeProjectAndTask(db, user, host.hostId, "needs-input");
+    // makeProjectAndTask creates the task without an executionThreadId.
+    const res = await req(`/api/tasks/${task.id}/uploads`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "X-Filename": "a.txt" },
+      body: "hello",
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "task not started" });
+    await close();
+  });
+
+  it("409 no host online when the resolved host isn't connected", async () => {
+    const { db, user, host, req, close } = await setup();
+    // Has an executionThreadId so we clear the not-started guard, but the host
+    // is never registered on the HostRouter → no online host.
+    const { task } = await makeProjectAndTask(db, user, host.hostId, "needs-input", {
+      withExecutionThread: true,
+    });
+    const res = await req(`/api/tasks/${task.id}/uploads`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "X-Filename": "a.txt" },
+      body: "hello",
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "no host online" });
+    await close();
+  });
+
+  it("404 cross-user", async () => {
+    const { db, req, close } = await setup();
+    const bob = await findOrCreateUserByEmail(db, "bob@x.com");
+    const bobHost = await createHost(db, { userId: bob.id, tenantId: bob.tenantId, name: "Bob" });
+    const { task } = await makeProjectAndTask(db, bob, bobHost.hostId, "needs-input");
+    const res = await req(`/api/tasks/${task.id}/uploads`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "X-Filename": "a.txt" },
+      body: "hello",
+    });
+    expect(res.status).toBe(404);
     await close();
   });
 });

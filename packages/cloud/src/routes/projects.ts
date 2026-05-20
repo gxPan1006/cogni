@@ -4,6 +4,7 @@ import { logger } from "@cogni/shared";
 import {
   mergePolicySchema,
   prioritySchema,
+  attachmentSchema,
   type Project,
   type ProjectTask,
   type TaskRun,
@@ -24,6 +25,8 @@ import {
 import { hosts as hostsTable } from "../db/schema.js";
 import { eq, and, isNull } from "drizzle-orm";
 import { artifactFileResponse, pathUnder } from "./artifact-file.js";
+import { relayUpload } from "./upload.js";
+import { sendHostRpc } from "./host-ws.js";
 import type { ServerDeps } from "../server.js";
 
 /**
@@ -103,6 +106,14 @@ const createTaskSchema = z.object({
 
 const replySchema = z.object({
   content: z.string().min(1).max(20_000),
+  /**
+   * Files the user attached to this reply. They were already streamed to the
+   * task's host via POST /api/tasks/:id/uploads (staged under the task's
+   * executionThreadId); naming them here makes the dispatch materialize them
+   * into the task's worktree cwd so the runner can read them. Optional +
+   * backward compatible — a reply with no attachments omits the field.
+   */
+  attachments: z.array(attachmentSchema).max(20).optional(),
 });
 
 const fsBrowseSchema = z.object({
@@ -435,11 +446,49 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
         userId,
         content: parsed.data.content,
         sourceClientId: "rest:reply",
+        ...(parsed.data.attachments && parsed.data.attachments.length > 0
+          ? { attachments: parsed.data.attachments }
+          : {}),
       });
       return c.json({ ok: true });
     } catch (err) {
       const { status, body } = domainErrorResponse(err);
       return c.json(body, status);
+    }
+  });
+
+  // Upload a file as context for a task reply. Mirrors the chat upload route
+  // (POST /api/threads/:id/uploads) but resolves the host + scope key from the
+  // task: uploads stage under the task's `executionThreadId`, and the host
+  // materializes them into the task's worktree cwd at the next dispatch (which
+  // is keyed by the same threadId). Returns the host's final (de-duped)
+  // name+size; the UI names it in the next reply's `attachments`.
+  app.post("/api/tasks/:taskId/uploads", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const owned = await ownedTask(deps, c.req.param("taskId"), userId, tenantId);
+    if (!owned) return c.json({ error: "not found" }, 404);
+    if (!owned.task.executionThreadId) return c.json({ error: "task not started" }, 409);
+
+    const fileName = decodeURIComponent(c.req.header("X-Filename") ?? "").trim() || "upload";
+    const declaredSize = Number(c.req.header("Content-Length") ?? 0) || 0;
+
+    // Prefer the task's pinned host, else the project default. The file must
+    // land on the host that owns the task's worktree.
+    const hostId = owned.task.hostId ?? owned.project.defaultHostId;
+    const online = deps.hosts.getOnlineHostsForUser(userId);
+    if (!online.some((h) => h.hostId === hostId)) return c.json({ error: "no host online" }, 409);
+
+    const body = c.req.raw.body;
+    if (!body) return c.json({ error: "empty body" }, 400);
+
+    try {
+      const result = await relayUpload({
+        hostId, threadId: owned.task.executionThreadId, fileName, declaredSize,
+        body, sendRpc: sendHostRpc, chunkBytes: 2 * 1024 * 1024,
+      });
+      return c.json(result);
+    } catch (err) {
+      return c.json({ error: "upload failed", detail: String(err) }, 502);
     }
   });
 

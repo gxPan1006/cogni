@@ -18,7 +18,7 @@
  * subscription reducer. UI does not optimistically transition.
  */
 import { useCallback, useEffect, useState } from "react";
-import type { ProjectTask, TaskRun, CloudToClient } from "@cogni/contract";
+import type { ProjectTask, TaskRun, CloudToClient, Attachment } from "@cogni/contract";
 import type { ApiClient, TaskDetailResponse } from "../transport/api.js";
 
 export interface UseTaskDetailResult {
@@ -27,7 +27,7 @@ export interface UseTaskDetailResult {
   loading: boolean;
   error: Error | null;
   refresh: () => Promise<void>;
-  reply: (content: string) => Promise<void>;
+  reply: (content: string, attachments?: Attachment[]) => Promise<void>;
   accept: () => Promise<void>;
   reject: () => Promise<void>;
   retry: () => Promise<void>;
@@ -86,7 +86,7 @@ export function useTaskDetail(api: ApiClient, taskId: string): UseTaskDetailResu
     return unsubscribe;
   }, [api, taskId]);
 
-  const reply  = useCallback(async (content: string) => { await api.replyToTask(taskId, content); }, [api, taskId]);
+  const reply  = useCallback(async (content: string, attachments?: Attachment[]) => { await api.replyToTask(taskId, content, attachments); }, [api, taskId]);
   const accept = useCallback(async () => { await api.acceptTask(taskId); }, [api, taskId]);
   const reject = useCallback(async () => { await api.rejectTask(taskId); }, [api, taskId]);
   const retry  = useCallback(async () => { await api.retryTask(taskId); }, [api, taskId]);

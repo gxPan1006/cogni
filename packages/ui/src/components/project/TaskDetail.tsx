@@ -20,11 +20,13 @@
  *   - Esc closes
  *   - ←/→ cycle to adjacent tasks (if `allTaskIds` is provided by the board)
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { ProjectTask, TaskState, Project } from "@cogni/contract";
 import type { ApiClient, HostInfo } from "../../transport/api.js";
-import { useTaskDetail } from "../../hooks/useTaskDetail.js";
+import { useTaskDetail, type UseTaskDetailResult } from "../../hooks/useTaskDetail.js";
 import { useThreadStream } from "../../hooks/useThreadStream.js";
+import { useUploads } from "../../hooks/useUploads.js";
+import { Composer } from "../Composer.js";
 import { Icon } from "../icons.js";
 import { ArtifactBrowser } from "./ArtifactBrowser.js";
 import {
@@ -147,13 +149,14 @@ export function TaskDetail({
           {task && <Stepper currentState={task.state} />}
           {task && <ActivityCard task={task} />}
 
-          {task?.state === "needs-input" && task.needsInputWhat && (
+          {task?.state === "needs-input" && (
             <div className="td-needs">
               <div className="td-needs__head">
                 <span className="td-needs__icon">{Icon.shield}</span>
                 <span className="td-needs__label">等你回应</span>
               </div>
-              <div className="td-needs__body">{task.needsInputWhat}</div>
+              {task.needsInputWhat && <div className="td-needs__body">{task.needsInputWhat}</div>}
+              <TaskReply api={api} taskId={taskId} reply={detail.reply} />
               <div className="td-needs__actions">
                 <button className="btn btn-sm" onClick={() => { void detail.cancel(); }}>取消任务</button>
               </div>
@@ -189,6 +192,53 @@ export function TaskDetail({
 }
 
 /* ─── Subcomponents ──────────────────────────────────── */
+
+/**
+ * Reply composer shown inside the `needs-input` card. Reuses the shared
+ * <Composer> so the attach button + drag-drop tray behave exactly like chat:
+ * the user can drop/pick files (streamed to the task's host via
+ * `api.uploadTaskFile`, staged under the task's executionThreadId), then types
+ * a reply and hits send. On submit we take the committed attachments and POST
+ * them with the reply — the cloud names them on the dispatch so the runner
+ * sees them under ./.cogni-uploads/ in its worktree.
+ *
+ * Visible behavior: file pills with progress bars appear above the textarea;
+ * send is disabled while any upload is in flight; after send the textarea +
+ * tray clear and the task transitions back to `running` (the card disappears
+ * once the `task-event` lands).
+ */
+function TaskReply({
+  api,
+  taskId,
+  reply,
+}: {
+  api: ApiClient;
+  taskId: string;
+  reply: UseTaskDetailResult["reply"];
+}) {
+  const [draft, setDraft] = useState("");
+  const uploads = useUploads((file, onProgress) => api.uploadTaskFile(taskId, file, onProgress));
+
+  const submit = () => {
+    const text = draft.trim();
+    if (!text) return;
+    const attachments = uploads.takeAttachments();
+    setDraft("");
+    void reply(text, attachments.length > 0 ? attachments : undefined);
+  };
+
+  return (
+    <div className="td-needs__reply">
+      <Composer
+        draft={draft}
+        setDraft={setDraft}
+        onSubmit={submit}
+        placeholder="回复 runner…"
+        uploads={uploads}
+      />
+    </div>
+  );
+}
 
 function TaskDetailLoading() {
   return (
