@@ -35,6 +35,7 @@ import {
 import { Markdown } from "../Markdown.js";
 import { StatePill, STATE_COLOR } from "./ProjectBoard.js";
 import { LoadingRows, LoadingState } from "../LoadingState.js";
+import "../conversation.css";
 import "./task-detail.css";
 
 const STEPPER: { state: TaskState; label: string }[] = [
@@ -65,7 +66,7 @@ export function TaskDetail({
 }) {
   const detail = useTaskDetail(api, taskId);
   const task = detail.task;
-  const [tab, setTab] = useState<"thread" | "files">("thread");
+  const [tab, setTab] = useState<"overview" | "thread" | "files">("overview");
 
   // Keyboard: Esc / ← / →
   useEffect(() => {
@@ -89,10 +90,12 @@ export function TaskDetail({
   // SP-4 Artifacts: files exist at the worktree while reviewing (new files live
   // there pre-merge), falling back to the project repo root once done.
   const hasFiles  = !!task && (task.state === "reviewing" || task.state === "done" || task.state === "running");
-  const activeTab: "thread" | "files" =
-    tab === "files" && hasFiles ? "files"
-    : tab === "thread" && hasThread ? "thread"
-    : hasThread ? "thread" : "files";
+  // 主页面 (overview) is always available; 执行记录 / 文件 only when they have
+  // content. Fall back to overview if the active tab isn't available.
+  const activeTab: "overview" | "thread" | "files" =
+    tab === "thread" && hasThread ? "thread"
+    : tab === "files" && hasFiles ? "files"
+    : "overview";
 
   return (
     <div className="td-scrim" onClick={onClose}>
@@ -150,66 +153,78 @@ export function TaskDetail({
           </div>
         </header>
 
-        <div className="td__scroll">
+        {/* 主页面 / 执行记录 / 文件 — fixed tab strip; switching tabs swaps the
+            scroll body below without resizing the modal. */}
+        {task && (
+          <div className="td-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={activeTab === "overview"}
+              className={"td-tab" + (activeTab === "overview" ? " is-on" : "")}
+              onClick={() => setTab("overview")}
+            >主页面</button>
+            {hasThread && (
+              <button
+                role="tab"
+                aria-selected={activeTab === "thread"}
+                className={"td-tab" + (activeTab === "thread" ? " is-on" : "")}
+                onClick={() => setTab("thread")}
+              >执行记录</button>
+            )}
+            {hasFiles && (
+              <button
+                role="tab"
+                aria-selected={activeTab === "files"}
+                className={"td-tab" + (activeTab === "files" ? " is-on" : "")}
+                onClick={() => setTab("files")}
+              >文件</button>
+            )}
+          </div>
+        )}
+
+        <div className={"td__scroll" + (task && activeTab !== "overview" ? " td__scroll--flush" : "")}>
           {detail.loading && !task && <TaskDetailLoading />}
           {!detail.loading && !task && (
             <div className="td-card td-card--empty">这个任务不存在或已经被删除。</div>
           )}
-          {task && <Stepper currentState={task.state} />}
-          {task && <ActivityCard task={task} />}
 
-          {task?.state === "needs-input" && (
-            <div className="td-needs">
-              <div className="td-needs__head">
-                <span className="td-needs__icon">{Icon.shield}</span>
-                <span className="td-needs__label">等你回应</span>
-              </div>
-              {task.needsInputWhat && <div className="td-needs__body">{task.needsInputWhat}</div>}
-              <TaskReply api={api} taskId={taskId} reply={detail.reply} />
-              <div className="td-needs__actions">
-                <button className="btn btn-sm" onClick={() => { void detail.cancel(); }}>取消任务</button>
-              </div>
-            </div>
+          {/* 主页面: status stepper, activity card, needs-input, actions. */}
+          {task && activeTab === "overview" && (
+            <>
+              <Stepper currentState={task.state} />
+              <ActivityCard task={task} />
+              {task.state === "needs-input" && (
+                <div className="td-needs">
+                  <div className="td-needs__head">
+                    <span className="td-needs__icon">{Icon.shield}</span>
+                    <span className="td-needs__label">等你回应</span>
+                  </div>
+                  {task.needsInputWhat && <div className="td-needs__body">{task.needsInputWhat}</div>}
+                  <TaskReply api={api} taskId={taskId} reply={detail.reply} />
+                  <div className="td-needs__actions">
+                    <button className="btn btn-sm" onClick={() => { void detail.cancel(); }}>取消任务</button>
+                  </div>
+                </div>
+              )}
+              <Actions task={task} onAccept={detail.accept} onReject={detail.reject} onRetry={detail.retry} onCancel={detail.cancel} />
+            </>
           )}
 
-          {task && <Actions task={task} onAccept={detail.accept} onReject={detail.reject} onRetry={detail.retry} onCancel={detail.cancel} />}
+          {/* 执行记录: the runner thread, rendered with the same chat styling. */}
+          {task && activeTab === "thread" && hasThread && (
+            <ThreadSection api={api} threadId={task.executionThreadId!} />
+          )}
 
-          {/* 对话 / 文件 as tabs inside the modal (was two stacked sections). */}
-          {task && (hasThread || hasFiles) && (
-            <div className="td-tabs-wrap">
-              <div className="td-tabs" role="tablist">
-                {hasThread && (
-                  <button
-                    role="tab"
-                    aria-selected={activeTab === "thread"}
-                    className={"td-tab" + (activeTab === "thread" ? " is-on" : "")}
-                    onClick={() => setTab("thread")}
-                  >对话</button>
-                )}
-                {hasFiles && (
-                  <button
-                    role="tab"
-                    aria-selected={activeTab === "files"}
-                    className={"td-tab" + (activeTab === "files" ? " is-on" : "")}
-                    onClick={() => setTab("files")}
-                  >文件</button>
-                )}
-              </div>
-
-              {activeTab === "thread" && hasThread && (
-                <ThreadSection api={api} threadId={task.executionThreadId!} />
-              )}
-              {activeTab === "files" && hasFiles && (
-                <ArtifactBrowser
-                  api={api}
-                  source={{
-                    kind: "project",
-                    projectId: task.projectId,
-                    ...(task.worktreePath ? { startPath: task.worktreePath } : {}),
-                  }}
-                />
-              )}
-            </div>
+          {/* 文件: SP-4 artifacts browser. */}
+          {task && activeTab === "files" && hasFiles && (
+            <ArtifactBrowser
+              api={api}
+              source={{
+                kind: "project",
+                projectId: task.projectId,
+                ...(task.worktreePath ? { startPath: task.worktreePath } : {}),
+              }}
+            />
           )}
         </div>
       </aside>
@@ -408,42 +423,30 @@ function ThreadSection({ api, threadId }: { api: ApiClient; threadId: string }) 
   const { rows } = buildTimeline(messages, events);
   if (rows.length === 0) {
     return (
-      <section className="td-thread">
-        <div className="td-thread__body">
-          {loading
-            ? <LoadingRows rows={3} compact />
-            : <div className="td-thread__empty">runner 还没说话…</div>}
-        </div>
-      </section>
+      <div className="conversation__list td-thread__list">
+        {loading
+          ? <LoadingRows rows={3} />
+          : <div className="conversation__empty">runner 还没说话…</div>}
+      </div>
     );
   }
+  // Same chat blocks + container as the main Conversation, so the execution
+  // record reads identically to a normal chat (full-size bubbles + tool pills).
   return (
-    <section className="td-thread">
-      <div className="td-thread__head">
-        <span>{rows.length} 条消息</span>
-      </div>
-      <div className="td-thread__body">
-        {rows.map((row) => {
-          if (row.kind === "user") return <UserMessage key={row.key} text={row.text} attachments={row.attachments} />;
-          if (row.kind === "system") {
-            return (
-              <div key={row.key} className="msg msg--aux">
-                <div className="td-thread__system"><Markdown text={row.text} /></div>
-              </div>
-            );
-          }
-          if (row.kind === "assistant-text") return <AssistantText key={row.key} text={row.text} />;
+    <div className="conversation__list td-thread__list">
+      {rows.map((row) => {
+        if (row.kind === "user") return <UserMessage key={row.key} text={row.text} attachments={row.attachments} />;
+        if (row.kind === "system") {
           return (
-            <AssistantBlocks
-              key={row.key}
-              blocks={row.blocks}
-              streaming={row.streaming}
-              errorClassName="td-thread__error"
-            />
+            <div key={row.key} className="msg msg--aux">
+              <div className="conversation__system"><Markdown text={row.text} /></div>
+            </div>
           );
-        })}
-      </div>
-    </section>
+        }
+        if (row.kind === "assistant-text") return <AssistantText key={row.key} text={row.text} />;
+        return <AssistantBlocks key={row.key} blocks={row.blocks} streaming={row.streaming} />;
+      })}
+    </div>
   );
 }
 

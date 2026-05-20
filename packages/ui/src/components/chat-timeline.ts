@@ -151,6 +151,15 @@ export function buildTimeline(messages: MessageView[], events: RunnerEvent[]): T
 
   const rows: TimelineRow[] = [];
   let ti = 0;
+  const emitTurn = (turn: RunnerEvent[], key: string) => {
+    const terminated = turn.some((e) => e.type === "done" || e.type === "error");
+    const isLast = ti === turns.length - 1;
+    const blocks = aggregateEvents(turn);
+    if (blocks.length > 0) {
+      rows.push({ kind: "assistant", key, blocks, streaming: isLast && !terminated });
+    }
+    ti++;
+  };
   for (const m of messages) {
     if (m.role === "assistant") continue; // rendered via the triggering user's turn
     if (m.role === "system") {
@@ -160,15 +169,15 @@ export function buildTimeline(messages: MessageView[], events: RunnerEvent[]): T
     // user turn
     rows.push({ kind: "user", key: m.id, text: m.content, attachments: m.attachments });
     const turn = turns[ti];
-    if (turn) {
-      const terminated = turn.some((e) => e.type === "done" || e.type === "error");
-      const isLast = ti === turns.length - 1;
-      const blocks = aggregateEvents(turn);
-      if (blocks.length > 0) {
-        rows.push({ kind: "assistant", key: `t-${m.id}`, blocks, streaming: isLast && !terminated });
-      }
-      ti++;
-    }
+    if (turn) emitTurn(turn, `t-${m.id}`);
+  }
+  // Emit any turns that weren't anchored to a user message. Project-task
+  // execution threads are the motivating case: the dispatch prompt is sent as a
+  // frame (never persisted as a user message), so the thread holds only
+  // assistant rows + the runner event stream — without this the whole turn
+  // would be dropped and the view would read "runner 还没说话…".
+  while (ti < turns.length) {
+    emitTurn(turns[ti]!, `t-orphan-${ti}`);
   }
   return { rows, awaitingReply: lastIsUser(rows) };
 }

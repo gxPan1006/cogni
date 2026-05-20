@@ -14,7 +14,9 @@
 .td {
   position: relative;
   width: 760px; max-width: 100%;
-  max-height: calc(100vh - 64px);
+  /* Fixed height so switching tabs (主页面 / 执行记录 / 文件) never resizes the
+     modal — the active tab's body scrolls inside .td__scroll instead. */
+  height: min(760px, calc(100vh - 64px));
   z-index: 101;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -233,30 +235,37 @@
 }
 .td-actions__danger:hover { background: var(--bad-soft); }
 
-/* ── 对话 / 文件 tabs ───────────────────────── */
-.td-tabs-wrap {
-  border-top: 1px solid var(--line-soft);
-  padding-top: 14px;
-  display: flex; flex-direction: column; gap: 12px;
-}
+/* ── 主页面 / 执行记录 / 文件 tab strip ──────── */
 .td-tabs {
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: stretch; gap: 2px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
 }
 .td-tab {
   appearance: none; border: 0; background: transparent;
   font: inherit; cursor: pointer;
-  padding: 6px 12px;
-  border-radius: var(--r-2);
+  padding: 11px 12px;
   font-size: 13px; color: var(--muted);
-  transition: background .12s, color .12s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color .12s, border-color .12s;
 }
-.td-tab:hover { color: var(--ink); background: var(--bg-sunk); }
-.td-tab.is-on { color: var(--ink); font-weight: 600; background: var(--bg-sunk); }
+.td-tab:hover { color: var(--ink); }
+.td-tab.is-on { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
 
-/* ── Embedded thread (inside the 对话 tab) ──── */
-.td-thread {
-  /* separator now comes from .td-tabs-wrap above */
+/* When a tab hosts the chat thread or the file browser, let it fill the scroll
+   area edge-to-edge (those components own their own padding). */
+.td__scroll--flush { padding: 0; gap: 0; }
+
+/* ── Embedded thread (执行记录 tab) ──────────── */
+.td-thread__list {
+  /* Reuses .conversation__list (max-width 760 / centered / chat blocks). Add a
+     little vertical breathing room since there's no composer below. */
+  padding-top: 20px;
+  padding-bottom: 20px;
 }
+/* Loading placeholder shown by TaskDetailLoading before the task row lands. */
 .td-thread--loading {
   display: flex;
   flex-direction: column;
@@ -269,22 +278,6 @@
   color: var(--muted);
   letter-spacing: 0.04em;
 }
-.td-thread__body { }
-.td-thread__system {
-  padding: 8px 10px;
-  background: var(--bg-sunk);
-  border-radius: var(--r-2);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--muted);
-  margin: 6px 0;
-}
-
-/* Tighter chat blocks inside the drawer */
-.td-thread .msg--user      { padding: 10px 0 4px; }
-.td-thread .msg--assistant { padding: 6px 0 12px; }
-.td-thread .msg__user-card { padding: 10px 12px; }
-.td-thread .md { font-size: 13.5px; }
 
 /* ── Mobile / narrow viewport ──────────────────
    On a phone the modal fills the viewport edge-to-edge with tighter padding. */

@@ -101,6 +101,24 @@ describe("buildTimeline", () => {
     expect(a2.blocks.some((b) => b.kind === "tool")).toBe(false);
   });
 
+  it("renders runner turns with no anchoring user message (project-task execution thread)", () => {
+    // Project tasks dispatch the prompt as a frame, not a persisted user
+    // message, so the execution thread holds only assistant message rows plus
+    // the runner event stream. The completed turn must still surface (with its
+    // tool pill) instead of being dropped for lack of a triggering user message.
+    const messages = [msg("a1", "assistant", "画好了")];
+    const { rows } = buildTimeline(messages, userWrite);
+    const asst = rows.find((r) => r.kind === "assistant");
+    if (!asst || asst.kind !== "assistant") throw new Error("expected an assistant row");
+    expect(asst.blocks.some((b) => b.kind === "tool")).toBe(true);
+    expect(asst.streaming).toBe(false);
+  });
+
+  it("renders turns even when the thread has no messages at all", () => {
+    const { rows } = buildTimeline([], userWrite);
+    expect(rows.map((r) => r.kind)).toEqual(["assistant"]);
+  });
+
   it("falls back to plain message rows when no events are available (catchup-too-long path)", () => {
     const messages = [msg("u1", "user", "hi"), msg("a1", "assistant", "reply text")];
     const { rows } = buildTimeline(messages, []);
