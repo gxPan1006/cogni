@@ -75,10 +75,6 @@ export function ProjectBoard({
 }) {
   const [view, setView] = useState<View>("swarm");
 
-  if (!project && loading) {
-    return <ProjectBoardLoading onBack={onBack} />;
-  }
-
   const live   = tasks.filter((t) => t.state === "running" || t.state === "needs-input").length;
   const queued = tasks.filter((t) => t.state === "queued").length;
   const needs  = tasks.filter((t) => t.state === "needs-input").length;
@@ -88,6 +84,10 @@ export function ProjectBoard({
     for (const h of hosts) m.set(h.id, h);
     return m;
   }, [hosts]);
+
+  if (!project && loading) {
+    return <ProjectBoardLoading onBack={onBack} />;
+  }
 
   return (
     <div className="project">
