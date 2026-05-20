@@ -64,6 +64,10 @@ export const threads = pgTable("threads", {
   title: text("title").notNull().default("New chat"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  // Soft delete (matches hosts.removed_at / projects.archived_at): a deleted
+  // thread keeps its messages/events/runner_sessions rows intact (those FK
+  // back to threads with no cascade) but disappears from every list + lookup.
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const messages = pgTable("messages", {

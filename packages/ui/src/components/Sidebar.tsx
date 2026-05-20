@@ -13,6 +13,7 @@
  * Everything else (host health, user menu, mode pill, settings entry) is
  * unchanged — same look as SP-2.
  */
+import { useState } from "react";
 import type { ThreadSummary } from "@cogni/contract";
 import { Icon } from "./icons.js";
 import "./sidebar.css";
@@ -43,6 +44,10 @@ export function Sidebar(props: {
   activeThreadId: string | null;
   onSelect: (id: string) => void;
   onNewChat: () => void;
+  /** Rename a conversation in place. When omitted, the pencil affordance is hidden. */
+  onRenameThread?: (id: string, title: string) => void;
+  /** Delete a conversation. When omitted, the trash affordance is hidden. */
+  onDeleteThread?: (id: string) => void;
 
   // project mode (SP-3)
   projects?: SidebarProject[];
@@ -121,45 +126,119 @@ function ChatLists(props: {
   threads: ThreadSummary[];
   activeThreadId: string | null;
   onSelect: (id: string) => void;
+  onRenameThread?: (id: string, title: string) => void;
+  onDeleteThread?: (id: string) => void;
 }) {
+  // Only one row edits at a time; keeping the edit state here (not per-row)
+  // means switching threads or modes cleanly resets any open rename input.
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const pinned = props.threads.filter((t) => (t as ThreadSummary & { pinned?: boolean }).pinned);
   const rest   = props.threads.filter((t) => !(t as ThreadSummary & { pinned?: boolean }).pinned);
+
+  const row = (t: ThreadSummary) => (
+    <ThreadRow
+      key={t.id}
+      thread={t}
+      active={t.id === props.activeThreadId}
+      editing={editingId === t.id}
+      onClick={() => props.onSelect(t.id)}
+      onStartRename={props.onRenameThread ? () => setEditingId(t.id) : undefined}
+      onCommitRename={(title) => {
+        props.onRenameThread?.(t.id, title);
+        setEditingId(null);
+      }}
+      onCancelRename={() => setEditingId(null)}
+      onDelete={props.onDeleteThread ? () => props.onDeleteThread?.(t.id) : undefined}
+    />
+  );
 
   return (
     <>
       {pinned.length > 0 && (
         <section className="sb__section">
           <div className="sb__section-head">PINNED</div>
-          <div className="sb__section-body">
-            {pinned.map((t) => (
-              <ThreadButton key={t.id} thread={t} active={t.id === props.activeThreadId} onClick={() => props.onSelect(t.id)} />
-            ))}
-          </div>
+          <div className="sb__section-body">{pinned.map(row)}</div>
         </section>
       )}
       <section className="sb__section">
         <div className="sb__section-head">RECENTS</div>
         <div className="sb__section-body">
-          {rest.length > 0
-            ? rest.map((t) => (
-                <ThreadButton key={t.id} thread={t} active={t.id === props.activeThreadId} onClick={() => props.onSelect(t.id)} />
-              ))
-            : <div className="sb__empty">还没有对话</div>}
+          {rest.length > 0 ? rest.map(row) : <div className="sb__empty">还没有对话</div>}
         </div>
       </section>
     </>
   );
 }
 
-function ThreadButton({ thread, active, onClick }: { thread: ThreadSummary; active: boolean; onClick: () => void }) {
+function ThreadRow({
+  thread, active, editing, onClick,
+  onStartRename, onCommitRename, onCancelRename, onDelete,
+}: {
+  thread: ThreadSummary;
+  active: boolean;
+  editing: boolean;
+  onClick: () => void;
+  onStartRename?: () => void;
+  onCommitRename: (title: string) => void;
+  onCancelRename: () => void;
+  onDelete?: () => void;
+}) {
+  const [draft, setDraft] = useState(thread.title);
+
+  if (editing) {
+    const commit = () => {
+      const next = draft.trim();
+      if (next && next !== thread.title) onCommitRename(next);
+      else onCancelRename();
+    };
+    return (
+      <div className={"sb-thread is-editing" + (active ? " is-active" : "")}>
+        <input
+          className="sb-thread__rename"
+          value={draft}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            else if (e.key === "Escape") onCancelRename();
+          }}
+        />
+        <span className="sb-thread__actions">
+          <button className="sb-thread__act" title="保存" onClick={commit}>{Icon.check}</button>
+          <button className="sb-thread__act" title="取消" onClick={onCancelRename}>{Icon.x}</button>
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <button
-      className={"sb-thread" + (active ? " is-active" : "")}
-      onClick={onClick}
-      title={thread.title}
-    >
-      <span className="sb-thread__title">{thread.title}</span>
-    </button>
+    <div className={"sb-thread" + (active ? " is-active" : "")}>
+      <button className="sb-thread__title" onClick={onClick} title={thread.title}>
+        {thread.title}
+      </button>
+      {(onStartRename || onDelete) && (
+        <span className="sb-thread__actions">
+          {onStartRename && (
+            <button
+              className="sb-thread__act"
+              title="重命名"
+              onClick={(e) => { e.stopPropagation(); setDraft(thread.title); onStartRename(); }}
+            >{Icon.edit}</button>
+          )}
+          {onDelete && (
+            <button
+              className="sb-thread__act sb-thread__act--danger"
+              title="删除"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm(`删除对话「${thread.title}」?`)) onDelete();
+              }}
+            >{Icon.trash}</button>
+          )}
+        </span>
+      )}
+    </div>
   );
 }
 

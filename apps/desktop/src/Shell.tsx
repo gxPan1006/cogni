@@ -167,6 +167,20 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
     await newChat();
   };
 
+  const renameThread = (id: string, title: string) => {
+    // Optimistic update; the cloud's `thread-meta` broadcast (which also lands
+    // on this client) confirms it.
+    setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title } : t)));
+    api.renameThread(id, title).catch((e) => { handleApiError(e); refreshThreads(); });
+  };
+
+  const deleteThread = (id: string) => {
+    setThreads((prev) => prev.filter((t) => t.id !== id));
+    // If the open conversation was deleted, fall back to the Welcome screen.
+    if (activeThreadId === id) { setActiveThreadId(null); setPage("chat"); }
+    api.deleteThread(id).catch((e) => { handleApiError(e); refreshThreads(); });
+  };
+
   const openProject = (id: string) => { setActiveProjectId(id); setPage("project"); };
 
   // SP-3 cards / sidebar need {liveRunners, queuedCount, needsInputCount,
@@ -284,6 +298,8 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
         activeThreadId={activeThreadId}
         onSelect={(id) => { setActiveThreadId(id); setMode("chat"); setPage("chat"); }}
         onNewChat={() => { void newChat(); }}
+        onRenameThread={renameThread}
+        onDeleteThread={deleteThread}
         projects={sidebarProjects}
         activeProjectId={activeProjectId}
         onSelectProject={openProject}

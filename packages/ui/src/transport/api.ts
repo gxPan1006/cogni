@@ -149,6 +149,16 @@ export class ApiClient {
   getThread = (id: string): Promise<ThreadDetail> =>
     this.request(`${this.cloudUrl}/api/threads/${id}`, { headers: this.authHeaders() });
 
+  renameThread = (id: string, title: string): Promise<{ ok: true }> =>
+    this.request(`${this.cloudUrl}/api/threads/${id}`, {
+      method: "PATCH", headers: this.authHeaders(), body: JSON.stringify({ title }),
+    });
+
+  deleteThread = (id: string): Promise<{ ok: true }> =>
+    this.request(`${this.cloudUrl}/api/threads/${id}`, {
+      method: "DELETE", headers: this.authHeaders(),
+    });
+
   // ─── Hosts ────────────────────────────────────────────────────────────
   listHosts = (): Promise<HostInfo[]> =>
     this.request(`${this.cloudUrl}/api/hosts`, { headers: this.authHeaders() });

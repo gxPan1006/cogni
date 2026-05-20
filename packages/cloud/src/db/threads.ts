@@ -1,4 +1,4 @@
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, isNull } from "drizzle-orm";
 import { threads, messages } from "./schema.js";
 import type { AnyDb } from "./users.js";
 import type { ThreadSummary, ThreadDetail, MessageView, Role } from "@cogni/contract";
@@ -18,13 +18,17 @@ export async function listThreads(db: AnyDb, userId: string): Promise<ThreadSumm
   const rows = await db
     .select()
     .from(threads)
-    .where(eq(threads.userId, userId))
+    .where(and(eq(threads.userId, userId), isNull(threads.deletedAt)))
     .orderBy(desc(threads.updatedAt));
   return rows.map((r) => ({ id: r.id, title: r.title, updatedAt: r.updatedAt.toISOString() }));
 }
 
 export async function getThreadDetail(db: AnyDb, threadId: string): Promise<ThreadDetail | null> {
-  const t = await db.select().from(threads).where(eq(threads.id, threadId)).limit(1);
+  const t = await db
+    .select()
+    .from(threads)
+    .where(and(eq(threads.id, threadId), isNull(threads.deletedAt)))
+    .limit(1);
   if (!t[0]) return null;
   const msgs = await db
     .select()
@@ -47,9 +51,29 @@ export async function threadBelongsToUser(
   const rows = await db
     .select({ id: threads.id })
     .from(threads)
-    .where(and(eq(threads.id, threadId), eq(threads.userId, userId)))
+    .where(and(eq(threads.id, threadId), eq(threads.userId, userId), isNull(threads.deletedAt)))
     .limit(1);
   return rows.length > 0;
+}
+
+/**
+ * Soft-delete a thread (sidebar "删除"). Sets deleted_at=now so the row drops
+ * out of listThreads / getThreadDetail / threadBelongsToUser while its message
+ * + event history stays referentially intact. Returns the owner's userId so the
+ * route can scope the `thread-deleted` broadcast without a second query; null
+ * if the thread doesn't exist or was already deleted (idempotent).
+ */
+export async function softDeleteThread(
+  db: AnyDb,
+  threadId: string,
+): Promise<{ userId: string } | null> {
+  const [row] = await db
+    .update(threads)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(threads.id, threadId), isNull(threads.deletedAt)))
+    .returning();
+  if (!row) return null;
+  return { userId: row.userId };
 }
 
 export async function appendMessage(
@@ -80,7 +104,7 @@ export async function updateThreadTitle(
   const [row] = await db
     .update(threads)
     .set({ title })
-    .where(eq(threads.id, threadId))
+    .where(and(eq(threads.id, threadId), isNull(threads.deletedAt)))
     .returning();
   if (!row) return null;
   return { userId: row.userId, title: row.title, updatedAt: row.updatedAt.toISOString() };

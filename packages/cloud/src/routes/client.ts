@@ -5,7 +5,11 @@ import type { CloudToClient } from "@cogni/contract";
 import { randomUUID } from "node:crypto";
 import { eq, desc } from "drizzle-orm";
 import { logger } from "@cogni/shared";
-import { listThreads, createThread, getThreadDetail, threadBelongsToUser } from "../db/threads.js";
+import { z } from "zod";
+import {
+  listThreads, createThread, getThreadDetail, threadBelongsToUser,
+  updateThreadTitle, softDeleteThread,
+} from "../db/threads.js";
 import { listEventsSince } from "../db/sessions.js";
 import { events as eventsTable } from "../db/schema.js";
 import { getAuthSession, touchAuthSession } from "../db/auth-sessions.js";
@@ -68,6 +72,9 @@ export function registerClientRoutes(
     await next();
   });
 
+  // Shared validator for PATCH /api/threads/:id (sidebar rename).
+  const renameSchema = z.object({ title: z.string().min(1).max(200) });
+
   app.get("/api/threads", async (c) => {
     const { userId } = c.get("claims");
     return c.json(await listThreads(deps.db, userId));
@@ -82,6 +89,40 @@ export function registerClientRoutes(
     if (!(await threadBelongsToUser(deps.db, id, userId))) return c.json({ error: "not found" }, 404);
     const detail = await getThreadDetail(deps.db, id);
     return detail ? c.json(detail) : c.json({ error: "not found" }, 404);
+  });
+  // Rename a conversation (sidebar inline edit). Mirrors PATCH /api/hosts/:id:
+  // ownership-checked (404, never 403, to avoid leaking thread-id existence),
+  // then fans out the new title over the list channel so every other window
+  // updates live. Reuses the same `thread-meta` frame the auto-titler emits.
+  app.patch("/api/threads/:id", async (c) => {
+    const { userId } = c.get("claims");
+    const id = c.req.param("id");
+    if (!(await threadBelongsToUser(deps.db, id, userId))) return c.json({ error: "not found" }, 404);
+
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = renameSchema.safeParse(body);
+    if (!parsed.success) return c.json({ error: "invalid title" }, 400);
+
+    const updated = await updateThreadTitle(deps.db, id, parsed.data.title.trim());
+    if (!updated) return c.json({ error: "not found" }, 404);
+    deps.clients.publishThreadMeta(userId, {
+      threadId: id,
+      title: updated.title,
+      lastMsgAt: updated.updatedAt,
+    });
+    return c.json({ ok: true });
+  });
+  // Soft-delete a conversation (sidebar "删除"). Ownership-checked, then fans
+  // out `thread-deleted` so the row vanishes from the sidebar in every window.
+  app.delete("/api/threads/:id", async (c) => {
+    const { userId } = c.get("claims");
+    const id = c.req.param("id");
+    if (!(await threadBelongsToUser(deps.db, id, userId))) return c.json({ error: "not found" }, 404);
+
+    const removed = await softDeleteThread(deps.db, id);
+    if (!removed) return c.json({ error: "not found" }, 404);
+    deps.clients.publishThreadDeleted(userId, id);
+    return c.json({ ok: true });
   });
   app.get("/api/threads/:id/events", async (c) => {
     const { userId } = c.get("claims");

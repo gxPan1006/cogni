@@ -193,6 +193,20 @@ function WebShell({ page }: { page: Page }) {
     await newChat();
   };
 
+  const renameThread = (id: string, title: string) => {
+    // Optimistic: update the row immediately; the cloud's `thread-meta`
+    // broadcast (which also reaches this window) confirms it.
+    setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title } : t)));
+    api.renameThread(id, title).catch((e) => { handleApiError(e); refreshThreads(); });
+  };
+
+  const deleteThread = (id: string) => {
+    setThreads((prev) => prev.filter((t) => t.id !== id));
+    // Leaving the deleted thread's route avoids a 404 fetch in <Conversation>.
+    if (params.threadId === id) nav("/chat");
+    api.deleteThread(id).catch((e) => { handleApiError(e); refreshThreads(); });
+  };
+
   // Items shape for ProjectsList + Sidebar. Same approach as desktop Shell —
   // only the active project gets per-task counter aggregation; others render
   // 0 until opened. See Shell.tsx for the rationale.
@@ -284,6 +298,8 @@ function WebShell({ page }: { page: Page }) {
         activeThreadId={params.threadId ?? null}
         onSelect={(id) => nav(`/chat/${id}`)}
         onNewChat={() => { void newChat(); }}
+        onRenameThread={renameThread}
+        onDeleteThread={deleteThread}
         projects={sidebarProjects}
         activeProjectId={params.projectId ?? null}
         onSelectProject={(id) => nav(`/projects/${id}`)}

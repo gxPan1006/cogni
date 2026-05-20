@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
+import { eq } from "drizzle-orm";
 import { makeTestDb } from "./test-db.js";
+import { messages } from "./schema.js";
 import { findOrCreateUserByEmail } from "./users.js";
-import { createThread, listThreads, getThreadDetail, appendMessage, touchThread, threadBelongsToUser } from "./threads.js";
+import { createThread, listThreads, getThreadDetail, appendMessage, touchThread, threadBelongsToUser, updateThreadTitle, softDeleteThread } from "./threads.js";
 
 describe("thread repository", () => {
   it("creates, lists, appends messages, and reads back detail", async () => {
@@ -49,6 +51,45 @@ describe("thread repository", () => {
     expect(await threadBelongsToUser(db, thread.id, owner.id)).toBe(true);
     expect(await threadBelongsToUser(db, thread.id, other.id)).toBe(false);
     expect(await threadBelongsToUser(db, "00000000-0000-0000-0000-000000000000", owner.id)).toBe(false);
+    await close();
+  });
+
+  it("softDeleteThread hides the thread from list / detail / ownership but keeps messages", async () => {
+    const { db, close } = await makeTestDb();
+    const user = await findOrCreateUserByEmail(db, "del@x.com");
+    const keep = await createThread(db, { userId: user.id, tenantId: user.tenantId });
+    const drop = await createThread(db, { userId: user.id, tenantId: user.tenantId });
+    await appendMessage(db, { threadId: drop.id, role: "user", content: "history stays" });
+
+    const removed = await softDeleteThread(db, drop.id);
+    expect(removed?.userId).toBe(user.id);
+
+    // Gone from the list + every per-thread lookup …
+    const list = await listThreads(db, user.id);
+    expect(list.map((t) => t.id)).toEqual([keep.id]);
+    expect(await getThreadDetail(db, drop.id)).toBeNull();
+    expect(await threadBelongsToUser(db, drop.id, user.id)).toBe(false);
+
+    // … but the messages row is still there (FK history intact).
+    const msgs = await db.select().from(messages).where(eq(messages.threadId, drop.id));
+    expect(msgs).toHaveLength(1);
+
+    // Re-deleting is a no-op (idempotent) and returns null.
+    expect(await softDeleteThread(db, drop.id)).toBeNull();
+    await close();
+  });
+
+  it("updateThreadTitle renames a live thread but refuses a deleted one", async () => {
+    const { db, close } = await makeTestDb();
+    const user = await findOrCreateUserByEmail(db, "ren@x.com");
+    const thread = await createThread(db, { userId: user.id, tenantId: user.tenantId });
+
+    const renamed = await updateThreadTitle(db, thread.id, "My renamed chat");
+    expect(renamed?.title).toBe("My renamed chat");
+    expect((await listThreads(db, user.id))[0]?.title).toBe("My renamed chat");
+
+    await softDeleteThread(db, thread.id);
+    expect(await updateThreadTitle(db, thread.id, "too late")).toBeNull();
     await close();
   });
 });
