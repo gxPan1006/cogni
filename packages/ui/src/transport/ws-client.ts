@@ -186,7 +186,7 @@ export function createWsClient(buildUrl: () => string): WsClient {
       return;
     }
     // User-wide and unscoped frames — fan out to every active subscriber
-    // (thread, projects-list, per-project, per-task).
+    // (thread, projects-list, per-project, per-task, AND list).
     if (
       frame.t === "host-status" ||
       frame.t === "host-meta" ||
@@ -196,6 +196,12 @@ export function createWsClient(buildUrl: () => string): WsClient {
       for (const s of projectsSubs) s.onFrame(frame);
       for (const s of projectSubs) s.onFrame(frame);
       for (const s of taskSubs) s.onFrame(frame);
+      // The web Shell tracks host online/offline via subscribeList (its only
+      // subscription when sitting on the chat or projects-list page — no
+      // thread/project sub of its own). host-status / host-meta are user-wide
+      // signals the sidebar host count depends on, so list subscribers must
+      // see them too. (thread-meta / thread-* below stay list-only.)
+      for (const s of listSubs) s.onFrame(frame);
       return;
     }
     // SP-3 project-list frames. Cloud filters by user; every list listener

@@ -145,6 +145,29 @@ describe("createWsClient — multiplexed connection lifetime", () => {
     client.close();
   });
 
+  it("fans host-status / host-meta out to the LIST subscriber (sidebar host count)", () => {
+    // Regression: the web Shell only subscribes via subscribeList to keep its
+    // sidebar (threads + host count) live. host-status / host-meta are
+    // user-wide signals it needs, but the dispatcher used to fan them only to
+    // thread / project / task subs — so the host online count never updated
+    // after the first HTTP fetch (HOSTS 0/1 stuck).
+    const client = createWsClient(() => "ws://test/api/ws");
+    const listHandler = vi.fn();
+    client.subscribeList({ onFrame: listHandler });
+    const sock = FakeWebSocket.instances[0]!;
+    sock.fireOpen();
+
+    sock.fireMessage({ t: "host-status", online: true });
+    sock.fireMessage({
+      t: "host-meta", hostId: "h1", name: "Mac", status: "online", lastSeen: "2026-05-20T00:00:00Z",
+    });
+    expect(listHandler).toHaveBeenCalledWith({ t: "host-status", online: true });
+    expect(listHandler).toHaveBeenCalledWith({
+      t: "host-meta", hostId: "h1", name: "Mac", status: "online", lastSeen: "2026-05-20T00:00:00Z",
+    });
+    client.close();
+  });
+
   it("re-emits subscribe-thread with latest lastSeq on reconnect", () => {
     const client = createWsClient(() => "ws://test/api/ws");
     let seqA = 5;

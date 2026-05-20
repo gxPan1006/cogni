@@ -59,6 +59,17 @@ export function useProjectBoard(api: ApiClient, projectId: string): UseProjectBo
   tasksRef.current = tasks;
 
   const refresh = useCallback(async () => {
+    // Guard empty projectId: the web Shell calls this hook unconditionally as
+    // `useProjectBoard(api, params.projectId ?? "")`, so on the chat /
+    // projects-list pages projectId is "". Fetching GET /api/projects/ 400s,
+    // and (see the effect below) firing `subscribe-project:""` makes the cloud
+    // run getProject(db, "") → Postgres "invalid input syntax for type uuid".
+    if (!projectId) {
+      setProject(null);
+      setTasks([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [p, ts] = await Promise.all([
@@ -79,8 +90,10 @@ export function useProjectBoard(api: ApiClient, projectId: string): UseProjectBo
     void refresh();
   }, [refresh]);
 
-  // Board-scoped task-event reducer.
+  // Board-scoped task-event reducer. Skip entirely when projectId is empty
+  // (chat / list pages) so we never emit a `subscribe-project:""` frame.
   useEffect(() => {
+    if (!projectId) return;
     const ws = api.wsClient;
     const unsubTasks = ws.subscribeProject({
       projectId,

@@ -157,6 +157,26 @@ function WebShell({ page }: { page: Page }) {
           );
         } else if (frame.t === "thread-deleted") {
           setThreads((prev) => prev.filter((t) => t.id !== frame.threadId));
+        } else if (frame.t === "host-meta") {
+          // Precise per-host update (carries hostId + status + name). Keeps the
+          // sidebar host count + project board's host indicator live without a
+          // refetch when the runner-host connects / disconnects / is renamed.
+          setHosts((prev) => {
+            const next: HostInfo = {
+              id: frame.hostId,
+              name: frame.name,
+              status: frame.status,
+              lastSeen: frame.lastSeen,
+            };
+            const idx = prev.findIndex((h) => h.id === frame.hostId);
+            if (idx === -1) return [...prev, next];
+            return prev.map((h) => (h.id === frame.hostId ? next : h));
+          });
+        } else if (frame.t === "host-status") {
+          // Coarse user-wide "some host (went) online/offline" signal with no
+          // hostId. Refetch the authoritative list so the count is correct
+          // even on first connect before any host-meta arrives.
+          refreshHosts();
         }
       },
     });
