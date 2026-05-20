@@ -5,6 +5,7 @@ import { makeAuth } from "./auth.js";
 import { HostRouter } from "./host-router.js";
 import { ClientHub } from "./client-hub.js";
 import { ChatDomain } from "./domains/chat.js";
+import { WorkspaceChatDomain } from "./domains/workspace-chat.js";
 // SP-3: project domain + its host-RPC transport binding. main.ts composes
 // both alongside ChatDomain; createServer() (route mounting) is Track C.
 import { ProjectDomain } from "./domains/project/index.js";
@@ -27,6 +28,10 @@ const auth = makeAuth({
 const hosts = new HostRouter();
 const clients = new ClientHub();
 const chat = new ChatDomain(db, hosts, clients);
+// SP-4: orchestrator floating-bar send/dispatch. Shares db/hosts/clients with
+// ChatDomain; the runner event stream still flows back through
+// ChatDomain.handleHostEvent (host-ws routes all sessions there).
+const workspaceChat = new WorkspaceChatDomain(db, hosts, clients);
 // SP-3: HostRpcClient wraps the transport-level sendHostRpc (exported from
 // routes/host-ws.ts where the WS connection registry lives). ProjectDomain
 // owns the reconcile orchestrator and starts it now so the loop ticks.
@@ -56,7 +61,7 @@ const emailTransport: EmailTransport =
     : new ConsoleTransport();
 
 const { app, injectWebSocket } = createServer({
-  db, auth, hosts, clients, chat, projectDomain,
+  db, auth, hosts, clients, chat, workspaceChat, projectDomain,
   emailTransport,
   magicLinkTtlMinutes: env.magicLinkTtlMinutes,
   publicUrl: env.publicUrl,

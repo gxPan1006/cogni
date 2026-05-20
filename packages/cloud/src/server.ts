@@ -7,6 +7,7 @@ import type { Auth, SessionClaims } from "./auth.js";
 import type { HostRouter } from "./host-router.js";
 import type { ClientHub } from "./client-hub.js";
 import type { ChatDomain } from "./domains/chat.js";
+import type { WorkspaceChatDomain } from "./domains/workspace-chat.js";
 // SP-3 project domain — single source of truth is the concrete class in
 // domains/project/index.ts (Track B). routes/projects.ts (Track C) types its
 // handlers against this same type, so they see the same method surface as
@@ -36,6 +37,13 @@ export interface ServerDeps {
   hosts: HostRouter;
   clients: ClientHub;
   chat: ChatDomain;
+  /**
+   * SP-4 workspace-chat orchestrator domain. Optional for the same
+   * test-ergonomics reason as `projectDomain`: when absent, the client WS
+   * `send` handler falls back to the ordinary chat path for every thread.
+   * Production main.ts always passes the real instance.
+   */
+  workspaceChat?: WorkspaceChatDomain;
   /**
    * SP-3 project domain. Optional so SP-1/SP-2 server-construction fixtures
    * keep compiling without having to wire a full orchestrator stack; routes

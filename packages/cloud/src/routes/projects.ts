@@ -15,6 +15,7 @@ import {
   getTask,
   listTaskRuns,
 } from "../db/projects.js";
+import { getOrCreateWorkspaceThread, getOrCreateProjectThread } from "../db/threads.js";
 import { hosts as hostsTable } from "../db/schema.js";
 import { eq, and, isNull } from "drizzle-orm";
 import { artifactFileResponse, pathUnder } from "./artifact-file.js";
@@ -205,6 +206,29 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
       includeArchived,
     });
     return c.json(rows);
+  });
+
+  // ─── SP-4 orchestrator thread-id endpoints ───────────────────────────────
+  // The Workspace Chat bar resolves which thread to subscribe to via these:
+  // a stable per-user workspace thread, or a per-project orchestrator thread.
+
+  app.get("/api/workspace-thread", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const t = await getOrCreateWorkspaceThread(deps.db, { userId, tenantId });
+    return c.json({ threadId: t.id });
+  });
+
+  app.get("/api/projects/:id/chat-thread", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const project = await ownedProject(deps, c.req.param("id"), userId, tenantId);
+    if (!project) return c.json({ error: "not found" }, 404);
+    const t = await getOrCreateProjectThread(deps.db, {
+      id: project.id,
+      userId,
+      tenantId,
+      threadId: project.threadId ?? null,
+    });
+    return c.json({ threadId: t.id });
   });
 
   app.post("/api/projects", async (c) => {

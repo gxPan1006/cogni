@@ -768,3 +768,49 @@ describe("Authorization: Host <token>", () => {
     await close();
   });
 });
+
+// ─── SP-4 orchestrator thread-id endpoints ───────────────────────────────────
+
+describe("GET /api/workspace-thread", () => {
+  it("returns a stable workspace thread id across calls", async () => {
+    const { req, close } = await setup();
+    const a = (await (await req("/api/workspace-thread")).json()) as { threadId: string };
+    const b = (await (await req("/api/workspace-thread")).json()) as { threadId: string };
+    expect(a.threadId).toBeTruthy();
+    expect(a.threadId).toBe(b.threadId);
+    await close();
+  });
+});
+
+describe("GET /api/projects/:id/chat-thread", () => {
+  it("returns the project orchestrator thread id", async () => {
+    const { db, user, host, req, close } = await setup();
+    const project = await dbCreateProject(db, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      name: "P",
+      repoPath: "/repos/p",
+      defaultHostId: host.hostId,
+    });
+    const res = await req(`/api/projects/${project.id}/chat-thread`);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { threadId: string }).threadId).toBeTruthy();
+    await close();
+  });
+
+  it("404 for another user's project", async () => {
+    const { db, req, close } = await setup();
+    const bob = await findOrCreateUserByEmail(db, "bob@x.com");
+    const bobHost = await createHost(db, { userId: bob.id, tenantId: bob.tenantId, name: "Bob" });
+    const bobProject = await dbCreateProject(db, {
+      tenantId: bob.tenantId,
+      userId: bob.id,
+      name: "Bob",
+      repoPath: "/repos/bob",
+      defaultHostId: bobHost.hostId,
+    });
+    const res = await req(`/api/projects/${bobProject.id}/chat-thread`);
+    expect(res.status).toBe(404);
+    await close();
+  });
+});

@@ -8,7 +8,7 @@ import { logger } from "@cogni/shared";
 import { z } from "zod";
 import {
   listThreads, createThread, getThreadDetail, threadBelongsToUser,
-  updateThreadTitle, softDeleteThread,
+  updateThreadTitle, softDeleteThread, getThreadKind,
 } from "../db/threads.js";
 import { listEventsSince, getLatestSessionForThread } from "../db/sessions.js";
 import { events as eventsTable } from "../db/schema.js";
@@ -241,12 +241,25 @@ export function registerClientRoutes(
                 deps.clients.broadcast(msg.threadId, { t: "host-status", online: host !== null });
               } else if (msg.t === "send") {
                 if (!(await threadBelongsToUser(deps.db, msg.threadId, claims.userId))) return;
-                await deps.chat.handleClientSend({
-                  userId: claims.userId,
-                  threadId: msg.threadId,
-                  content: msg.text,
-                  sourceClientId: clientId,
-                });
+                // SP-4: 'workspace' threads route to the orchestrator domain
+                // (dispatches with orchestrator:true so the host mounts cogni
+                // MCP); everything else stays on the ordinary chat path.
+                const kind = await getThreadKind(deps.db, msg.threadId);
+                if (kind === "workspace" && deps.workspaceChat) {
+                  await deps.workspaceChat.handleClientSend({
+                    userId: claims.userId,
+                    threadId: msg.threadId,
+                    content: msg.text,
+                    sourceClientId: clientId,
+                  });
+                } else {
+                  await deps.chat.handleClientSend({
+                    userId: claims.userId,
+                    threadId: msg.threadId,
+                    content: msg.text,
+                    sourceClientId: clientId,
+                  });
+                }
               }
 
               // SP-2 sync variants
