@@ -17,22 +17,6 @@ import { getProject, getTask } from "../db/projects.js";
 import type { ServerDeps } from "../server.js";
 
 /**
- * SP-3 project domain ClientHub fan-out methods. Track B augments the
- * concrete `ClientHub` class with these; we type the surface locally so
- * this file compiles independently. The runtime methods are added in
- * `client-hub.ts` (Track B's main); if they're missing at runtime the
- * subscribe-* branches no-op via the `typeof` guard below.
- */
-interface ProjectAwareClients {
-  subscribeProjects?(userId: string, clientId: string): void;
-  unsubscribeProjects?(userId: string, clientId: string): void;
-  subscribeProject?(projectId: string, clientId: string): void;
-  unsubscribeProject?(projectId: string, clientId: string): void;
-  subscribeTask?(taskId: string, clientId: string): void;
-  unsubscribeTask?(taskId: string, clientId: string): void;
-}
-
-/**
  * SP-2 hard cap on a single subscribe-thread catchup. If the unread tail
  * exceeds this, the cloud sends `catchup-too-long` and lets the client
  * decide (e.g., HTTP-pull the latest messages, then resubscribe from latest).
@@ -216,12 +200,19 @@ export function registerClientRoutes(
               // then register on ClientHub. Cleanup on disconnect is
               // handled by ClientHub.unregister (Track B's sweep covers
               // the new subscription maps).
+              // NOTE: ClientHub's subscribe* methods take (clientId, scopeId)
+              // — clientId FIRST. An earlier local `ProjectAwareClients`
+              // interface declared the args in the opposite order and was
+              // bridged with a cast + optional-chaining, which silently
+              // mis-registered every subscription (the hub's
+              // `clients.has(clientId)` guard saw a projectId/taskId in the
+              // clientId slot and bailed, so projectSubs stayed empty and no
+              // task-event ever fanned out). We now call deps.clients directly
+              // so TS enforces the real signature.
               else if (msg.t === "subscribe-projects") {
-                const c = deps.clients as ProjectAwareClients;
-                c.subscribeProjects?.(claims.userId, clientId);
+                deps.clients.subscribeProjects(clientId, claims.userId);
               } else if (msg.t === "unsubscribe-projects") {
-                const c = deps.clients as ProjectAwareClients;
-                c.unsubscribeProjects?.(claims.userId, clientId);
+                deps.clients.unsubscribeProjects(clientId, claims.userId);
               } else if (msg.t === "subscribe-project") {
                 // Validate ownership: project's userId must match caller.
                 const project = await getProject(deps.db, msg.projectId);
@@ -229,12 +220,10 @@ export function registerClientRoutes(
                   ws.close(4003, "forbidden");
                   return;
                 }
-                const c = deps.clients as ProjectAwareClients;
-                c.subscribeProject?.(msg.projectId, clientId);
+                deps.clients.subscribeProject(clientId, msg.projectId);
               } else if (msg.t === "unsubscribe-project") {
                 // No ownership check on unsubscribe — idempotent cleanup.
-                const c = deps.clients as ProjectAwareClients;
-                c.unsubscribeProject?.(msg.projectId, clientId);
+                deps.clients.unsubscribeProject(clientId, msg.projectId);
               } else if (msg.t === "subscribe-task") {
                 // Validate ownership: task → parent project → user.
                 const task = await getTask(deps.db, msg.taskId);
@@ -247,11 +236,9 @@ export function registerClientRoutes(
                   ws.close(4003, "forbidden");
                   return;
                 }
-                const c = deps.clients as ProjectAwareClients;
-                c.subscribeTask?.(msg.taskId, clientId);
+                deps.clients.subscribeTask(clientId, msg.taskId);
               } else if (msg.t === "unsubscribe-task") {
-                const c = deps.clients as ProjectAwareClients;
-                c.unsubscribeTask?.(msg.taskId, clientId);
+                deps.clients.unsubscribeTask(clientId, msg.taskId);
               }
             })
             .catch((err) => {
