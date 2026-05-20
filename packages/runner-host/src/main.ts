@@ -15,6 +15,7 @@ import {
 } from "./git-ops.js";
 import { fsBrowse, readFile } from "./fs-browse.js";
 import { generateThreadTitle } from "./generate-title.js";
+import { UploadStore } from "./uploads.js";
 import { logger } from "@cogni/shared";
 
 // SP-4: `mcp-serve` subcommand runs the cogni stdio MCP server instead of the
@@ -42,6 +43,8 @@ if (process.argv.includes("mcp-serve")) {
   // asymmetry with claude-code (no session-resume, no permission-prompt).
   manager.register(new CodexAdapter());
 
+  const uploads = new UploadStore();
+
   // SP-3: wire the host-RPC dispatcher. The cloud uses this to delegate
   // git-ops + fs-browse to the host (which owns the user's local disk).
   connectToCloud(config, manager, (req) =>
@@ -56,6 +59,10 @@ if (process.argv.includes("mcp-serve")) {
       fsBrowse,
       readFile,
       generateThreadTitle,
+      uploadBegin: (r) => uploads.begin(r),
+      uploadChunk: (r) => uploads.chunk(r),
+      uploadCommit: (r) => uploads.commit(r),
+      uploadAbort: (r) => uploads.abort(r),
     }),
   );
   logger.info({ hostId: config.hostId }, "runner host daemon started");

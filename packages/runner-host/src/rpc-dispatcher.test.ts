@@ -3,6 +3,7 @@ import type { HostRpcRequest } from "@cogni/contract";
 import { dispatchHostRpc, type RpcDeps } from "./rpc-dispatcher.js";
 import { GitOpError } from "./git-ops.js";
 import { FsBrowseError } from "./fs-browse.js";
+import { UploadError } from "./uploads.js";
 
 /** Stub deps where every handler defaults to a "should not be called" guard. */
 function depsWith(overrides: Partial<RpcDeps>): RpcDeps {
@@ -136,5 +137,37 @@ describe("dispatchHostRpc", () => {
     if (resp.ok === true && resp.method === "git-tests-run") {
       expect(resp.result.exitCode).toBe(0);
     }
+  });
+});
+
+function deps(over: Partial<RpcDeps>): RpcDeps {
+  const stub = vi.fn();
+  return {
+    gitInitIfMissing: stub, gitWorktreeCreate: stub, gitWorktreeRemove: stub,
+    gitMergeToMain: stub, gitPushToRemote: stub, gitTestsRun: stub,
+    gitDiffSnapshot: stub, fsBrowse: stub, readFile: stub, generateThreadTitle: stub,
+    uploadBegin: stub, uploadChunk: stub, uploadCommit: stub, uploadAbort: stub,
+    ...over,
+  } as RpcDeps;
+}
+
+describe("dispatchHostRpc upload arms", () => {
+  it("routes upload-begin to deps.uploadBegin", async () => {
+    const uploadBegin = vi.fn().mockResolvedValue({ uploadId: "u1" });
+    const resp = await dispatchHostRpc(
+      { method: "upload-begin", params: { scope: { kind: "thread", threadId: "t1" }, fileName: "a", declaredSize: 1 } },
+      deps({ uploadBegin }),
+    );
+    expect(uploadBegin).toHaveBeenCalled();
+    expect(resp).toMatchObject({ ok: true, method: "upload-begin", result: { uploadId: "u1" } });
+  });
+
+  it("maps an UploadError to ok:false with its code", async () => {
+    const uploadCommit = vi.fn().mockRejectedValue(new UploadError("upload-not-found", "nope"));
+    const resp = await dispatchHostRpc(
+      { method: "upload-commit", params: { uploadId: "x" } },
+      deps({ uploadCommit }),
+    );
+    expect(resp).toMatchObject({ ok: false, method: "upload-commit", error: { code: "upload-not-found" } });
   });
 });

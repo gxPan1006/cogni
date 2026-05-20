@@ -43,10 +43,19 @@ import {
   type ReadFileResponse,
   type GenerateThreadTitleRequest,
   type GenerateThreadTitleResponse,
+  type UploadBeginRequest,
+  type UploadBeginResponse,
+  type UploadChunkRequest,
+  type UploadChunkResponse,
+  type UploadCommitRequest,
+  type UploadCommitResponse,
+  type UploadAbortRequest,
+  type UploadAbortResponse,
 } from "@cogni/contract";
 import { GitOpError } from "./git-ops.js";
 import { FsBrowseError } from "./fs-browse.js";
 import { GenerateTitleError } from "./generate-title.js";
+import { UploadError } from "./uploads.js";
 
 export interface RpcDeps {
   gitInitIfMissing: (req: GitInitIfMissingRequest) => Promise<GitInitIfMissingResponse>;
@@ -59,6 +68,10 @@ export interface RpcDeps {
   fsBrowse: (req: FsBrowseRequest) => Promise<FsBrowseResponse>;
   readFile: (req: ReadFileRequest) => Promise<ReadFileResponse>;
   generateThreadTitle: (req: GenerateThreadTitleRequest) => Promise<GenerateThreadTitleResponse>;
+  uploadBegin: (req: UploadBeginRequest) => Promise<UploadBeginResponse>;
+  uploadChunk: (req: UploadChunkRequest) => Promise<UploadChunkResponse>;
+  uploadCommit: (req: UploadCommitRequest) => Promise<UploadCommitResponse>;
+  uploadAbort: (req: UploadAbortRequest) => Promise<UploadAbortResponse>;
 }
 
 /**
@@ -122,11 +135,19 @@ async function routeRpc(frame: HostRpcRequest, deps: RpcDeps): Promise<HostRpcRe
       return { ok: true, method: frame.method, result: await deps.readFile(frame.params) };
     case "generate-thread-title":
       return { ok: true, method: frame.method, result: await deps.generateThreadTitle(frame.params) };
+    case "upload-begin":
+      return { ok: true, method: frame.method, result: await deps.uploadBegin(frame.params) };
+    case "upload-chunk":
+      return { ok: true, method: frame.method, result: await deps.uploadChunk(frame.params) };
+    case "upload-commit":
+      return { ok: true, method: frame.method, result: await deps.uploadCommit(frame.params) };
+    case "upload-abort":
+      return { ok: true, method: frame.method, result: await deps.uploadAbort(frame.params) };
   }
 }
 
 function errorPayload(e: unknown): { code: string; message: string } {
-  if (e instanceof GitOpError || e instanceof FsBrowseError || e instanceof GenerateTitleError) {
+  if (e instanceof GitOpError || e instanceof FsBrowseError || e instanceof GenerateTitleError || e instanceof UploadError) {
     return { code: e.code, message: e.message };
   }
   if (e instanceof Error) {
