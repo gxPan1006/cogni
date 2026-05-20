@@ -97,6 +97,17 @@
   margin: 0; padding: 0; background: transparent;
   font-family: var(--font-mono); font-size: 11.5px; line-height: 1.55;
   color: var(--ink-2); white-space: pre-wrap;
+  /* Long unbroken strings (e.g. an image read's base64) have no whitespace, so
+     pre-wrap alone can't break them — anywhere lets them wrap inside the card
+     instead of spilling past its right edge. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  /* And a tall result (a big base64 blob) must never exceed the viewport —
+     cap it and scroll inside the card instead of pushing the page down. */
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .toolcall__result--empty { color: var(--muted-2); font-style: italic; }
 .toolcall__spin { display: inline-flex; animation: toolcall-spin 1.2s linear infinite; }
