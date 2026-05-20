@@ -12,10 +12,6 @@
  *          `api.updateProject(id, patch)` then refreshes via WS push)
  *        - danger archive → `onArchive()` (Shell calls `api.archiveProject`).
  *
- * The "source" picker is preserved visually (Linear / 内部 / 手动) but its
- * value is **not** persisted to the cloud — SP-3 contract has no source
- * field. The Linear OAuth wire-up lands in SP-3+1.
- *
  * "删除项目" is left as a UI-only step in SP-3: archive is the supported
  * lifecycle. The button looks the same but routes to `onArchive` rather
  * than a separate delete endpoint.
@@ -26,7 +22,7 @@ import type { HostInfo, UpdateProjectInput } from "../../transport/api.js";
 import { Icon } from "../icons.js";
 import "./project-settings.css";
 
-type Section = "basics" | "source" | "runner" | "prompt" | "danger";
+type Section = "basics" | "runner" | "prompt" | "danger";
 
 export function ProjectSettings({
   project,
@@ -91,7 +87,6 @@ export function ProjectSettings({
         </div>
         <nav className="ps__menu">
           <NavBtn id="basics"  active={section} onClick={setSection} icon={Icon.edit}>基础</NavBtn>
-          <NavBtn id="source"  active={section} onClick={setSection} icon={Icon.flow}>任务来源</NavBtn>
           <NavBtn id="runner"  active={section} onClick={setSection} icon={Icon.bolt}>Runner</NavBtn>
           <NavBtn id="prompt"  active={section} onClick={setSection} icon={Icon.brain}>System prompt</NavBtn>
           <NavBtn id="danger"  active={section} onClick={setSection} icon={Icon.trash} danger>危险区</NavBtn>
@@ -111,21 +106,6 @@ export function ProjectSettings({
                 <textarea className="input ps__textarea" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
               </div>
               <SaveBar onSave={saveBasics} />
-            </div>
-          </Section>
-        )}
-
-        {section === "source" && (
-          <Section title="任务来源" subtitle="SP-3 中保留为 UI 占位,实际任务源在 SP-3+1 接通 Linear。">
-            <div className="settings-card">
-              <div className="ps__field">
-                <div className="seg seg--block">
-                  <button className={"seg__btn"} disabled>Linear</button>
-                  <button className={"seg__btn is-on"}>内部 tracker</button>
-                  <button className={"seg__btn"} disabled>手动</button>
-                </div>
-                <div className="ps__hint">当前所有任务都视为内部 tracker。SP-3+1 接 Linear 后,这里会有真切换。</div>
-              </div>
             </div>
           </Section>
         )}

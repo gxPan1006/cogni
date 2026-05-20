@@ -30,7 +30,7 @@
   line-height: 1.55;
 }
 
-/* ── Linear issue list ─────────────────────── */
+/* ── Legacy option list styles ─────────────── */
 .nt__issues {
   list-style: none; padding: 0; margin: 0;
   border: 1px solid var(--line);

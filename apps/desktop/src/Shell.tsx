@@ -209,7 +209,6 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
         queuedCount,
         needsInputCount,
         health,
-        sourceLabel: "—",
         updatedAtLabel: relativeTime(p.updatedAt),
       };
     });
@@ -249,14 +248,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   const handleCreateTask = async (draft: NewTaskDraft) => {
     if (!activeProjectId) return;
     try {
-      if (draft.kind === "manual") {
-        await board.createTask({ title: draft.title, description: draft.description || undefined });
-      } else if (draft.kind === "linear") {
-        // SP-3+1 will hit Linear's API. For now we make one placeholder task per pick.
-        await Promise.all(draft.issueIds.map((id) => board.createTask({ title: `Linear ${id}`, description: "" })));
-      } else if (draft.kind === "upload") {
-        await board.createTask({ title: draft.file.name, description: "(从 backlog 文件导入)" });
-      }
+      await board.createTask({ title: draft.title, description: draft.description || undefined });
       setNewTaskOpen(false);
     } catch (e) {
       handleApiError(e);

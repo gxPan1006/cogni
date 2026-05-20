@@ -250,6 +250,7 @@ export type Block =
  */
 export function aggregateEvents(events: RunnerEvent[]): Block[] {
   const blocks: Block[] = [];
+  const hiddenToolIds = new Set<string>();
   for (const e of events) {
     if (e.type === "text") {
       const last = blocks[blocks.length - 1];
@@ -259,8 +260,13 @@ export function aggregateEvents(events: RunnerEvent[]): Block[] {
         blocks.push({ kind: "text", text: e.text, streaming: true });
       }
     } else if (e.type === "tool-call") {
+      if (e.name === "AskUserQuestion") {
+        hiddenToolIds.add(e.toolId);
+        continue;
+      }
       blocks.push({ kind: "tool", toolId: e.toolId, name: e.name, input: e.input, status: "running" });
     } else if (e.type === "tool-result") {
+      if (hiddenToolIds.has(e.toolId)) continue;
       const idx = findToolIdx(blocks, e.toolId);
       const target = idx >= 0 ? blocks[idx] : undefined;
       if (target && target.kind === "tool") {

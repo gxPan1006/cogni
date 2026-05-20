@@ -145,12 +145,10 @@ describe("CodexAdapter — startSession streams a turn", () => {
 });
 
 describe("CodexAdapter — spawn args (no real codex run)", () => {
-  it("CODEX_BASE_ARGS contains --sandbox danger-full-access and --json", () => {
+  it("CODEX_BASE_ARGS contains AFK approval bypass and --json", () => {
     expect(CODEX_BASE_ARGS).toContain("exec");
     expect(CODEX_BASE_ARGS).toContain("--json");
-    const sandboxIdx = CODEX_BASE_ARGS.indexOf("--sandbox");
-    expect(sandboxIdx).toBeGreaterThanOrEqual(0);
-    expect(CODEX_BASE_ARGS[sandboxIdx + 1]).toBe("danger-full-access");
+    expect(CODEX_BASE_ARGS).toContain("--dangerously-bypass-approvals-and-sandbox");
   });
 
   it("CODEX_BASE_ARGS contains --skip-git-repo-check so codex runs in fresh worktrees", () => {

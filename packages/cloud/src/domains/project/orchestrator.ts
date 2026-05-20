@@ -417,6 +417,7 @@ export class ProjectOrchestrator {
         "- Your CWD is a git worktree dedicated to this task. Treat it as the deliverable surface.",
         "- For any code/document/asset the user is asking for, **write real files** in CWD (do NOT only paste the content in chat).",
         "- When done implementing, run `git add -A && git commit -m \"<concise summary>\"` before reporting completion.",
+        "- Do not ask the user clarifying questions with AskUserQuestion. If details are missing, make a conservative product-minded assumption, write it down briefly in the final response, and continue.",
         "- If the task is exploratory / Q&A only (no deliverable), say so explicitly and don't force a commit.",
         "",
       ].join("\n");

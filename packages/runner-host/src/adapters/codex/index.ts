@@ -8,7 +8,7 @@
  * session-resume support" only earns its keep with a second adapter. Codex
  * is the contrast point — it deliberately does NOT declare `session-resume`
  * (cold-start per retry) and does NOT declare `permission-prompt`
- * (`danger-full-access` sandbox is unconditional).
+ * (`--dangerously-bypass-approvals-and-sandbox` is unconditional).
  *
  * Declared capabilities:
  *   - "streaming"    JSONL stdout → RunnerEvent stream, one line at a time
@@ -16,7 +16,7 @@
  *
  * NOT declared:
  *   - "session-resume"     — `resumeSession` throws (see below)
- *   - "permission-prompt"  — Codex's permission UI is bypassed via sandbox
+ *   - "permission-prompt"  — Codex runs in AFK mode and bypasses approvals
  *
  * resumeSession contract: throws synchronously (well, rejects). The cloud
  * lifecycle (SP-3 retry policy) checks `adapter.capabilities` before deciding

@@ -224,7 +224,6 @@ function WebShell({ page }: { page: Page }) {
         "ok";
       return {
         project: p, liveRunners, queuedCount, needsInputCount, health,
-        sourceLabel: "—",
         updatedAtLabel: relativeTime(p.updatedAt),
       };
     });
@@ -263,13 +262,7 @@ function WebShell({ page }: { page: Page }) {
   const handleCreateTask = async (draft: NewTaskDraft) => {
     if (!params.projectId) return;
     try {
-      if (draft.kind === "manual") {
-        await board.createTask({ title: draft.title, description: draft.description || undefined });
-      } else if (draft.kind === "linear") {
-        await Promise.all(draft.issueIds.map((id) => board.createTask({ title: `Linear ${id}`, description: "" })));
-      } else if (draft.kind === "upload") {
-        await board.createTask({ title: draft.file.name, description: "(从 backlog 文件导入)" });
-      }
+      await board.createTask({ title: draft.title, description: draft.description || undefined });
       setNewTaskOpen(false);
     } catch (e) {
       handleApiError(e);

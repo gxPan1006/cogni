@@ -70,12 +70,9 @@ export class ChatDomain {
   private pendingFallbacks = new Map<string, PendingFallback>();
 
   /**
-   * SP-3 hook: when a runner emits an `AskUserQuestion` tool-call on a thread
-   * owned by a project task, ProjectDomain wires this to transition the task
-   * `running → needs-input` and surface the question to the user via the
-   * drawer's reply box. Optional — SP-1/SP-2 chat threads have no task and
-   * the wiring stays untouched (hook left undefined). Set by main.ts after
-   * ChatDomain + ProjectDomain are both constructed.
+   * Optional hook for experiments that want AskUserQuestion to pause a task.
+   * Production leaves this undefined: project runners should make reasonable
+   * assumptions and keep moving instead of surfacing clarification prompts.
    */
   public onRunnerAskingForInput?: (threadId: string, questionText: string) => Promise<void>;
 
@@ -181,12 +178,8 @@ export class ChatDomain {
     if (event.type === "session-id") {
       await setRunnerSessionId(this.db, sessionId, event.id);
     } else if (event.type === "tool-call" && event.name === "AskUserQuestion" && this.onRunnerAskingForInput) {
-      // SP-3 needs-input bridge: runners (claude-code, codex) surface
-      // mid-task clarifications via the AskUserQuestion tool. The cloud
-      // catches the event, formats the question list, and lets ProjectDomain
-      // pause the task lifecycle until the user replies in the drawer. We
-      // don't await this — the broadcast below should still fire so the UI
-      // sees the tool-call event itself.
+      // Optional needs-input bridge. Not wired in production; see field
+      // comment above for the product rationale.
       void this.onRunnerAskingForInput(threadId, formatAskUserQuestion(event.input)).catch((err) => {
         // best-effort hook; surface the error but never abort event processing.
         // eslint-disable-next-line no-console

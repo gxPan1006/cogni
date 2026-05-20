@@ -39,8 +39,6 @@ export interface ProjectListItem {
   pinned?: boolean;
   /** Display-only last-touch hint (e.g. "12m ago"); callers format the timestamp. */
   updatedAtLabel?: string;
-  /** Display-only source label ("Linear" / "Internal" / "手动"). SP-3 backend has no source field. */
-  sourceLabel?: string;
 }
 
 export function ProjectsList({
@@ -175,7 +173,6 @@ function Grid({ items, onOpen, dim }: { items: ProjectListItem[]; onOpen?: (id: 
 function ProjectCard({ item, onOpen }: { item: ProjectListItem; onOpen?: (id: string) => void }) {
   const { project, liveRunners, queuedCount, needsInputCount, health } = item;
   const totalRunners = liveRunners + queuedCount;
-  const sourceLabel = item.sourceLabel ?? "—";
   const updatedAtLabel = item.updatedAtLabel ?? "";
 
   return (
@@ -211,7 +208,7 @@ function ProjectCard({ item, onOpen }: { item: ProjectListItem; onOpen?: (id: st
         )}
       </div>
       <div className="project-card__foot">
-        <span className="project-card__source">{sourceLabel}</span>
+        <span className="project-card__source">Cogni</span>
         <span className="project-card__time">{updatedAtLabel}</span>
       </div>
     </button>
@@ -227,7 +224,7 @@ function EmptyAll({ onNew }: { onNew?: () => void }) {
         <div className="projects-list__empty-art">{Icon.kanban}</div>
         <h2 className="projects-list__empty-title">还没有项目</h2>
         <p className="projects-list__empty-text">
-          项目就是一组让 Cogni 持续跑的任务 —— 接 Linear、内部 tracker,或直接手动加。
+          项目就是一组让 Cogni 持续跑的任务,由你设定边界,它负责推进。
         </p>
         <button className="btn btn-primary" onClick={onNew}>
           {Icon.plus} 创建第一个项目

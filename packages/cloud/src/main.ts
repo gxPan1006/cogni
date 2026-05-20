@@ -35,13 +35,9 @@ const hostRpc = new HostRpcClient({ sendHostRpc, logger });
 const projectDomain = new ProjectDomain({
   db, hostRpc, hostRouter: hosts, clients, chat, logger,
 });
-// SP-3 needs-input bridge: when ChatDomain sees a runner emit
-// AskUserQuestion on a project-task thread, route it through ProjectDomain
-// so the task lifecycle pauses at `needs-input` and the user can reply in
-// the drawer. Hook is set post-construction because ChatDomain is built
-// before ProjectDomain (ProjectDomain depends on ChatDomain.handleClientSend).
-chat.onRunnerAskingForInput = (threadId, q) =>
-  projectDomain.handleAskUserQuestion(threadId, q);
+// Product stance: project tasks should keep moving without surfacing a modal
+// clarification path. If a runner emits AskUserQuestion, ChatDomain records the
+// event for history but no longer pauses the task lifecycle into needs-input.
 projectDomain.start();
 
 const emailTransport: EmailTransport =

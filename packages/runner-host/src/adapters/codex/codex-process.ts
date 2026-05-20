@@ -39,12 +39,10 @@ export type CodexRunner = (params: {
 export const CODEX_BASE_ARGS = [
   "exec",
   "--json",
-  // SP-3 §八: sandbox is permissive — cogni's autonomy assumption is that
-  // tasks run unattended on a host the user controls. Permission prompts
-  // would block the runner indefinitely (no UI surface to answer them yet;
-  // capability "permission-prompt" is intentionally not declared).
-  "--sandbox",
-  "danger-full-access",
+  // SP-3 §八: project tasks run unattended on a host the user controls.
+  // This is the Codex CLI AFK switch: no approval prompts, no command
+  // sandbox. Capability "permission-prompt" is intentionally not declared.
+  "--dangerously-bypass-approvals-and-sandbox",
   // The runner-host may dispatch a Codex session into a fresh worktree
   // before any commit lands. `--skip-git-repo-check` keeps codex from
   // refusing to run there.

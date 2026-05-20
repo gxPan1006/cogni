@@ -18,18 +18,14 @@
  * the new project. The modal closes itself on submit (parent controls
  * mount via `onClose`).
  *
- * Note: the SP-3 contract does NOT carry the legacy `source` field
- * (Linear/internal/manual). The picker is preserved as UI-only — its value
- * is dropped at the boundary. This keeps the look identical and frees us
- * to wire a real Linear integration later (SP-3+1).
+ * Cogni's project model is intentionally repo + host + supervision policy;
+ * it does not ask users to classify work by external tracker/source.
  */
 import { useEffect, useState } from "react";
 import type { MergePolicy } from "@cogni/contract";
 import type { HostInfo } from "../../transport/api.js";
 import { Icon } from "../icons.js";
 import "./new-project.css";
-
-type SourceKind = "linear" | "internal" | "manual";
 
 export interface NewProjectDraft {
   name: string;
@@ -39,9 +35,6 @@ export interface NewProjectDraft {
   concurrencyLimit: number;
   systemPrompt: string;
   mergePolicy: MergePolicy;
-  /** UI-only; ignored by the cloud in SP-3. */
-  source: SourceKind;
-  linearTeamId?: string;
   /** Ask the host to `git init` the repoPath if it isn't already a repo. */
   initRepo: boolean;
 }
@@ -68,22 +61,18 @@ export function NewProject({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [source, setSource] = useState<SourceKind>("manual");
-  const [linearTeamId, setLinearTeamId] = useState("");
   const [defaultHostId, setDefaultHostId] = useState(hosts[0]?.id ?? "");
   const [repoPath, setRepoPath] = useState("");
   const [concurrencyLimit, setConcurrencyLimit] = useState(2);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [mergePolicy, setMergePolicy] = useState<MergePolicy>("require-review");
   const [initRepo, setInitRepo] = useState(true);
-  const [testing, setTesting] = useState<"idle" | "testing" | "ok" | "fail">("idle");
   const [browseOpen, setBrowseOpen] = useState(false);
 
   const canSubmit =
     name.trim().length > 0 &&
     repoPath.trim().length > 0 &&
-    defaultHostId.length > 0 &&
-    (source !== "linear" || linearTeamId.trim().length > 0);
+    defaultHostId.length > 0;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -103,39 +92,6 @@ export function NewProject({
 
           <Field label="描述" hint="可选">
             <textarea className="input np__textarea" placeholder="给一两句话上下文,会进 system prompt" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-          </Field>
-
-          <Field label="任务来源">
-            <div className="seg seg--block">
-              <button className={"seg__btn" + (source === "linear"   ? " is-on" : "")} onClick={() => setSource("linear")}>Linear</button>
-              <button className={"seg__btn" + (source === "internal" ? " is-on" : "")} onClick={() => setSource("internal")}>内部 tracker</button>
-              <button className={"seg__btn" + (source === "manual"   ? " is-on" : "")} onClick={() => setSource("manual")}>手动</button>
-            </div>
-            {source === "linear" && (
-              <div className="np__linear">
-                <input
-                  className="input np__linear-input"
-                  placeholder="Linear team ID(例:COG)"
-                  value={linearTeamId}
-                  onChange={(e) => { setLinearTeamId(e.target.value); setTesting("idle"); }}
-                />
-                <button
-                  className="btn btn-sm"
-                  disabled={!linearTeamId.trim() || testing === "testing"}
-                  onClick={() => {
-                    setTesting("testing");
-                    // UI-only stub; SP-3+1 will wire real Linear OAuth.
-                    setTimeout(() => setTesting(linearTeamId.toUpperCase() === "FAIL" ? "fail" : "ok"), 700);
-                  }}
-                >
-                  {testing === "testing" ? "测试中…" : "测试连接"}
-                </button>
-              </div>
-            )}
-            {source === "linear" && testing === "ok"   && <div className="np__test np__test--ok">连接成功(占位)· SP-3+1 才真接</div>}
-            {source === "linear" && testing === "fail" && <div className="np__test np__test--fail">连接失败 · 检查 team ID 和 API key</div>}
-            {source === "internal" && <div className="np__hint">用 Cogni 内置的 tracker,无需外部账号。</div>}
-            {source === "manual"   && <div className="np__hint">所有任务由你或 agent 自己加。</div>}
           </Field>
 
           <Field label="默认 host" required hint="新任务首先尝试在这台机器上跑">
@@ -202,8 +158,7 @@ export function NewProject({
             className="btn btn-sm btn-primary"
             disabled={!canSubmit}
             onClick={() => onCreate?.({
-              name, description, source,
-              linearTeamId: source === "linear" ? linearTeamId : undefined,
+              name, description,
               repoPath, defaultHostId, concurrencyLimit, systemPrompt,
               mergePolicy, initRepo,
             })}
@@ -326,4 +281,3 @@ function joinPath(base: string, leaf: string): string {
   if (base.endsWith("/")) return base + leaf;
   return base + "/" + leaf;
 }
-
