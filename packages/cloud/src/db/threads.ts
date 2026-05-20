@@ -1,5 +1,5 @@
-import { eq, ne, and, desc, asc, isNull } from "drizzle-orm";
-import { threads, messages, projects } from "./schema.js";
+import { eq, ne, and, desc, asc, isNull, isNotNull, notInArray } from "drizzle-orm";
+import { threads, messages, projects, projectTasks } from "./schema.js";
 import type { AnyDb } from "./users.js";
 import type { ThreadSummary, ThreadDetail, MessageView, Role } from "@cogni/contract";
 
@@ -15,13 +15,26 @@ export async function createThread(
 }
 
 export async function listThreads(db: AnyDb, userId: string): Promise<ThreadSummary[]> {
+  // Threads that back a project task's execution — hidden from the Chat sidebar
+  // (they're surfaced inside the task detail, not as standalone conversations).
+  const taskThreadIds = db
+    .select({ id: projectTasks.executionThreadId })
+    .from(projectTasks)
+    .where(isNotNull(projectTasks.executionThreadId));
   const rows = await db
     .select()
     .from(threads)
-    // Exclude kind='workspace' orchestrator sessions — those live only in the
-    // project chat bubble, not the main Chat sidebar (which is for ordinary
-    // conversations).
-    .where(and(eq(threads.userId, userId), ne(threads.kind, "workspace"), isNull(threads.deletedAt)))
+    // The Chat sidebar is for ordinary conversations only. Exclude:
+    //   - kind='workspace' orchestrator sessions (live in the chat bubble), and
+    //   - project task-execution threads (live in the task detail drawer).
+    .where(
+      and(
+        eq(threads.userId, userId),
+        ne(threads.kind, "workspace"),
+        isNull(threads.deletedAt),
+        notInArray(threads.id, taskThreadIds),
+      ),
+    )
     .orderBy(desc(threads.updatedAt));
   return rows.map((r) => ({ id: r.id, title: r.title, updatedAt: r.updatedAt.toISOString() }));
 }

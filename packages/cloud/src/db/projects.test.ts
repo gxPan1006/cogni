@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { makeTestDb } from "./test-db.js";
 import { findOrCreateUserByEmail } from "./users.js";
 import { createHost } from "./hosts.js";
-import { createThread, createOrchestratorThread } from "./threads.js";
+import { createThread, createOrchestratorThread, listThreads } from "./threads.js";
 import { openRunnerSession } from "./sessions.js";
 import {
   createProject,
@@ -409,6 +409,26 @@ describe("projects.deleteTask + deleteProject + getProjectByThreadId", () => {
     await deleteProject(db, project.id);
     expect(await getProject(db, project.id)).toBeNull();
     expect(await getTask(db, task.id)).toBeNull();
+    await close();
+  });
+
+  it("listThreads hides task-execution threads (linked via executionThreadId)", async () => {
+    const { db, close, user, host } = await seedUserAndHost("tasklist@x.com");
+    const chat = await createThread(db, { userId: user.id, tenantId: user.tenantId });
+    const project = await createProject(db, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      name: "P",
+      repoPath: "/tmp/p",
+      defaultHostId: host.hostId,
+    });
+    const task = await createTask(db, { projectId: project.id, title: "t" });
+    const execThread = await createThread(db, { userId: user.id, tenantId: user.tenantId });
+    await updateTaskState(db, task.id, "queued", { executionThreadId: execThread.id });
+
+    const ids = (await listThreads(db, user.id)).map((t) => t.id);
+    expect(ids).toContain(chat.id); // ordinary chat stays
+    expect(ids).not.toContain(execThread.id); // task-execution thread hidden
     await close();
   });
 
