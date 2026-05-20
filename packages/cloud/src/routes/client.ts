@@ -16,6 +16,8 @@ import { getAuthSession, touchAuthSession } from "../db/auth-sessions.js";
 import { findHostByToken } from "../db/hosts.js";
 import { getProject, getTask } from "../db/projects.js";
 import { artifactFileResponse } from "./artifact-file.js";
+import { relayUpload } from "./upload.js";
+import { sendHostRpc } from "./host-ws.js";
 import type { ServerDeps } from "../server.js";
 
 /** File-writing tool names across adapters (claude-code Write/Edit, etc.). */
@@ -190,6 +192,38 @@ export function registerClientRoutes(
       return artifactFileResponse(c, reqPath, file);
     } catch (err) {
       return c.json({ error: "read failed", detail: String(err) }, 502);
+    }
+  });
+
+  // Upload a file as agent context for a chat thread. Streams the body to the
+  // thread's host (the latest runner session's host if online, else any online
+  // host) and stages it under ~/.cogni/uploads/<threadId>/. Returns the host's
+  // final (de-duped) name+size; the client references it in the next `send`
+  // frame's `attachments`.
+  app.post("/api/threads/:id/uploads", async (c) => {
+    const { userId } = c.get("claims");
+    const id = c.req.param("id");
+    if (!(await threadBelongsToUser(deps.db, id, userId))) return c.json({ error: "not found" }, 404);
+
+    const fileName = decodeURIComponent(c.req.header("X-Filename") ?? "").trim() || "upload";
+    const declaredSize = Number(c.req.header("Content-Length") ?? 0) || 0;
+
+    const session = await getLatestSessionForThread(deps.db, id);
+    const online = deps.hosts.getOnlineHostsForUser(userId);
+    const hostId = online.find((h) => h.hostId === session?.hostId)?.hostId ?? online[0]?.hostId;
+    if (!hostId) return c.json({ error: "no host online" }, 409);
+
+    const body = c.req.raw.body;
+    if (!body) return c.json({ error: "empty body" }, 400);
+
+    try {
+      const result = await relayUpload({
+        hostId, threadId: id, fileName, declaredSize,
+        body, sendRpc: sendHostRpc, chunkBytes: 2 * 1024 * 1024,
+      });
+      return c.json(result);
+    } catch (err) {
+      return c.json({ error: "upload failed", detail: String(err) }, 502);
     }
   });
   // --- WS: /api/ws?token=<jwt> ---
