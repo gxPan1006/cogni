@@ -8,9 +8,11 @@
  *   - Composer reused with optional host name pill
  *   - Quick prompts as soft outlined chips
  */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Composer } from "./Composer.js";
 import { Icon } from "./icons.js";
+import { useUploads } from "../hooks/useUploads.js";
+import type { ApiClient } from "../transport/api.js";
 import "./welcome.css";
 
 const CHIPS = [
@@ -41,14 +43,50 @@ export function Welcome({
   userName,
   hostName,
   onStartChat,
+  api,
 }: {
   userName?: string;
   /** Optional: the host this welcome will route to once you send. */
   hostName?: string;
-  onStartChat: (firstMessage: string) => void;
+  /**
+   * Start the first turn. `opts.threadId` is set when the user attached files:
+   * Welcome lazily created that thread (so uploads had somewhere to land), and
+   * the caller should navigate to it instead of creating a fresh one. `opts.
+   * attachments` are the committed uploads to send with the first message.
+   */
+  onStartChat: (
+    firstMessage: string,
+    opts?: { threadId?: string; attachments?: { name: string; size: number }[] },
+  ) => void;
+  /** Needed so attachments can target a thread before the first message is sent. */
+  api: ApiClient;
 }) {
   const [draft, setDraft] = useState("");
   const greeting = useMemo(() => buildGreeting(userName), [userName]);
+
+  // First-message attachments need a thread to upload into, but Welcome has no
+  // thread yet. Lazily create one the first time the user attaches a file (no
+  // navigation — that would unmount Welcome and lose the draft). The created id
+  // is handed to onStartChat so the caller navigates to that same thread.
+  const threadIdRef = useRef<string | null>(null);
+  const ensureThread = useCallback(async () => {
+    if (!threadIdRef.current) {
+      const t = await api.createThread();
+      threadIdRef.current = t.id;
+    }
+    return threadIdRef.current;
+  }, [api]);
+  const uploads = useUploads(async (file, onProgress) => {
+    const tid = await ensureThread();
+    return api.uploadFile(tid, file, onProgress);
+  });
+
+  const submit = () => {
+    if (!draft.trim()) return;
+    const attachments = uploads.takeAttachments();
+    onStartChat(draft, { threadId: threadIdRef.current ?? undefined, attachments });
+    setDraft("");
+  };
 
   return (
     <div className="welcome">
@@ -62,19 +100,14 @@ export function Welcome({
         )}
 
         <div className="welcome__composer-block">
-          {/* No `uploads` prop here: Welcome has no thread yet (it only collects
-              the first message and hands it to onStartChat, which creates the
-              thread downstream). uploadFile needs a threadId to target, so the
-              attach button stays disabled until the thread exists and the user
-              is in <Conversation>, where uploads are wired. */}
+          {/* Attachments are supported on the first message: the upload tray
+              lazily creates a thread to land files in, then onStartChat routes
+              there. */}
           <Composer
             draft={draft}
             setDraft={setDraft}
-            onSubmit={() => {
-              if (!draft.trim()) return;
-              onStartChat(draft);
-              setDraft("");
-            }}
+            onSubmit={submit}
+            uploads={uploads}
             status={hostName ? { kind: "ok", hostName } : undefined}
           />
 

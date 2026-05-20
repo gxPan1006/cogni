@@ -61,6 +61,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<{ name: string; size: number }[] | null>(null);
   const [hosts, setHosts] = useState<HostInfo[]>([]);
 
   // SP-3 project state (real, driven by hooks)
@@ -163,9 +164,21 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
     }
   };
 
-  const startFromWelcome = async (firstMessage: string) => {
+  const startFromWelcome = async (
+    firstMessage: string,
+    opts?: { threadId?: string; attachments?: { name: string; size: number }[] },
+  ) => {
     setPendingFirstMessage(firstMessage);
-    await newChat();
+    setPendingAttachments(opts?.attachments && opts.attachments.length > 0 ? opts.attachments : null);
+    if (opts?.threadId) {
+      // Welcome already created this thread (to land attachments) — switch to it
+      // instead of creating a new one.
+      await refreshThreads();
+      setActiveThreadId(opts.threadId);
+      setPage("chat");
+    } else {
+      await newChat();
+    }
   };
 
   const renameThread = (id: string, title: string) => {
@@ -353,12 +366,13 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
               api={api}
               threadId={activeThreadId}
               initialDraft={pendingFirstMessage ?? undefined}
-              onConsumeInitialDraft={() => setPendingFirstMessage(null)}
+              initialAttachments={pendingAttachments ?? undefined}
+              onConsumeInitialDraft={() => { setPendingFirstMessage(null); setPendingAttachments(null); }}
               onTitleMaybeChanged={refreshThreads}
               hostName={hostName}
             />
           ) : (
-            <Welcome onStartChat={startFromWelcome} hostName={hostName} />
+            <Welcome api={api} onStartChat={startFromWelcome} hostName={hostName} />
           )
         )}
       </div>

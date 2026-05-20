@@ -106,6 +106,7 @@ function WebShell({ page }: { page: Page }) {
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [hosts, setHosts] = useState<HostInfo[]>([]);
   const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<{ name: string; size: number }[] | null>(null);
 
   // Mobile drawer: the left rail is off-canvas on narrow viewports and the
   // ☰ button in the top bar slides it in. Any route change (picking a thread /
@@ -228,9 +229,20 @@ function WebShell({ page }: { page: Page }) {
     }
   };
 
-  const startFromWelcome = async (firstMessage: string) => {
+  const startFromWelcome = async (
+    firstMessage: string,
+    opts?: { threadId?: string; attachments?: { name: string; size: number }[] },
+  ) => {
     setPendingFirstMessage(firstMessage);
-    await newChat();
+    setPendingAttachments(opts?.attachments && opts.attachments.length > 0 ? opts.attachments : null);
+    if (opts?.threadId) {
+      // Welcome already created this thread (to land attachments) — pick it up
+      // into the sidebar and navigate there instead of creating a new one.
+      refreshThreads();
+      nav(`/chat/${opts.threadId}`);
+    } else {
+      await newChat();
+    }
   };
 
   const renameThread = (id: string, title: string) => {
@@ -418,12 +430,13 @@ function WebShell({ page }: { page: Page }) {
               api={api}
               threadId={params.threadId}
               initialDraft={pendingFirstMessage ?? undefined}
-              onConsumeInitialDraft={() => setPendingFirstMessage(null)}
+              initialAttachments={pendingAttachments ?? undefined}
+              onConsumeInitialDraft={() => { setPendingFirstMessage(null); setPendingAttachments(null); }}
               onTitleMaybeChanged={refreshThreads}
               hostName={hostName}
             />
           ) : (
-            <Welcome onStartChat={startFromWelcome} hostName={hostName} />
+            <Welcome api={api} onStartChat={startFromWelcome} hostName={hostName} />
           )
         )}
       </div>

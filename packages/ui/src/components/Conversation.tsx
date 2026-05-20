@@ -38,6 +38,7 @@ export function Conversation({
   api,
   threadId,
   initialDraft,
+  initialAttachments,
   onConsumeInitialDraft,
   hostName,
 }: {
@@ -45,6 +46,8 @@ export function Conversation({
   threadId: string;
   /** First message handed in from Welcome — auto-sent once the WS connects. */
   initialDraft?: string;
+  /** Files attached to the first message in Welcome (already uploaded to this thread). */
+  initialAttachments?: { name: string; size: number }[];
   onConsumeInitialDraft?: () => void;
   onTitleMaybeChanged?: () => void;
   /** Name of the host this thread is routed to. Shown above the composer. */
@@ -62,12 +65,12 @@ export function Conversation({
   // Welcome → first message: send as soon as the WS is connected.
   useEffect(() => {
     if (!consumedInitial.current && initialDraft && connected) {
-      if (send(initialDraft)) {
+      if (send(initialDraft, initialAttachments)) {
         consumedInitial.current = true;
         onConsumeInitialDraft?.();
       }
     }
-  }, [connected, initialDraft, send, onConsumeInitialDraft]);
+  }, [connected, initialDraft, initialAttachments, send, onConsumeInitialDraft]);
 
   // Auto-scroll to bottom on every change. SP-1 pins unconditionally; the
   // "stay pinned only if user was at bottom" UX lands later.
