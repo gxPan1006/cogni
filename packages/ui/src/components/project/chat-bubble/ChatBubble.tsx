@@ -35,6 +35,11 @@ import {
 } from "./geometry.js";
 import "./chat-bubble.css";
 
+function errText(e: unknown): string {
+  if (e instanceof Error && e.message) return e.message;
+  return String(e ?? "未知错误");
+}
+
 function loadPos(): Pos | null {
   try {
     const raw = localStorage.getItem(POS_KEY);
@@ -67,6 +72,7 @@ export function ChatBubble({ api, scope }: { api: ApiClient; scope: WorkspaceCha
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   const active = useMemo(() => sessions.find((s) => s.id === activeId) ?? null, [sessions, activeId]);
@@ -83,13 +89,14 @@ export function ChatBubble({ api, scope }: { api: ApiClient; scope: WorkspaceCha
     if (!open) return;
     let live = true;
     setLoading(true);
+    setError(null);
     api
       .listOrchestratorThreads(projectId)
       .then((rows) => {
         if (live) setSessions(rows);
       })
-      .catch(() => {
-        /* leave the list as-is; the new-chat button still works */
+      .catch((e) => {
+        if (live) setError("加载会话失败:" + errText(e));
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -101,14 +108,16 @@ export function ChatBubble({ api, scope }: { api: ApiClient; scope: WorkspaceCha
 
   const onNew = useCallback(() => {
     setCreating(true);
+    setError(null);
     api
       .createOrchestratorThread(projectId)
       .then((created) => {
         setSessions((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
         setActiveId(created.id);
       })
-      .catch(() => {
-        /* swallow — user can retry */
+      .catch((e) => {
+        // Never fail silently — a swallowed error here looked like "点击没反应".
+        setError("新建会话失败:" + errText(e));
       })
       .finally(() => setCreating(false));
   }, [api, projectId]);
@@ -226,6 +235,7 @@ export function ChatBubble({ api, scope }: { api: ApiClient; scope: WorkspaceCha
             composerPlaceholder={composerPlaceholder}
             loading={loading}
             creating={creating}
+            error={error}
             draft={activeId ? drafts[activeId] ?? "" : ""}
             setDraft={setDraft}
             onPick={setActiveId}

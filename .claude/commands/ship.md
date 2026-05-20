@@ -83,11 +83,28 @@ hang（见 `tbd.md` N1），毫无收益。
 git diff --stat $PROD HEAD -- packages/cloud packages/contract packages/shared apps/web
 ```
 
-### 3a. 同步 prod checkout（永远做，零风险）
+### 3a. 同步 prod checkout + **编译 dist**（永远做，零风险）
+
+> ⚠️ 关键教训（2026-05-20 踩过）：prod cloud 跑的是 `node dist/main.js`（见 `systemctl cat
+> cogni-cloud` 的 ExecStart），**不是 tsx 跑 src**。`git pull + pnpm install` 不会重新编译
+> `dist/`，光 `systemctl restart` 只是把**旧的 dist 重启一遍**——你的新路由/新逻辑根本没上线
+> （表现：新 API 路由打到 cloud.ai-cognit.com 返回 404/异常，前端静默失败像“点了没反应”）。
+> 所以 cloud/contract/shared 有改动时**必须先 build 再 restart**。DEPLOYMENT.md 的部署配方也是
+> 先 `pnpm -r --filter "@cogni/*" build` 再 restart。
 
 ```sh
-ssh prod-cognit 'sudo -u cogni bash -c "cd /opt/cogni && git pull --ff-only && pnpm install --frozen-lockfile"'
+ssh prod-cognit 'sudo -u cogni bash -c "cd /opt/cogni && git pull --ff-only && pnpm install --frozen-lockfile && pnpm -r --filter \"@cogni/*\" build"'
 ```
+
+验证 dist 真的新了（拿本次新增的符号 grep dist，对得上才算编进去了）：
+
+```sh
+# 例：本次加了 /api/orchestrator-threads 路由
+ssh prod-cognit 'grep -c orchestrator-threads /opt/cogni/packages/cloud/dist/routes/projects.js'   # 期望 >0
+```
+
+> 注意：API 在 **cloud.ai-cognit.com**，不是 chat.ai-cognit.com（后者是 SPA 静态站，未匹配的
+> GET 会兜底回 index.html 给 200、POST 给 405 —— 拿它探活会误判，必须打 cloud.* 才准）。
 
 ### 3b. 跑待处理的 DB migration（**重启前**，关键！）
 

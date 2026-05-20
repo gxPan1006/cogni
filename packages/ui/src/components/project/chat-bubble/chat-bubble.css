@@ -250,6 +250,17 @@
   font-size: 12.5px;
   padding: 8px 6px;
 }
+.cb-list-error {
+  color: var(--accent-ink, #b3261e);
+  background: color-mix(in oklch, var(--accent), transparent 88%);
+  border: 1px solid color-mix(in oklch, var(--accent), transparent 70%);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  margin: 0 0 6px;
+  word-break: break-word;
+}
 .cb-row {
   display: flex;
   flex-direction: column;

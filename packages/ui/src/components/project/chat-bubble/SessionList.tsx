@@ -22,6 +22,7 @@ export function SessionList({
   scopeLabel,
   loading,
   creating,
+  error,
   onPick,
   onNew,
 }: {
@@ -29,6 +30,7 @@ export function SessionList({
   scopeLabel: string;
   loading: boolean;
   creating: boolean;
+  error: string | null;
   onPick: (id: string) => void;
   onNew: () => void;
 }) {
@@ -39,6 +41,8 @@ export function SessionList({
         <span className="cb-newchat-label">{creating ? "新建中…" : "开始新的编排对话"}</span>
         <span className="cb-newchat-kbd">⌘N</span>
       </button>
+
+      {error && <div className="cb-list-error">{error}</div>}
 
       <div className="cb-list-head">会话</div>
       {loading && sessions.length === 0 && <div className="cb-list-empty">加载中…</div>}

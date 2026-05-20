@@ -17,6 +17,7 @@ export function ChatPanel({
   composerPlaceholder,
   loading,
   creating,
+  error,
   draft,
   setDraft,
   onPick,
@@ -32,6 +33,7 @@ export function ChatPanel({
   composerPlaceholder: string;
   loading: boolean;
   creating: boolean;
+  error: string | null;
   draft: string;
   setDraft: (v: string) => void;
   onPick: (id: string) => void;
@@ -74,6 +76,7 @@ export function ChatPanel({
             scopeLabel={scopeLabel}
             loading={loading}
             creating={creating}
+            error={error}
             onPick={onPick}
             onNew={onNew}
           />
