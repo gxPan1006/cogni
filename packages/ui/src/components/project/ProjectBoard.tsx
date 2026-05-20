@@ -64,6 +64,7 @@ export function ProjectBoard({
   onOpenSettings,
   onOpenTask,
   onPrefetchTask,
+  onMoveTask,
 }: {
   project: Project | null;
   tasks: ProjectTask[];
@@ -75,6 +76,13 @@ export function ProjectBoard({
   onOpenTask?: (id: string) => void;
   /** Hover-prefetch a task's detail into the SWR cache (flash-free drawer). */
   onPrefetchTask?: (id: string) => void;
+  /**
+   * Kanban drag-to-column. Fired when a task card is dropped on a column whose
+   * `TaskState` differs from the card's current state — the Shell wires this to
+   * `api.moveTaskState`. Omit to disable the drop (cards still drag but nothing
+   * happens on release).
+   */
+  onMoveTask?: (taskId: string, to: TaskState) => void;
 }) {
   const [view, setView] = useState<View>("columns");
 
@@ -136,7 +144,7 @@ export function ProjectBoard({
           if (id) onPrefetchTask(id);
         }}
       >
-        {view === "columns"  && <ColumnsView  tasks={tasks} hostMap={hostMap} onOpenTask={onOpenTask} />}
+        {view === "columns"  && <ColumnsView  tasks={tasks} hostMap={hostMap} onOpenTask={onOpenTask} onMoveTask={onMoveTask} />}
         {view === "swarm"    && <SwarmView    tasks={tasks} hostMap={hostMap} onOpenTask={onOpenTask} />}
         {view === "timeline" && <TimelineView tasks={tasks} hostMap={hostMap} onOpenTask={onOpenTask} />}
       </div>
@@ -206,13 +214,31 @@ function TaskCardSkeleton({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function ColumnsView({ tasks, hostMap, onOpenTask }: { tasks: ProjectTask[]; hostMap: Map<string, HostInfo>; onOpenTask?: (id: string) => void }) {
+function ColumnsView({ tasks, hostMap, onOpenTask, onMoveTask }: { tasks: ProjectTask[]; hostMap: Map<string, HostInfo>; onOpenTask?: (id: string) => void; onMoveTask?: (taskId: string, to: TaskState) => void }) {
   return (
     <div className="kb-cols">
       {COLUMN_STATES.map((state) => {
         const filtered = tasks.filter((t) => t.state === state);
         return (
-          <div key={state} className={"kb-col" + (state === "needs-input" && filtered.length > 0 ? " kb-col--alert" : "")}>
+          <div
+            key={state}
+            className={"kb-col" + (state === "needs-input" && filtered.length > 0 ? " kb-col--alert" : "")}
+            onDragOver={onMoveTask ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; } : undefined}
+            onDragEnter={onMoveTask ? (e) => (e.currentTarget as HTMLElement).classList.add("kb-col--drop") : undefined}
+            onDragLeave={onMoveTask ? (e) => {
+              // Only clear when the pointer actually left the column (not when it
+              // crossed onto a child element, which also fires dragleave).
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                (e.currentTarget as HTMLElement).classList.remove("kb-col--drop");
+              }
+            } : undefined}
+            onDrop={onMoveTask ? (e) => {
+              e.preventDefault();
+              (e.currentTarget as HTMLElement).classList.remove("kb-col--drop");
+              const id = e.dataTransfer.getData("text/task-id");
+              if (id) onMoveTask(id, state); // `state` is this column's TaskState
+            } : undefined}
+          >
             <div className="kb-col__head">
               <span className="dot" style={{ background: STATE_COLOR[state] }} />
               <span className="kb-col__label">{STATE_LABEL[state]}</span>
@@ -221,7 +247,7 @@ function ColumnsView({ tasks, hostMap, onOpenTask }: { tasks: ProjectTask[]; hos
             <div className="kb-col__body">
               {filtered.length === 0
                 ? <div className="kb-col__empty">空</div>
-                : filtered.map((t) => <ColumnCard key={t.id} task={t} hostMap={hostMap} onOpen={onOpenTask} />)}
+                : filtered.map((t) => <ColumnCard key={t.id} task={t} hostMap={hostMap} onOpen={onOpenTask} draggable={!!onMoveTask} />)}
             </div>
           </div>
         );
@@ -230,7 +256,7 @@ function ColumnsView({ tasks, hostMap, onOpenTask }: { tasks: ProjectTask[]; hos
   );
 }
 
-function ColumnCard({ task, hostMap, onOpen }: { task: ProjectTask; hostMap: Map<string, HostInfo>; onOpen?: (id: string) => void }) {
+function ColumnCard({ task, hostMap, onOpen, draggable = false }: { task: ProjectTask; hostMap: Map<string, HostInfo>; onOpen?: (id: string) => void; draggable?: boolean }) {
   const host = task.hostId ? hostMap.get(task.hostId) : undefined;
   const cls = "kb-card"
     + (task.state === "running"     ? " kb-card--running" : "")
@@ -240,7 +266,16 @@ function ColumnCard({ task, hostMap, onOpen }: { task: ProjectTask; hostMap: Map
   const activity = inferActivity(task);
   const elapsed = inferElapsed(task);
   return (
-    <button className={cls} data-task-id={task.id} onClick={() => onOpen?.(task.id)}>
+    <button
+      className={cls}
+      data-task-id={task.id}
+      onClick={() => onOpen?.(task.id)}
+      draggable={draggable}
+      onDragStart={draggable ? (e) => {
+        e.dataTransfer.setData("text/task-id", task.id);
+        e.dataTransfer.effectAllowed = "move";
+      } : undefined}
+    >
       <div className="kb-card__head">
         <span className="kb-card__ref">{task.ref}</span>
         <StatePill state={task.state} />

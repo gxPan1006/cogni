@@ -112,6 +112,11 @@
 .kb-cols--loading { min-height: auto; }
 .kb-col { display: flex; flex-direction: column; gap: 10px; }
 .kb-col--alert .kb-col__head { background: var(--warn-soft); border-radius: var(--r-2); padding: 4px 8px; margin: -4px -8px 6px; }
+/* Drag-to-requeue: the hovered column lifts a dashed accent outline while a
+   task card is dragged over it. Cleared on drop / leave. */
+.kb-col--drop { outline: 2px dashed var(--accent); outline-offset: 6px; border-radius: var(--r-3); }
+.kb-card[draggable="true"] { cursor: grab; }
+.kb-card[draggable="true"]:active { cursor: grabbing; }
 
 .kb-col__head { display: flex; align-items: center; gap: 8px; padding: 4px 4px; }
 .kb-col__label { font-size: 13px; font-weight: 600; }

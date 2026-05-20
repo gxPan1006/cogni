@@ -34,6 +34,7 @@ import {
 } from "../ChatBlocks.js";
 import { Markdown } from "../Markdown.js";
 import { StatePill, STATE_COLOR } from "./ProjectBoard.js";
+import { TaskComments } from "./TaskComments.js";
 import { LoadingRows, LoadingState } from "../LoadingState.js";
 import "../conversation.css";
 import "./task-detail.css";
@@ -207,6 +208,7 @@ export function TaskDetail({
                 </div>
               )}
               <Actions task={task} onAccept={detail.accept} onReject={detail.reject} onRetry={detail.retry} onCancel={detail.cancel} />
+              <TaskComments api={api} taskId={taskId} />
             </>
           )}
 

@@ -2,6 +2,7 @@ import type {
   ThreadSummary, ThreadDetail, HostRegistration,
   Project, ProjectTask, TaskRun, MergePolicy,
   FsBrowseResponse, GitDiffSnapshotResponse, Attachment,
+  TaskComment, TaskState,
 } from "@cogni/contract";
 import { createWsClient, type WsClient } from "./ws-client.js";
 import { ClientCache } from "./cache.js";
@@ -411,6 +412,41 @@ export class ApiClient {
   getTaskDiff = (taskId: string): Promise<GitDiffSnapshotResponse> =>
     this.request(`${this.cloudUrl}/api/tasks/${taskId}/diff`, {
       headers: this.authHeaders(),
+    });
+
+  // ─── Task comment feed (主页面) ───────────────────────────────────────
+  //
+  // The comment grid below a task's Actions row. Worker handoff notes are
+  // captured cloud-side at each transition; human comments are inert (no
+  // lifecycle change) and get folded into the runner context only at the
+  // next (re)dispatch. WS `task-comment` frames keep the feed live.
+
+  /** List a task's comment feed, chronological. */
+  getTaskComments = (taskId: string): Promise<TaskComment[]> =>
+    this.request(`${this.cloudUrl}/api/tasks/${taskId}/comments`, {
+      headers: this.authHeaders(),
+    });
+
+  /** Post an inert human comment. No state transition, no runner contact. */
+  addTaskComment = (taskId: string, body: string): Promise<TaskComment> =>
+    this.request(`${this.cloudUrl}/api/tasks/${taskId}/comments`, {
+      method: "POST", headers: this.authHeaders(), body: JSON.stringify({ body }),
+    });
+
+  /** Delete one's own un-consumed comment. */
+  deleteTaskComment = (taskId: string, commentId: string): Promise<{ ok: true }> =>
+    this.request(`${this.cloudUrl}/api/tasks/${taskId}/comments/${commentId}`, {
+      method: "DELETE", headers: this.authHeaders(),
+    });
+
+  /**
+   * Kanban drag-to-column. The cloud maps the target column to the matching
+   * lifecycle action (re-queue / activate / review / done / park) and returns
+   * the updated task row; the board reconciles via the `task-event` stream.
+   */
+  moveTaskState = (taskId: string, to: TaskState): Promise<ProjectTask> =>
+    this.request(`${this.cloudUrl}/api/tasks/${taskId}/state`, {
+      method: "PATCH", headers: this.authHeaders(), body: JSON.stringify({ to }),
     });
 
   // ─── SP-3 fs-browse (web NewProject Step 0) ───────────────────────────
