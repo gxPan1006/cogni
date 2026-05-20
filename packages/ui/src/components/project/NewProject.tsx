@@ -82,6 +82,13 @@ export function NewProject({
     setRepoPath(suggestRepoPath(selectedHost?.projectsRoot, name));
   }, [name, selectedHost?.projectsRoot, pathDirty]);
 
+  // When the selected host reports a projects-root, make the placeholder
+  // illustrative — `<root>/<项目名>` — so the user sees where a new project
+  // will land even before typing a name (the field stays empty until then).
+  const repoPathPlaceholder = selectedHost?.projectsRoot
+    ? `${selectedHost.projectsRoot.replace(/\/+$/, "")}/<项目名>`
+    : "/Users/you/code/myapp";
+
   const canSubmit =
     name.trim().length > 0 &&
     repoPath.trim().length > 0 &&
@@ -122,7 +129,7 @@ export function NewProject({
             <div className="np__path">
               <input
                 className="input np__path-input"
-                placeholder="/Users/you/code/myapp"
+                placeholder={repoPathPlaceholder}
                 value={repoPath}
                 onChange={(e) => { setRepoPath(e.target.value); setPathDirty(true); }}
               />
