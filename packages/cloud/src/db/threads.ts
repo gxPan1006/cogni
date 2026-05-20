@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, isNull } from "drizzle-orm";
+import { eq, ne, and, desc, asc, isNull } from "drizzle-orm";
 import { threads, messages, projects } from "./schema.js";
 import type { AnyDb } from "./users.js";
 import type { ThreadSummary, ThreadDetail, MessageView, Role } from "@cogni/contract";
@@ -18,7 +18,10 @@ export async function listThreads(db: AnyDb, userId: string): Promise<ThreadSumm
   const rows = await db
     .select()
     .from(threads)
-    .where(and(eq(threads.userId, userId), isNull(threads.deletedAt)))
+    // Exclude kind='workspace' orchestrator sessions — those live only in the
+    // project chat bubble, not the main Chat sidebar (which is for ordinary
+    // conversations).
+    .where(and(eq(threads.userId, userId), ne(threads.kind, "workspace"), isNull(threads.deletedAt)))
     .orderBy(desc(threads.updatedAt));
   return rows.map((r) => ({ id: r.id, title: r.title, updatedAt: r.updatedAt.toISOString() }));
 }

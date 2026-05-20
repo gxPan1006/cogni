@@ -26,6 +26,16 @@ describe("thread repository", () => {
     await close();
   });
 
+  it("listThreads excludes kind='workspace' orchestrator sessions", async () => {
+    const { db, close } = await makeTestDb();
+    const user = await findOrCreateUserByEmail(db, "ws@x.com");
+    const chat = await createThread(db, { userId: user.id, tenantId: user.tenantId });
+    await getOrCreateWorkspaceThread(db, { userId: user.id, tenantId: user.tenantId });
+    const list = await listThreads(db, user.id);
+    expect(list.map((t) => t.id)).toEqual([chat.id]); // only the ordinary chat
+    await close();
+  });
+
   it("touchThread bumps updatedAt for ordering", async () => {
     const { db, close } = await makeTestDb();
     const user = await findOrCreateUserByEmail(db, "b@x.com");
