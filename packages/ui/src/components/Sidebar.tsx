@@ -129,9 +129,11 @@ function ChatLists(props: {
   onRenameThread?: (id: string, title: string) => void;
   onDeleteThread?: (id: string) => void;
 }) {
-  // Only one row edits at a time; keeping the edit state here (not per-row)
-  // means switching threads or modes cleanly resets any open rename input.
+  // Only one row is in rename / delete-confirm mode at a time; keeping that
+  // state here (not per-row) means switching threads or modes cleanly resets
+  // any open input, and the two modes are mutually exclusive.
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const pinned = props.threads.filter((t) => (t as ThreadSummary & { pinned?: boolean }).pinned);
   const rest   = props.threads.filter((t) => !(t as ThreadSummary & { pinned?: boolean }).pinned);
@@ -142,14 +144,20 @@ function ChatLists(props: {
       thread={t}
       active={t.id === props.activeThreadId}
       editing={editingId === t.id}
+      confirmingDelete={confirmingId === t.id}
       onClick={() => props.onSelect(t.id)}
-      onStartRename={props.onRenameThread ? () => setEditingId(t.id) : undefined}
+      onStartRename={props.onRenameThread ? () => { setConfirmingId(null); setEditingId(t.id); } : undefined}
       onCommitRename={(title) => {
         props.onRenameThread?.(t.id, title);
         setEditingId(null);
       }}
       onCancelRename={() => setEditingId(null)}
-      onDelete={props.onDeleteThread ? () => props.onDeleteThread?.(t.id) : undefined}
+      onStartDelete={props.onDeleteThread ? () => { setEditingId(null); setConfirmingId(t.id); } : undefined}
+      onConfirmDelete={() => {
+        props.onDeleteThread?.(t.id);
+        setConfirmingId(null);
+      }}
+      onCancelDelete={() => setConfirmingId(null)}
     />
   );
 
@@ -172,17 +180,21 @@ function ChatLists(props: {
 }
 
 function ThreadRow({
-  thread, active, editing, onClick,
-  onStartRename, onCommitRename, onCancelRename, onDelete,
+  thread, active, editing, confirmingDelete, onClick,
+  onStartRename, onCommitRename, onCancelRename,
+  onStartDelete, onConfirmDelete, onCancelDelete,
 }: {
   thread: ThreadSummary;
   active: boolean;
   editing: boolean;
+  confirmingDelete: boolean;
   onClick: () => void;
   onStartRename?: () => void;
   onCommitRename: (title: string) => void;
   onCancelRename: () => void;
-  onDelete?: () => void;
+  onStartDelete?: () => void;
+  onConfirmDelete: () => void;
+  onCancelDelete: () => void;
 }) {
   const [draft, setDraft] = useState(thread.title);
 
@@ -212,12 +224,30 @@ function ThreadRow({
     );
   }
 
+  // In-place delete confirmation — no native popup. The row turns red and the
+  // title is replaced by "删除「…」?" with a confirm (red ✓) / cancel (×) pair.
+  if (confirmingDelete) {
+    return (
+      <div
+        className={"sb-thread sb-thread--confirm" + (active ? " is-active" : "")}
+        tabIndex={-1}
+        onKeyDown={(e) => { if (e.key === "Escape") onCancelDelete(); }}
+      >
+        <span className="sb-thread__confirm" title={thread.title}>删除「{thread.title}」?</span>
+        <span className="sb-thread__actions">
+          <button className="sb-thread__act sb-thread__act--danger" title="确认删除" onClick={onConfirmDelete}>{Icon.check}</button>
+          <button className="sb-thread__act" title="取消" onClick={onCancelDelete}>{Icon.x}</button>
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className={"sb-thread" + (active ? " is-active" : "")}>
       <button className="sb-thread__title" onClick={onClick} title={thread.title}>
         {thread.title}
       </button>
-      {(onStartRename || onDelete) && (
+      {(onStartRename || onStartDelete) && (
         <span className="sb-thread__actions">
           {onStartRename && (
             <button
@@ -226,14 +256,11 @@ function ThreadRow({
               onClick={(e) => { e.stopPropagation(); setDraft(thread.title); onStartRename(); }}
             >{Icon.edit}</button>
           )}
-          {onDelete && (
+          {onStartDelete && (
             <button
               className="sb-thread__act sb-thread__act--danger"
               title="删除"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (window.confirm(`删除对话「${thread.title}」?`)) onDelete();
-              }}
+              onClick={(e) => { e.stopPropagation(); onStartDelete(); }}
             >{Icon.trash}</button>
           )}
         </span>
