@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ClaudeCodeAdapter } from "./claude-code.js";
+import { ClaudeCodeAdapter, type ClaudeRunner } from "./claude-code.js";
 import type { RunnerEvent } from "@cogni/contract";
 
 // Fake runner: yields canned Claude stream-json lines.
@@ -58,5 +58,24 @@ describe("ClaudeCodeAdapter", () => {
     const adapter = new ClaudeCodeAdapter(fakeRunner([]));
     const session = await adapter.resumeSession("claude-prev", { cwd: "/tmp/x" });
     expect(session.runnerSessionId).toBe("claude-prev");
+  });
+
+  it("passes mcpConfigPath + allowedTools through to the runner", async () => {
+    const seen: Array<Parameters<ClaudeRunner>[0]> = [];
+    const runner: ClaudeRunner = async function* (p) {
+      seen.push(p);
+      yield JSON.stringify({ type: "result", subtype: "success" });
+    };
+    const adapter = new ClaudeCodeAdapter(runner);
+    const session = await adapter.startSession({
+      cwd: "/tmp",
+      mcpConfigPath: "/tmp/cogni-mcp.json",
+      allowedTools: ["mcp__cogni__create_task"],
+    });
+    for await (const _ of session.send("hi")) { /* drain */ }
+    expect(seen[0]).toMatchObject({
+      mcpConfigPath: "/tmp/cogni-mcp.json",
+      allowedTools: ["mcp__cogni__create_task"],
+    });
   });
 });

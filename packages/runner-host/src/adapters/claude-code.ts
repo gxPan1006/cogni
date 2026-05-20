@@ -9,6 +9,10 @@ export type ClaudeRunner = (params: {
   cwd: string;
   message: string;
   resumeId: string | null;
+  /** SP-4: path to an MCP config JSON passed as `--mcp-config`. */
+  mcpConfigPath?: string;
+  /** SP-4: tool allowlist passed as a single comma-joined `--allowed-tools`. */
+  allowedTools?: string[];
 }) => AsyncIterable<string>;
 
 const CAPABILITIES: RunnerCapability[] = ["streaming", "session-resume", "tool-events"];
@@ -32,7 +36,7 @@ const CAPABILITIES: RunnerCapability[] = ["streaming", "session-resume", "tool-e
  * stdout stays an unbuffered Readable we can drive with `readline`, while stderr
  * is still buffered so a non-zero exit can report a useful message.
  */
-export const defaultClaudeRunner: ClaudeRunner = async function* ({ cwd, message, resumeId }) {
+export const defaultClaudeRunner: ClaudeRunner = async function* ({ cwd, message, resumeId, mcpConfigPath, allowedTools }) {
   const args = [
     "--print",
     "--output-format", "stream-json",
@@ -42,6 +46,11 @@ export const defaultClaudeRunner: ClaudeRunner = async function* ({ cwd, message
     "--dangerously-skip-permissions",
   ];
   if (resumeId) args.push("--resume", resumeId);
+  // SP-4: orchestrator dispatches mount the cogni stdio MCP server and
+  // restrict the runner to its tools. Claude Code takes one comma-joined
+  // `--allowed-tools` argument.
+  if (mcpConfigPath) args.push("--mcp-config", mcpConfigPath);
+  if (allowedTools && allowedTools.length) args.push("--allowed-tools", allowedTools.join(","));
   const proc = execa("claude", args, {
     cwd,
     input: message,
@@ -76,6 +85,7 @@ class ClaudeCodeSession implements RunnerSessionHandle {
     private readonly runner: ClaudeRunner,
     private readonly cwd: string,
     resumeId: string | null,
+    private readonly opts: { mcpConfigPath?: string; allowedTools?: string[] } = {},
   ) {
     this._runnerSessionId = resumeId;
   }
@@ -85,7 +95,13 @@ class ClaudeCodeSession implements RunnerSessionHandle {
   async *send(message: string): AsyncIterable<RunnerEvent> {
     let sawTerminal = false;
     try {
-      for await (const line of this.runner({ cwd: this.cwd, message, resumeId: this._runnerSessionId })) {
+      for await (const line of this.runner({
+        cwd: this.cwd,
+        message,
+        resumeId: this._runnerSessionId,
+        mcpConfigPath: this.opts.mcpConfigPath,
+        allowedTools: this.opts.allowedTools,
+      })) {
         for (const event of translateLine(line)) {
           if (event.type === "session-id") this._runnerSessionId = event.id;
           if (event.type === "done" || event.type === "error") sawTerminal = true;
@@ -109,10 +125,16 @@ export class ClaudeCodeAdapter implements RunnerAdapter {
   constructor(private readonly runner: ClaudeRunner = defaultClaudeRunner) {}
 
   async startSession(opts: StartSessionOpts): Promise<RunnerSessionHandle> {
-    return new ClaudeCodeSession(this.runner, opts.cwd, null);
+    return new ClaudeCodeSession(this.runner, opts.cwd, null, {
+      mcpConfigPath: opts.mcpConfigPath,
+      allowedTools: opts.allowedTools,
+    });
   }
   async resumeSession(runnerSessionId: string, opts: StartSessionOpts): Promise<RunnerSessionHandle> {
-    return new ClaudeCodeSession(this.runner, opts.cwd, runnerSessionId);
+    return new ClaudeCodeSession(this.runner, opts.cwd, runnerSessionId, {
+      mcpConfigPath: opts.mcpConfigPath,
+      allowedTools: opts.allowedTools,
+    });
   }
 }
 
