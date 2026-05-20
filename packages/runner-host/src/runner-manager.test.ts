@@ -1,6 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { RunnerManager } from "./runner-manager.js";
-import type { RunnerAdapter, RunnerEvent } from "@cogni/contract";
+import type { RunnerAdapter, RunnerEvent, RunnerSessionHandle } from "@cogni/contract";
 
 function fakeAdapter(events: RunnerEvent[]): RunnerAdapter {
   const make = (resumeId: string | null) => ({
@@ -112,5 +115,41 @@ describe("RunnerManager", () => {
     const caps = mgr.capabilities();
     expect(caps.adapters.sort()).toEqual(["claude-code", "codex"]);
     expect(caps.capabilities.sort()).toEqual(["streaming", "tool-events"]);
+  });
+});
+
+function attachmentAdapter(): RunnerAdapter {
+  const handle: RunnerSessionHandle = {
+    runnerSessionId: null,
+    async *send() { yield { type: "done" } as const; },
+    async close() {},
+  };
+  return {
+    id: "claude-code",
+    capabilities: ["streaming"],
+    async startSession() { return handle; },
+    async resumeSession() { return handle; },
+  } as unknown as RunnerAdapter;
+}
+
+describe("RunnerManager attachment materialization", () => {
+  let home: string;
+  beforeEach(async () => { home = await mkdtemp(join(tmpdir(), "cogni-rm-")); process.env.COGNI_HOME = home; });
+  afterEach(async () => { delete process.env.COGNI_HOME; await rm(home, { recursive: true, force: true }); });
+
+  it("copies staged attachments into <cwd>/.cogni-uploads before the turn", async () => {
+    const stage = join(home, "uploads", "t1");
+    await mkdir(stage, { recursive: true });
+    await writeFile(join(stage, "foo.txt"), "hi");
+
+    const mgr = new RunnerManager();
+    mgr.register(attachmentAdapter());
+    const events: unknown[] = [];
+    await mgr.dispatch(
+      { sessionId: "s1", threadId: "t1", adapter: "claude-code", runnerSessionId: null, message: "go", attachments: [{ name: "foo.txt" }] },
+      (e) => events.push(e),
+    );
+    const cwd = join(home, "threads", "t1");
+    expect(await readFile(join(cwd, ".cogni-uploads", "foo.txt"), "utf8")).toBe("hi");
   });
 });

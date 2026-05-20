@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import type { RunnerAdapter, RunnerEvent, RunnerSessionHandle, StartSessionOpts } from "@cogni/contract";
 import { threadScratchDir } from "./config.js";
 import { ensureCogniMcpConfig, COGNI_ALLOWED_TOOLS } from "./mcp/mcp-config.js";
+import { materializeUploads } from "./uploads.js";
 
 export interface DispatchInput {
   sessionId: string;
@@ -29,6 +30,11 @@ export interface DispatchInput {
    * resumed sessions keep the framing.
    */
   appendSystemPrompt?: string;
+  /**
+   * Files the user attached this turn. Copied from the host staging dir into
+   * <cwd>/.cogni-uploads/ before the runner starts. Absent for turns with none.
+   */
+  attachments?: { name: string }[];
 }
 
 /** Holds registered adapters + live session handles, runs one turn per dispatch. */
@@ -71,6 +77,14 @@ export class RunnerManager {
     const cwd = input.workspacePath ?? threadScratchDir(input.threadId);
     if (!input.workspacePath) {
       await mkdir(cwd, { recursive: true });
+    }
+
+    // File-upload: copy this turn's staged attachments into <cwd>/.cogni-uploads/
+    // BEFORE the runner starts, so Claude Code can read them. Runs for both the
+    // chat scratch dir and the project-task worktree; materializeUploads mkdirs
+    // the target subdir and (for worktrees) adds a git exclude.
+    if (input.attachments && input.attachments.length > 0) {
+      await materializeUploads(input.threadId, input.attachments, cwd);
     }
 
     // SP-4: orchestrator dispatches mount the cogni MCP server + tool allowlist;
