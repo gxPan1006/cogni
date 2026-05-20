@@ -65,6 +65,20 @@ export const gitWorktreeRemoveRequestSchema = z.object({
   worktreePath: z.string(),
   /** If true, pass `--force` to `git worktree remove`. SP-3 reviewing→reject sends true. */
   force: z.boolean(),
+  /**
+   * SP-3: repo root, needed to delete the task branch after the worktree is
+   * gone. Branch deletion can't happen while the worktree still has the
+   * branch checked out (git refuses), so it's deferred to here rather than
+   * done inside git-merge-to-main. Optional — omit to skip branch cleanup.
+   */
+  repoPath: z.string().optional(),
+  /**
+   * SP-3: the task branch to delete once the worktree is removed. Uses
+   * `git branch -d` when `force` is false (refuses if unmerged — the
+   * accept/auto-merge path, branch is already merged) or `-D` when `force`
+   * is true (the reject/cancel path, discard unmerged work). No-op if absent.
+   */
+  branchName: z.string().optional(),
 });
 export type GitWorktreeRemoveRequest = z.infer<typeof gitWorktreeRemoveRequestSchema>;
 

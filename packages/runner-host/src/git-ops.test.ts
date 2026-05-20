@@ -147,6 +147,52 @@ describe("gitWorktreeRemove", () => {
     const res = await gitWorktreeRemove({ worktreePath: wt, force: true });
     expect(res.removed).toBe(true);
   });
+
+  it.skipIf(!hasGit)("deletes the task branch when repoPath + branchName given (force=true → -D, unmerged ok)", async () => {
+    const repo = await bootstrapRepo();
+    const wt = join(repo, ".worktrees", "with-branch");
+    await gitWorktreeCreate({ repoPath: repo, branchName: "task/with-branch", worktreePath: wt });
+    // Commit something on the branch so it's a real (unmerged) branch.
+    await writeFile(join(wt, "f.txt"), "x", "utf8");
+    await execa("git", ["-C", wt, "add", "."], { reject: true });
+    await execa("git", ["-C", wt, "commit", "-m", "wip"], { reject: true, env: cogniEnv() });
+
+    const res = await gitWorktreeRemove({
+      worktreePath: wt,
+      force: true, // reject/cancel semantics → -D, discards unmerged branch
+      repoPath: repo,
+      branchName: "task/with-branch",
+    });
+    expect(res.removed).toBe(true);
+    // Branch should be gone.
+    const branches = await execa("git", ["-C", repo, "branch", "--list", "task/with-branch"], { reject: false });
+    expect(branches.stdout.trim()).toBe("");
+  });
+
+  it.skipIf(!hasGit)("deletes the merged task branch after merge (force=false → -d succeeds)", async () => {
+    const repo = await bootstrapRepo();
+    const wt = join(repo, ".worktrees", "merged");
+    await gitWorktreeCreate({ repoPath: repo, branchName: "task/merged", worktreePath: wt });
+    await writeFile(join(wt, "g.txt"), "y", "utf8");
+    await execa("git", ["-C", wt, "add", "."], { reject: true });
+    await execa("git", ["-C", wt, "commit", "-m", "done"], { reject: true, env: cogniEnv() });
+    // Merge into main first (mirrors the real accept flow: merge, THEN remove).
+    const merge = await gitMergeToMain({ repoPath: repo, branchName: "task/merged" });
+    expect(merge.ok).toBe(true);
+    // Branch is still present right after merge (we no longer delete it in merge).
+    const before = await execa("git", ["-C", repo, "branch", "--list", "task/merged"], { reject: false });
+    expect(before.stdout.trim()).not.toBe("");
+    // Now remove worktree + delete branch (-d, merged so it succeeds).
+    const res = await gitWorktreeRemove({
+      worktreePath: wt,
+      force: false,
+      repoPath: repo,
+      branchName: "task/merged",
+    });
+    expect(res.removed).toBe(true);
+    const after = await execa("git", ["-C", repo, "branch", "--list", "task/merged"], { reject: false });
+    expect(after.stdout.trim()).toBe("");
+  });
 });
 
 describe("gitMergeToMain", () => {

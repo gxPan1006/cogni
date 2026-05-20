@@ -229,6 +229,16 @@ export async function gitWorktreeRemove(
       r.stderr || `git worktree remove exited ${r.exitCode}`,
     );
   }
+  // SP-3: now that the worktree is gone, the task branch is no longer checked
+  // out anywhere, so it can be deleted (git refuses to delete a branch that a
+  // worktree still has checked out). `-d` for the accept path (branch already
+  // merged), `-D` for reject/cancel (discard unmerged). Best-effort: a failed
+  // branch delete leaves a dangling branch but the worktree is already cleaned,
+  // so we log rather than throw.
+  if (req.repoPath && req.branchName) {
+    const flag = req.force ? "-D" : "-d";
+    await execa("git", ["-C", req.repoPath, "branch", flag, req.branchName], { reject: false });
+  }
   return { removed: true };
 }
 
@@ -276,9 +286,11 @@ export async function gitMergeToMain(
       message: merge.stderr || merge.stdout || "merge failed",
     };
   }
-  // Delete the merged branch — leaves the repo tidy. `-d` (not `-D`) refuses
-  // if not merged; that's the right safety behavior here.
-  await execa("git", ["-C", req.repoPath, "branch", "-d", req.branchName], { reject: false });
+  // NOTE: branch deletion is intentionally NOT done here. At merge time the
+  // task's worktree still has the branch checked out, so `git branch -d` would
+  // fail ("checked out at <worktree>"). Branch cleanup is deferred to
+  // gitWorktreeRemove (called right after this in the accept/auto-merge flow),
+  // which deletes the branch once the worktree is gone. See spec §七 / tbd #3a.
   return { ok: true };
 }
 

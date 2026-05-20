@@ -124,6 +124,9 @@ export async function evaluateAndApplyMergeGate(
     await deps.hostRpc.gitWorktreeRemove(task.hostId, {
       worktreePath: task.worktreePath,
       force: false,
+      // Branch is already merged into main above; clean it up too (git -d).
+      repoPath: project.repoPath,
+      branchName: task.branchName,
     });
   } catch (err) {
     deps.logger?.warn?.(

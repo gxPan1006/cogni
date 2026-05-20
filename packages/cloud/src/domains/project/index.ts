@@ -283,10 +283,15 @@ export class ProjectDomain {
       throw new Error(`rejectTask: task is in ${task.state}, not reviewing`);
     }
     if (task.hostId && task.worktreePath) {
+      const project = await dbGetProject(this.deps.db, task.projectId);
       try {
         await this.deps.hostRpc.gitWorktreeRemove(task.hostId, {
           worktreePath: task.worktreePath,
           force: true,
+          // Discard the unmerged task branch too (git -D).
+          ...(project && task.branchName
+            ? { repoPath: project.repoPath, branchName: task.branchName }
+            : {}),
         });
       } catch (err) {
         this.deps.logger?.warn?.(
@@ -346,10 +351,16 @@ export class ProjectDomain {
       }
     }
     if (task.hostId && task.worktreePath) {
+      const project = await dbGetProject(this.deps.db, task.projectId);
       try {
         await this.deps.hostRpc.gitWorktreeRemove(task.hostId, {
           worktreePath: task.worktreePath,
           force: true,
+          // Discard the unmerged task branch too (git -D). repoPath only
+          // present if we could resolve the project (always, in practice).
+          ...(project && task.branchName
+            ? { repoPath: project.repoPath, branchName: task.branchName }
+            : {}),
         });
       } catch (err) {
         this.deps.logger?.warn?.(
