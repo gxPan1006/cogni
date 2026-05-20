@@ -33,6 +33,7 @@ export function Composer({
   onSubmit,
   disabled,
   status,
+  placeholder,
 }: {
   draft: string;
   setDraft: (v: string) => void;
@@ -40,6 +41,8 @@ export function Composer({
   disabled?: boolean;
   /** Pill above the textarea. Omit to hide the pill entirely. */
   status?: ComposerStatus;
+  /** Override the idle textarea placeholder (e.g. orchestrator scope hint). */
+  placeholder?: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -69,7 +72,7 @@ export function Composer({
           ref={textareaRef}
           className="composer__input"
           value={draft}
-          placeholder={disabled ? "等待重连…" : "想聊点什么?"}
+          placeholder={disabled ? "等待重连…" : (placeholder ?? "想聊点什么?")}
           rows={1}
           disabled={disabled}
           onChange={(e) => setDraft(e.target.value)}

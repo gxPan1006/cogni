@@ -162,6 +162,14 @@ export class ApiClient {
   getThread = (id: string): Promise<ThreadDetail> =>
     this.request(`${this.cloudUrl}/api/threads/${id}`, { headers: this.authHeaders() });
 
+  /** Stable per-user workspace orchestrator thread (kind=workspace). */
+  getWorkspaceThread = (): Promise<{ threadId: string }> =>
+    this.request(`${this.cloudUrl}/api/workspace-thread`, { headers: this.authHeaders() });
+
+  /** Project-scoped orchestrator thread (lazily created, kind=workspace). */
+  getProjectChatThread = (projectId: string): Promise<{ threadId: string }> =>
+    this.request(`${this.cloudUrl}/api/projects/${projectId}/chat-thread`, { headers: this.authHeaders() });
+
   renameThread = (id: string, title: string): Promise<{ ok: true }> =>
     this.request(`${this.cloudUrl}/api/threads/${id}`, {
       method: "PATCH", headers: this.authHeaders(), body: JSON.stringify({ title }),
