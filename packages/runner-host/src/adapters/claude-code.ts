@@ -14,10 +14,18 @@ export type ClaudeRunner = (params: {
 const CAPABILITIES: RunnerCapability[] = ["streaming", "session-resume", "tool-events"];
 
 /**
- * Default runner: spawns `claude --print --output-format stream-json --verbose`,
- * pipes the message on stdin, yields stdout lines. Mirrors the working invocation
- * in cognit-flow/src/coding-tool/claude-cli.ts — adjust flags there if Claude Code
- * changes its CLI surface.
+ * Default runner: spawns `claude --print --output-format stream-json --verbose
+ * --permission-mode bypassPermissions --dangerously-skip-permissions`, pipes
+ * the message on stdin, yields stdout lines.
+ *
+ * **`--permission-mode bypassPermissions` + `--dangerously-skip-permissions`
+ * are load-bearing (spec §九).** Without them, Claude Code falls into *plan
+ * mode* — it writes a plan doc to ~/.claude/plans and calls ExitPlanMode
+ * instead of editing files in the worktree, so the task "completes" with an
+ * empty worktree and no commit. SP-3 deliberately trusts the per-task git
+ * worktree as the sandbox, so the runner runs unattended with permissions
+ * fully bypassed and never pauses for an approval prompt that no human is
+ * watching.
  *
  * execa v9 note: `buffer: false` would unset `proc.stdout` (no stream) and
  * `result.stderr`. We instead use the per-fd form `buffer: { stdout: false }`:
@@ -25,7 +33,14 @@ const CAPABILITIES: RunnerCapability[] = ["streaming", "session-resume", "tool-e
  * is still buffered so a non-zero exit can report a useful message.
  */
 export const defaultClaudeRunner: ClaudeRunner = async function* ({ cwd, message, resumeId }) {
-  const args = ["--print", "--output-format", "stream-json", "--verbose"];
+  const args = [
+    "--print",
+    "--output-format", "stream-json",
+    "--verbose",
+    // Run unattended: never enter plan mode, never block on an approval prompt.
+    "--permission-mode", "bypassPermissions",
+    "--dangerously-skip-permissions",
+  ];
   if (resumeId) args.push("--resume", resumeId);
   const proc = execa("claude", args, {
     cwd,
