@@ -42,6 +42,10 @@ export function useThreadStream(api: ApiClient, threadId: string) {
   // turns keep their events so tool-call pills survive past the final answer
   // and across reloads. `buildTimeline` slices it back into per-turn blocks.
   const [events, setEvents] = useState<RunnerEvent[]>([]);
+  // True only while a thread with NO cached snapshot is doing its first
+  // history fetch. Lets the view show a loading state instead of the "empty
+  // conversation" placeholder, which used to flash before the history loaded.
+  const [loading, setLoading] = useState(false);
   const [hostOnline, setHostOnline] = useState(true);
   const [connected, setConnected] = useState(() => api.wsClient.isConnected());
   const [pendingFallback, setPendingFallback] = useState<PendingFallback | null>(null);
@@ -85,6 +89,10 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     setMessages(cached ?? []);
     setEvents(cachedEv?.events ?? []);
     lastSeqRef.current = cachedEv?.lastSeq ?? 0;
+    // Only show the loading state when we have nothing cached to paint. With a
+    // cached snapshot we render it instantly and revalidate in the background.
+    const hasSeed = (cached?.length ?? 0) > 0 || (cachedEv?.events.length ?? 0) > 0;
+    setLoading(!hasSeed);
 
     // Guards a stale getThread/catchup resolving after the user already moved
     // on — without this the late promise would clobber the new thread's view.
@@ -117,6 +125,9 @@ export function useThreadStream(api: ApiClient, threadId: string) {
         console.error("failed to load thread history", e);
         // Keep whatever we seeded from cache rather than blanking on error.
         if (active && !cached) setMessages([]);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
 
     const unsubscribe = api.wsClient.subscribeThread({
@@ -220,6 +231,7 @@ export function useThreadStream(api: ApiClient, threadId: string) {
   return {
     messages,
     events,
+    loading,
     hostOnline,
     connected,
     send,

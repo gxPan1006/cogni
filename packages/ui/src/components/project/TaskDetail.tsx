@@ -328,14 +328,16 @@ function Actions({ task, onAccept, onReject, onRetry, onCancel }: {
 }
 
 function ThreadSection({ api, threadId }: { api: ApiClient; threadId: string }) {
-  const { messages, events } = useThreadStream(api, threadId);
+  const { messages, events, loading } = useThreadStream(api, threadId);
   const { rows } = buildTimeline(messages, events);
   if (rows.length === 0) {
     return (
       <section className="td-thread">
         <div className="td-thread__head"><span>对话</span></div>
         <div className="td-thread__body">
-          <div className="td-thread__empty">runner 还没说话…</div>
+          {loading
+            ? <LoadingRows rows={3} compact />
+            : <div className="td-thread__empty">runner 还没说话…</div>}
         </div>
       </section>
     );

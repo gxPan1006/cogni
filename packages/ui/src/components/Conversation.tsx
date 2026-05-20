@@ -26,6 +26,7 @@ import { useThreadStream } from "../hooks/useThreadStream.js";
 import { Composer, type ComposerStatus } from "./Composer.js";
 import { HostFallbackCard } from "./HostFallbackCard.js";
 import { NoHostBanner } from "./NoHostBanner.js";
+import { LoadingRows } from "./LoadingState.js";
 import {
   UserMessage, AssistantText, AssistantBlocks,
   buildTimeline,
@@ -49,7 +50,7 @@ export function Conversation({
   hostName?: string;
 }) {
   const {
-    messages, events, hostOnline, connected, send,
+    messages, events, loading, hostOnline, connected, send,
     pendingFallback, pendingNoHost, resolveFallback,
   } = useThreadStream(api, threadId);
   const [draft, setDraft] = useState("");
@@ -99,7 +100,12 @@ export function Conversation({
       <div className="conversation__scroll" ref={scrollRef}>
         <div className="conversation__list">
           {isEmpty && (
-            <div className="conversation__empty">开始你的对话吧</div>
+            loading
+              // First load of an uncached thread — show a skeleton, never the
+              // "empty conversation" placeholder (which used to flash before
+              // the history arrived).
+              ? <LoadingRows rows={4} />
+              : <div className="conversation__empty">开始你的对话吧</div>
           )}
 
           {/* Whole conversation, event-sourced: user turns interleaved with
