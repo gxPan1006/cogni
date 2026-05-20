@@ -10,11 +10,38 @@ import {
   listThreads, createThread, getThreadDetail, threadBelongsToUser,
   updateThreadTitle, softDeleteThread,
 } from "../db/threads.js";
-import { listEventsSince } from "../db/sessions.js";
+import { listEventsSince, getLatestSessionForThread } from "../db/sessions.js";
 import { events as eventsTable } from "../db/schema.js";
 import { getAuthSession, touchAuthSession } from "../db/auth-sessions.js";
 import { getProject, getTask } from "../db/projects.js";
+import { artifactFileResponse } from "./artifact-file.js";
 import type { ServerDeps } from "../server.js";
+
+/** File-writing tool names across adapters (claude-code Write/Edit, etc.). */
+const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit", "create_file", "apply_patch"]);
+
+/**
+ * The deliverable set for a chat thread = absolute paths the runner Wrote /
+ * Edited, recovered from the tool-call event log (most-recent write of each
+ * path wins; order preserved by last-seen). No git boundary exists for chat,
+ * so this event-derived allowlist is what we expose + confine downloads to.
+ */
+async function threadWrittenFiles(deps: ServerDeps, threadId: string): Promise<string[]> {
+  const evs = await listEventsSince(deps.db, threadId, 0);
+  const seen: string[] = [];
+  for (const e of evs) {
+    if (e.type !== "tool-call") continue;
+    const p = e.payload as { name?: unknown; input?: unknown };
+    if (typeof p.name !== "string" || !WRITE_TOOLS.has(p.name)) continue;
+    const input = p.input as { file_path?: unknown; path?: unknown } | null;
+    const fp = input && typeof input === "object"
+      ? (typeof input.file_path === "string" ? input.file_path
+        : typeof input.path === "string" ? input.path : null)
+      : null;
+    if (fp && !seen.includes(fp)) seen.push(fp);
+  }
+  return seen;
+}
 
 /**
  * SP-2 hard cap on a single subscribe-thread catchup. If the unread tail
@@ -115,6 +142,41 @@ export function registerClientRoutes(
     const sinceRaw = Number(c.req.query("since") ?? 0);
     const since = Number.isFinite(sinceRaw) ? sinceRaw : 0;
     return c.json(await listEventsSince(deps.db, id, since));
+  });
+
+  // ─── SP-4 Artifacts: chat thread file delivery ───────────────────────────
+  // chat has no git boundary, so the deliverable set = the files the runner
+  // actually Wrote/Edited this thread (extracted from the tool-call event
+  // log). That same allowlist confines the download endpoint — we never read
+  // an arbitrary host path, only one the runner is on record as having
+  // produced in this thread.
+
+  app.get("/api/threads/:id/files", async (c) => {
+    const { userId } = c.get("claims");
+    const id = c.req.param("id");
+    if (!(await threadBelongsToUser(deps.db, id, userId))) return c.json({ error: "not found" }, 404);
+    const paths = await threadWrittenFiles(deps, id);
+    return c.json({ files: paths.map((p) => ({ path: p, name: p.split("/").pop() ?? p })) });
+  });
+
+  app.get("/api/threads/:id/file", async (c) => {
+    const { userId } = c.get("claims");
+    const id = c.req.param("id");
+    if (!(await threadBelongsToUser(deps.db, id, userId))) return c.json({ error: "not found" }, 404);
+    const reqPath = c.req.query("path");
+    if (!reqPath) return c.json({ error: "path required" }, 400);
+    // Allowlist: only files the runner Wrote/Edited in this thread.
+    const allow = await threadWrittenFiles(deps, id);
+    if (!allow.includes(reqPath)) return c.json({ error: "not a deliverable of this thread" }, 403);
+    if (!deps.projectDomain) return c.json({ error: "project domain unavailable" }, 503);
+    const session = await getLatestSessionForThread(deps.db, id);
+    if (!session?.hostId) return c.json({ error: "no host for thread" }, 409);
+    try {
+      const file = await deps.projectDomain.readFile(session.hostId, reqPath);
+      return artifactFileResponse(c, reqPath, file);
+    } catch (err) {
+      return c.json({ error: "read failed", detail: String(err) }, 502);
+    }
   });
   // --- WS: /api/ws?token=<jwt> ---
   app.get(

@@ -20,10 +20,15 @@
  * stable strings the cloud / UI can branch on.
  */
 
-import { readdir, stat } from "node:fs/promises";
+import { readdir, stat, open } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, isAbsolute, resolve } from "node:path";
-import type { FsBrowseRequest, FsBrowseResponse, FsBrowseEntry } from "@cogni/contract";
+import type {
+  FsBrowseRequest, FsBrowseResponse, FsBrowseEntry,
+  ReadFileRequest, ReadFileResponse,
+} from "@cogni/contract";
+
+const DEFAULT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export class FsBrowseError extends Error {
   readonly code: string;
@@ -113,6 +118,47 @@ export async function fsBrowse(req: FsBrowseRequest): Promise<FsBrowseResponse> 
   });
 
   return { entries, cwd };
+}
+
+/**
+ * SP-4 Artifacts: read a single file's bytes for delivery to a thin client.
+ * The cloud route confines `path` to an allowed root (project repo / thread
+ * scratch dir) before calling — here we only enforce: absolute path, real
+ * file (not dir), and a byte cap so a huge file can't blow the WS frame.
+ * Returns base64 (binary-safe over JSON) + the true size + a truncated flag.
+ */
+export async function readFile(req: ReadFileRequest): Promise<ReadFileResponse> {
+  if (!isAbsolute(req.path)) {
+    throw new FsBrowseError("path-must-be-absolute", `path must be absolute: ${req.path}`);
+  }
+  const abs = resolve(req.path);
+  const cap = req.maxBytes ?? DEFAULT_MAX_BYTES;
+
+  let st;
+  try {
+    st = await stat(abs);
+  } catch (e: unknown) {
+    const code = errCode(e);
+    if (code === "ENOENT") throw new FsBrowseError("path-not-found", `file does not exist: ${abs}`);
+    if (code === "EACCES" || code === "EPERM") throw new FsBrowseError("permission-denied", `permission denied: ${abs}`);
+    throw new FsBrowseError("stat-failed", `${code ?? "unknown"}: ${abs}`);
+  }
+  if (st.isDirectory()) throw new FsBrowseError("is-a-directory", `path is a directory: ${abs}`);
+  if (!st.isFile()) throw new FsBrowseError("not-a-file", `path is not a regular file: ${abs}`);
+
+  const sliceLen = Math.min(st.size, cap);
+  const buf = Buffer.alloc(sliceLen);
+  const fh = await open(abs, "r");
+  try {
+    if (sliceLen > 0) await fh.read(buf, 0, sliceLen, 0);
+  } finally {
+    await fh.close();
+  }
+  return {
+    contentBase64: buf.toString("base64"),
+    size: st.size,
+    truncated: st.size > sliceLen,
+  };
 }
 
 function errCode(e: unknown): string | undefined {

@@ -6,3 +6,4 @@ export { TaskDetail } from "./TaskDetail.js";
 export { NewProject, type NewProjectDraft, type BrowseEntry, type BrowseResponse } from "./NewProject.js";
 export { NewTask, type NewTaskDraft } from "./NewTask.js";
 export { ProjectSettings } from "./ProjectSettings.js";
+export { ArtifactBrowser, type ArtifactSource } from "./ArtifactBrowser.js";

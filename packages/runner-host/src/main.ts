@@ -13,7 +13,7 @@ import {
   gitTestsRun,
   gitDiffSnapshot,
 } from "./git-ops.js";
-import { fsBrowse } from "./fs-browse.js";
+import { fsBrowse, readFile } from "./fs-browse.js";
 import { generateThreadTitle } from "./generate-title.js";
 import { logger } from "@cogni/shared";
 
@@ -41,6 +41,7 @@ connectToCloud(config, manager, (req) =>
     gitTestsRun,
     gitDiffSnapshot,
     fsBrowse,
+    readFile,
     generateThreadTitle,
   }),
 );

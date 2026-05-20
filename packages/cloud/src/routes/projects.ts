@@ -17,6 +17,7 @@ import {
 } from "../db/projects.js";
 import { hosts as hostsTable } from "../db/schema.js";
 import { eq, and, isNull } from "drizzle-orm";
+import { artifactFileResponse, pathUnder } from "./artifact-file.js";
 import type { ServerDeps } from "../server.js";
 
 /**
@@ -493,6 +494,49 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
     try {
       const result = await deps.projectDomain.fsBrowse(hostId, parsed.data.path);
       return c.json(result);
+    } catch (err) {
+      const { status, body } = domainErrorResponse(err);
+      return c.json(body, status);
+    }
+  });
+
+  // ─── SP-4 Artifacts: project file browser (tree + file bytes) ─────────────
+  // Confined to the project's repoPath so a crafted ?path can't read arbitrary
+  // host disk. Both endpoints resolve the requested path and verify it stays
+  // under repoPath before forwarding to the host.
+
+  app.get("/api/projects/:id/browse", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const project = await ownedProject(deps, c.req.param("id"), userId, tenantId);
+    if (!project) return c.json({ error: "not found" }, 404);
+    if (!deps.projectDomain) return c.json({ error: "project domain unavailable" }, 503);
+    // Default to the repo root; any provided path must stay under it.
+    const reqPath = c.req.query("path") || project.repoPath;
+    if (!pathUnder(project.repoPath, reqPath)) {
+      return c.json({ error: "path outside project" }, 403);
+    }
+    try {
+      const result = await deps.projectDomain.fsBrowse(project.defaultHostId, reqPath);
+      return c.json(result);
+    } catch (err) {
+      const { status, body } = domainErrorResponse(err);
+      return c.json(body, status);
+    }
+  });
+
+  app.get("/api/projects/:id/file", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const project = await ownedProject(deps, c.req.param("id"), userId, tenantId);
+    if (!project) return c.json({ error: "not found" }, 404);
+    if (!deps.projectDomain) return c.json({ error: "project domain unavailable" }, 503);
+    const reqPath = c.req.query("path");
+    if (!reqPath) return c.json({ error: "path required" }, 400);
+    if (!pathUnder(project.repoPath, reqPath)) {
+      return c.json({ error: "path outside project" }, 403);
+    }
+    try {
+      const file = await deps.projectDomain.readFile(project.defaultHostId, reqPath);
+      return artifactFileResponse(c, reqPath, file);
     } catch (err) {
       const { status, body } = domainErrorResponse(err);
       return c.json(body, status);

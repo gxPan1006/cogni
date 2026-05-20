@@ -46,9 +46,11 @@ export {
   TaskDetail,
   NewProject, NewTask,
   ProjectSettings,
+  ArtifactBrowser,
 } from "./components/project/index.js";
 export type {
   ProjectListItem, ProjectHealth,
   NewProjectDraft, NewTaskDraft,
   BrowseEntry, BrowseResponse,
+  ArtifactSource,
 } from "./components/project/index.js";

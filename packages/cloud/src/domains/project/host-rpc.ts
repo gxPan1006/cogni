@@ -39,6 +39,8 @@ import type {
   GitDiffSnapshotResponse,
   FsBrowseRequest,
   FsBrowseResponse,
+  ReadFileRequest,
+  ReadFileResponse,
   HostRpcMethod,
 } from "@cogni/contract";
 
@@ -105,6 +107,9 @@ export class HostRpcClient {
   }
   async fsBrowse(hostId: string, params: FsBrowseRequest): Promise<FsBrowseResponse> {
     return this.call(hostId, "fs-browse", params) as Promise<FsBrowseResponse>;
+  }
+  async readFile(hostId: string, params: ReadFileRequest): Promise<ReadFileResponse> {
+    return this.call(hostId, "read-file", params) as Promise<ReadFileResponse>;
   }
 
   private async call(

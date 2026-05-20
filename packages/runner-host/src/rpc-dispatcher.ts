@@ -39,6 +39,8 @@ import {
   type GitDiffSnapshotResponse,
   type FsBrowseRequest,
   type FsBrowseResponse,
+  type ReadFileRequest,
+  type ReadFileResponse,
   type GenerateThreadTitleRequest,
   type GenerateThreadTitleResponse,
 } from "@cogni/contract";
@@ -55,6 +57,7 @@ export interface RpcDeps {
   gitTestsRun: (req: GitTestsRunRequest) => Promise<GitTestsRunResponse>;
   gitDiffSnapshot: (req: GitDiffSnapshotRequest) => Promise<GitDiffSnapshotResponse>;
   fsBrowse: (req: FsBrowseRequest) => Promise<FsBrowseResponse>;
+  readFile: (req: ReadFileRequest) => Promise<ReadFileResponse>;
   generateThreadTitle: (req: GenerateThreadTitleRequest) => Promise<GenerateThreadTitleResponse>;
 }
 
@@ -115,6 +118,8 @@ async function routeRpc(frame: HostRpcRequest, deps: RpcDeps): Promise<HostRpcRe
       return { ok: true, method: frame.method, result: await deps.gitDiffSnapshot(frame.params) };
     case "fs-browse":
       return { ok: true, method: frame.method, result: await deps.fsBrowse(frame.params) };
+    case "read-file":
+      return { ok: true, method: frame.method, result: await deps.readFile(frame.params) };
     case "generate-thread-title":
       return { ok: true, method: frame.method, result: await deps.generateThreadTitle(frame.params) };
   }

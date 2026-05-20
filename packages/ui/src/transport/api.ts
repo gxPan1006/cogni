@@ -326,6 +326,40 @@ export class ApiClient {
       body: JSON.stringify({ path }),
     });
 
+  // ─── SP-4 Artifacts ───────────────────────────────────────────────────
+  //
+  // Files live on the host; thin clients fetch them through the cloud. The
+  // file endpoints sit behind the /api Bearer middleware, so a bare
+  // <iframe src> / <a download> can't authenticate — instead we fetch with the
+  // Authorization header and hand back a Blob the caller wraps in a
+  // `URL.createObjectURL` (works uniformly for preview iframes, <img>, <pre>,
+  // and download links).
+
+  /** Project file tree — one directory, confined to the project's repoPath. */
+  browseProjectDir = (projectId: string, path?: string): Promise<FsBrowseResponse> =>
+    this.request(
+      `${this.cloudUrl}/api/projects/${projectId}/browse${path ? `?path=${encodeURIComponent(path)}` : ""}`,
+      { headers: this.authHeaders() },
+    );
+
+  /** Fetch a project file's bytes as a Blob (auth'd). `download` forces attachment. */
+  fetchProjectFile = (projectId: string, path: string): Promise<Blob> =>
+    this.fetchBlob(`${this.cloudUrl}/api/projects/${projectId}/file?path=${encodeURIComponent(path)}`);
+
+  /** Chat thread's deliverable files (paths the runner Wrote/Edited this thread). */
+  listThreadFiles = (threadId: string): Promise<{ files: { path: string; name: string }[] }> =>
+    this.request(`${this.cloudUrl}/api/threads/${threadId}/files`, { headers: this.authHeaders() });
+
+  /** Fetch a chat thread file's bytes as a Blob (auth'd, allowlisted server-side). */
+  fetchThreadFile = (threadId: string, path: string): Promise<Blob> =>
+    this.fetchBlob(`${this.cloudUrl}/api/threads/${threadId}/file?path=${encodeURIComponent(path)}`);
+
+  private async fetchBlob(url: string): Promise<Blob> {
+    const res = await fetch(url, { headers: this.authHeaders() });
+    if (!res.ok) throw new ApiError(res.status, `GET ${url} → ${res.status}`);
+    return res.blob();
+  }
+
   // ─── Prefetch (hover → warm the SWR cache) ────────────────────────────
   //
   // Fire-and-forget: called from sidebar / card `onMouseEnter`. They warm the

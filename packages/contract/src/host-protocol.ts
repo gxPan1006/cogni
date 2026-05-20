@@ -205,6 +205,28 @@ export const fsBrowseResponseSchema = z.object({
 });
 export type FsBrowseResponse = z.infer<typeof fsBrowseResponseSchema>;
 
+// read-file (SP-4 Artifacts: stream a host file's bytes to a thin client)
+export const readFileRequestSchema = z.object({
+  /** Absolute path on the host. The cloud route is responsible for confining
+   *  this to an allowed root (project repo / thread scratch dir) before
+   *  calling — the host only enforces the byte cap + that it's a real file. */
+  path: z.string(),
+  /** Max bytes to read; host returns truncated:true if the file is larger.
+   *  Defaults host-side (10 MB) when omitted. */
+  maxBytes: z.number().int().positive().optional(),
+});
+export type ReadFileRequest = z.infer<typeof readFileRequestSchema>;
+
+export const readFileResponseSchema = z.object({
+  /** File contents, base64-encoded (binary-safe over the JSON WS frame). */
+  contentBase64: z.string(),
+  /** Actual file size on disk in bytes (may exceed the returned slice). */
+  size: z.number().int().min(0),
+  /** True when the file was larger than maxBytes and contentBase64 is a prefix. */
+  truncated: z.boolean(),
+});
+export type ReadFileResponse = z.infer<typeof readFileResponseSchema>;
+
 // ─── Discriminated unions for typed dispatch ────────────────────────────────
 
 /**
@@ -222,6 +244,7 @@ export const hostRpcRequestSchema = z.discriminatedUnion("method", [
   z.object({ method: z.literal("git-diff-snapshot"), params: gitDiffSnapshotRequestSchema }),
   z.object({ method: z.literal("fs-browse"), params: fsBrowseRequestSchema }),
   z.object({ method: z.literal("generate-thread-title"), params: generateThreadTitleRequestSchema }),
+  z.object({ method: z.literal("read-file"), params: readFileRequestSchema }),
 ]);
 export type HostRpcRequest = z.infer<typeof hostRpcRequestSchema>;
 
@@ -235,6 +258,7 @@ export const hostRpcMethodSchema = z.enum([
   "git-diff-snapshot",
   "fs-browse",
   "generate-thread-title",
+  "read-file",
 ]);
 
 /**
@@ -258,6 +282,7 @@ export const hostRpcResponseSchema = z.union([
   z.object({ ok: z.literal(true), method: z.literal("git-diff-snapshot"), result: gitDiffSnapshotResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("fs-browse"), result: fsBrowseResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("generate-thread-title"), result: generateThreadTitleResponseSchema }),
+  z.object({ ok: z.literal(true), method: z.literal("read-file"), result: readFileResponseSchema }),
   z.object({
     ok: z.literal(false),
     method: hostRpcMethodSchema,
@@ -283,5 +308,6 @@ export const HOST_RPC_METHODS = [
   "git-diff-snapshot",
   "fs-browse",
   "generate-thread-title",
+  "read-file",
 ] as const;
 export type HostRpcMethod = (typeof HOST_RPC_METHODS)[number];

@@ -26,6 +26,7 @@ import type { ApiClient, HostInfo } from "../../transport/api.js";
 import { useTaskDetail } from "../../hooks/useTaskDetail.js";
 import { useThreadStream } from "../../hooks/useThreadStream.js";
 import { Icon } from "../icons.js";
+import { ArtifactBrowser } from "./ArtifactBrowser.js";
 import {
   UserMessage, AssistantText, ToolCallBlock, aggregateEvents,
 } from "../ChatBlocks.js";
@@ -163,6 +164,23 @@ export function TaskDetail({
 
           {task?.executionThreadId && (
             <ThreadSection api={api} threadId={task.executionThreadId} />
+          )}
+
+          {/* SP-4 Artifacts: browse this task's output files. Opens at the
+              worktree while reviewing (new files live there pre-merge); falls
+              back to the project repo root once done (files merged to main). */}
+          {task && (task.state === "reviewing" || task.state === "done" || task.state === "running") && (
+            <section className="td-files">
+              <div className="td-thread__head"><span>文件</span></div>
+              <ArtifactBrowser
+                api={api}
+                source={{
+                  kind: "project",
+                  projectId: task.projectId,
+                  ...(task.worktreePath ? { startPath: task.worktreePath } : {}),
+                }}
+              />
+            </section>
           )}
         </div>
       </aside>

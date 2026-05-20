@@ -19,6 +19,7 @@ function depsWith(overrides: Partial<RpcDeps>): RpcDeps {
     gitTestsRun: must("gitTestsRun"),
     gitDiffSnapshot: must("gitDiffSnapshot"),
     fsBrowse: must("fsBrowse"),
+    readFile: must("readFile"),
     ...overrides,
   };
 }

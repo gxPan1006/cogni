@@ -50,6 +50,7 @@ import type {
   TaskRun,
   TaskState,
   FsBrowseResponse,
+  ReadFileResponse,
   GitDiffSnapshotResponse,
 } from "@cogni/contract";
 import type { ChatDomain } from "../chat.js";
@@ -395,6 +396,15 @@ export class ProjectDomain {
    */
   async fsBrowse(hostId: string, path?: string): Promise<FsBrowseResponse> {
     return this.deps.hostRpc.fsBrowse(hostId, { path });
+  }
+
+  /**
+   * SP-4 Artifacts: read a host file's bytes (base64). Authorization +
+   * path-confinement are the route's responsibility (project repo root /
+   * thread scratch dir); this is a thin passthrough to the host RPC.
+   */
+  async readFile(hostId: string, path: string, maxBytes?: number): Promise<ReadFileResponse> {
+    return this.deps.hostRpc.readFile(hostId, maxBytes != null ? { path, maxBytes } : { path });
   }
 
   /**
