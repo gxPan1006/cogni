@@ -25,8 +25,9 @@ implementation:
 - **SP-2 — Accounts + multi-device sync + thin clients.**
 - **SP-3 — Project domain** (supervised orchestrator, kanban, tracker
   integration, a second runner adapter).
-- **SP-4 — Cross-domain layer + polish** (Recents/artifacts/memory, Windows,
-  proactive intervention).
+- **SP-4 — Cross-domain layer + polish** (Recents/artifacts/memory, Windows).
+  Explicitly out of scope: proactive intervention and cross-host task
+  fan-out — deferred indefinitely, not part of SP-4.
 
 Full design and rationale:
 [`docs/superpowers/specs/2026-05-14-cogni-sp1-spine-design.md`](docs/superpowers/specs/2026-05-14-cogni-sp1-spine-design.md).
