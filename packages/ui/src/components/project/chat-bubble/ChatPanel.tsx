@@ -24,6 +24,7 @@ export function ChatPanel({
   onNew,
   onBack,
   onClose,
+  onResizeStart,
   onTitled,
 }: {
   api: ApiClient;
@@ -40,10 +41,18 @@ export function ChatPanel({
   onNew: () => void;
   onBack: () => void;
   onClose: () => void;
+  onResizeStart: (e: React.MouseEvent) => void;
   onTitled: (id: string, title: string) => void;
 }) {
   return (
     <div className="cb-panel" role="dialog" aria-label="Cogni 编排">
+      <div
+        className="cb-resize"
+        onMouseDown={onResizeStart}
+        title="拖动缩放"
+        aria-label="拖动缩放窗口"
+      />
+
       <div className="cb-panel-top">
         <div className="cb-panel-crumb">
           {active ? "编排会话" : `编排会话 · ${sessions.length}`}

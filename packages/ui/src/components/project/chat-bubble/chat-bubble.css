@@ -13,6 +13,29 @@
   z-index: 1099;
 }
 
+/* Frosted-glass scrim behind the popover — blurs the app while chatting. */
+.cb-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1098;
+  background: color-mix(in oklch, var(--ink), transparent 86%);
+  backdrop-filter: blur(8px) saturate(115%);
+  -webkit-backdrop-filter: blur(8px) saturate(115%);
+  animation: cb-fade 0.18s ease-out;
+}
+/* While dragging the resize grip, don't let the scrim eat mouse events. */
+.cb-backdrop.is-resizing {
+  pointer-events: none;
+}
+@keyframes cb-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* ── Bubble (pill, closed) ── */
 .cb-bubble {
   height: 52px;
@@ -137,6 +160,40 @@
     transform: translateY(0) scale(1);
   }
 }
+/* Top-left resize grip — drag to grow the popover (up + outward). */
+.cb-resize {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  z-index: 5;
+  cursor: nwse-resize;
+  border-top: 2px solid transparent;
+  border-left: 2px solid transparent;
+  border-top-left-radius: 18px;
+  transition: border-color 0.12s;
+}
+.cb-resize::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 7px;
+  height: 7px;
+  border-top: 2px solid var(--muted-2);
+  border-left: 2px solid var(--muted-2);
+  border-top-left-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.cb-panel:hover .cb-resize::after {
+  opacity: 0.7;
+}
+.cb-resize:hover::after {
+  opacity: 1;
+}
+
 .cb-panel-top {
   display: flex;
   align-items: center;

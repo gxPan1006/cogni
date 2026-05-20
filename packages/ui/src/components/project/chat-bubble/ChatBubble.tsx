@@ -27,10 +27,14 @@ import { scopePlaceholder } from "../WorkspaceChatBar.js";
 import { ChatPanel } from "./ChatPanel.js";
 import {
   type Pos,
+  type Size,
+  type Rect,
   POS_KEY,
+  SIZE_KEY,
   DEFAULT_BOTTOM,
   DRAG_THRESHOLD,
   clampCenter,
+  clampSize,
   computePanelRect,
 } from "./geometry.js";
 import "./chat-bubble.css";
@@ -52,6 +56,18 @@ function loadPos(): Pos | null {
   return null;
 }
 
+function loadSize(): Size | null {
+  try {
+    const raw = localStorage.getItem(SIZE_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as Partial<Size>;
+    if (typeof v?.w === "number" && typeof v?.h === "number") return { w: v.w, h: v.h };
+  } catch {
+    /* ignore malformed storage */
+  }
+  return null;
+}
+
 export function ChatBubble({ api, scope }: { api: ApiClient; scope: WorkspaceChatScope }) {
   const projectId = scope.kind === "project" ? scope.projectId : undefined;
   const scopeLabel = scope.kind === "project" ? scope.projectName : "工作区编排";
@@ -59,7 +75,9 @@ export function ChatBubble({ api, scope }: { api: ApiClient; scope: WorkspaceCha
 
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<Pos | null>(loadPos);
+  const [size, setSize] = useState<Size | null>(loadSize);
   const [dragging, setDragging] = useState(false);
+  const [resizing, setResizing] = useState(false);
   const dragRef = useRef<{
     startX: number;
     startY: number;
@@ -67,6 +85,9 @@ export function ChatBubble({ api, scope }: { api: ApiClient; scope: WorkspaceCha
     offsetY: number;
     moved: boolean;
   } | null>(null);
+  const resizeRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
+  // Latest computed panel rect — read by the resize handler to seed startW/H.
+  const panelRectRef = useRef<Rect | null>(null);
 
   const [sessions, setSessions] = useState<ThreadSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -198,6 +219,51 @@ export function ChatBubble({ api, scope }: { api: ApiClient; scope: WorkspaceCha
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // ── Panel resize (drag the top-left corner grip) ───────────────────────
+  // The panel hangs upward from the pill, so its bottom edge is the anchor.
+  // Doubling the horizontal delta makes the (re-centred) top-left corner track
+  // the cursor 1:1; the upward height tracks 1:1 too.
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const r = panelRectRef.current;
+    if (!r) return;
+    resizeRef.current = { startX: e.clientX, startY: e.clientY, startW: r.width, startH: r.height };
+    setResizing(true);
+  }, []);
+
+  useEffect(() => {
+    if (!resizing) return;
+    const onMove = (e: MouseEvent) => {
+      const r = resizeRef.current;
+      if (!r) return;
+      const dx = r.startX - e.clientX;
+      const dy = r.startY - e.clientY;
+      setSize(clampSize(r.startW + 2 * dx, r.startH + dy, pos, window.innerWidth, window.innerHeight));
+    };
+    const onUp = () => {
+      resizeRef.current = null;
+      setResizing(false);
+      setSize((s) => {
+        if (s) {
+          try {
+            localStorage.setItem(SIZE_KEY, JSON.stringify(s));
+          } catch {
+            /* ignore */
+          }
+        }
+        return s;
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [resizing, pos]);
+
   // Keyboard: Esc closes, ⌘N / Ctrl+N opens a new session — only while open.
   useEffect(() => {
     if (!open) return;
@@ -217,34 +283,43 @@ export function ChatBubble({ api, scope }: { api: ApiClient; scope: WorkspaceCha
     ? { left: pos.x, top: pos.y, right: "auto", bottom: "auto", transform: "translate(-50%, -50%)" }
     : { left: "50%", bottom: DEFAULT_BOTTOM, right: "auto", top: "auto", transform: "translateX(-50%)" };
 
-  const panelStyle: React.CSSProperties = (() => {
-    const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
-    const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-    return computePanelRect(pos, vw, vh);
-  })();
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const panelRect = computePanelRect(pos, vw, vh, size);
+  panelRectRef.current = panelRect;
+  const panelStyle: React.CSSProperties = panelRect;
 
   return (
     <>
       {open && (
-        <div className="cb-panel-wrap" style={panelStyle}>
-          <ChatPanel
-            api={api}
-            sessions={sessions}
-            active={active}
-            scopeLabel={scopeLabel}
-            composerPlaceholder={composerPlaceholder}
-            loading={loading}
-            creating={creating}
-            error={error}
-            draft={activeId ? drafts[activeId] ?? "" : ""}
-            setDraft={setDraft}
-            onPick={setActiveId}
-            onNew={onNew}
-            onBack={() => setActiveId(null)}
-            onClose={() => setOpen(false)}
-            onTitled={onTitled}
+        <>
+          {/* Frosted-glass scrim: blurs the app behind the popover; click to close. */}
+          <div
+            className={"cb-backdrop" + (resizing ? " is-resizing" : "")}
+            onClick={() => setOpen(false)}
+            aria-hidden="true"
           />
-        </div>
+          <div className="cb-panel-wrap" style={panelStyle}>
+            <ChatPanel
+              api={api}
+              sessions={sessions}
+              active={active}
+              scopeLabel={scopeLabel}
+              composerPlaceholder={composerPlaceholder}
+              loading={loading}
+              creating={creating}
+              error={error}
+              draft={activeId ? drafts[activeId] ?? "" : ""}
+              setDraft={setDraft}
+              onPick={setActiveId}
+              onNew={onNew}
+              onBack={() => setActiveId(null)}
+              onClose={() => setOpen(false)}
+              onResizeStart={onResizeStart}
+              onTitled={onTitled}
+            />
+          </div>
+        </>
       )}
       <div className="cb-bubble-wrap" style={bubbleStyle}>
         <button

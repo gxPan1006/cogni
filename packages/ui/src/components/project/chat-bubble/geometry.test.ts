@@ -1,12 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
   clampCenter,
+  clampSize,
   computePanelRect,
   BUBBLE_W,
   BUBBLE_H,
   PAD,
   PANEL_W,
   PANEL_H_MAX,
+  PANEL_MIN_W,
+  PANEL_MIN_H,
+  EDGE,
 } from "./geometry.js";
 
 describe("clampCenter", () => {
@@ -50,5 +54,35 @@ describe("computePanelRect", () => {
     expect(right.left).toBe(1280 - PANEL_W - 16);
     const left = computePanelRect({ x: 10, y: 400 }, 1280, 800);
     expect(left.left).toBe(16);
+  });
+
+  it("honours a user size, still centred + clamped above the pill", () => {
+    const r = computePanelRect({ x: 640, y: 760 }, 1280, 800, { w: 520, h: 360 });
+    expect(r.width).toBe(520);
+    expect(r.height).toBe(360);
+    expect(r.left).toBe(640 - 520 / 2); // centred on the pill
+  });
+
+  it("caps a user size to the room above the pill / viewport width", () => {
+    // pill near the top: requested 600px height won't fit, gets capped
+    const r = computePanelRect({ x: 640, y: 300 }, 1280, 800, { w: 5000, h: 600 });
+    expect(r.width).toBe(1280 - 2 * EDGE);
+    expect(r.height).toBeLessThan(600);
+    expect(r.top).toBeGreaterThanOrEqual(EDGE);
+  });
+});
+
+describe("clampSize", () => {
+  it("enforces min width/height", () => {
+    const s = clampSize(10, 10, { x: 640, y: 760 }, 1280, 800);
+    expect(s.w).toBe(PANEL_MIN_W);
+    expect(s.h).toBe(PANEL_MIN_H);
+  });
+
+  it("caps width to viewport and height to the room above the pill", () => {
+    const s = clampSize(9999, 9999, { x: 640, y: 760 }, 1280, 800);
+    expect(s.w).toBe(1280 - 2 * EDGE);
+    // bubbleTop = 760 - 26 = 734; maxH = 734 - 24 = 710
+    expect(s.h).toBe(710);
   });
 });
