@@ -23,6 +23,7 @@
 import { readdir, stat, open } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, isAbsolute, resolve } from "node:path";
+import { expandTilde } from "./paths.js";
 import type {
   FsBrowseRequest, FsBrowseResponse, FsBrowseEntry,
   ReadFileRequest, ReadFileResponse,
@@ -49,7 +50,7 @@ export async function fsBrowse(req: FsBrowseRequest): Promise<FsBrowseResponse> 
   // Default path when none provided — spec §七 says host picks a sensible
   // default (we use $HOME, which matches what the web UI's "📁 Browse"
   // button is conceptually doing: "show me where my code lives").
-  const requestedPath = req.path ?? homedir();
+  const requestedPath = expandTilde(req.path ?? homedir());
   if (!isAbsolute(requestedPath)) {
     throw new FsBrowseError("path-must-be-absolute", `path must be absolute: ${requestedPath}`);
   }

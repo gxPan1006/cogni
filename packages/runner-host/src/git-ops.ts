@@ -27,6 +27,7 @@
 import { access, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { execa } from "execa";
+import { resolveUserPath } from "./paths.js";
 import type {
   GitInitIfMissingRequest,
   GitInitIfMissingResponse,
@@ -111,7 +112,7 @@ function tailBytes(buf: Buffer, maxBytes: number): string {
 export async function gitInitIfMissing(
   req: GitInitIfMissingRequest,
 ): Promise<GitInitIfMissingResponse> {
-  const repoPath = resolve(req.repoPath);
+  const repoPath = resolveUserPath(req.repoPath);
   if (await pathExists(`${repoPath}${sep}.git`)) {
     return { initialized: false };
   }
@@ -154,8 +155,10 @@ export async function gitInitIfMissing(
 export async function gitWorktreeCreate(
   req: GitWorktreeCreateRequest,
 ): Promise<GitWorktreeCreateResponse> {
-  assertWorktreeInRepo(req.repoPath, req.worktreePath);
-  await assertIsGitRepo(req.repoPath);
+  const repoPath = resolveUserPath(req.repoPath);
+  const worktreePath = resolveUserPath(req.worktreePath);
+  assertWorktreeInRepo(repoPath, worktreePath);
+  await assertIsGitRepo(repoPath);
 
   // Idempotency check: `git worktree list --porcelain` is the canonical way
   // to enumerate worktrees. Lines look like `worktree /path`, `branch refs/heads/foo`.
@@ -163,11 +166,11 @@ export async function gitWorktreeCreate(
   // matches the requested branchName, this is already-created — return success.
   const listed = await execa(
     "git",
-    ["-C", req.repoPath, "worktree", "list", "--porcelain"],
+    ["-C", repoPath, "worktree", "list", "--porcelain"],
     { reject: false },
   );
   if (listed.exitCode === 0) {
-    const want = resolve(req.worktreePath);
+    const want = worktreePath;
     const wantBranch = `refs/heads/${req.branchName}`;
     const entries = listed.stdout.split("\n\n");
     for (const block of entries) {
@@ -192,7 +195,7 @@ export async function gitWorktreeCreate(
 
   const r = await execa(
     "git",
-    ["-C", req.repoPath, "worktree", "add", "-b", req.branchName, req.worktreePath],
+    ["-C", repoPath, "worktree", "add", "-b", req.branchName, worktreePath],
     { reject: false },
   );
   if (r.exitCode !== 0) {
@@ -201,7 +204,7 @@ export async function gitWorktreeCreate(
       r.stderr || `git worktree add exited ${r.exitCode}`,
     );
   }
-  return { worktreePath: resolve(req.worktreePath) };
+  return { worktreePath };
 }
 
 // ─── Handler 3: gitWorktreeRemove ──────────────────────────────────────────
@@ -217,7 +220,7 @@ export async function gitWorktreeCreate(
 export async function gitWorktreeRemove(
   req: GitWorktreeRemoveRequest,
 ): Promise<GitWorktreeRemoveResponse> {
-  const wt = resolve(req.worktreePath);
+  const wt = resolveUserPath(req.worktreePath);
   if (!(await pathExists(wt))) {
     return { removed: false };
   }
@@ -239,7 +242,7 @@ export async function gitWorktreeRemove(
   // so we log rather than throw.
   if (req.repoPath && req.branchName) {
     const flag = req.force ? "-D" : "-d";
-    await execa("git", ["-C", req.repoPath, "branch", flag, req.branchName], { reject: false });
+    await execa("git", ["-C", resolveUserPath(req.repoPath), "branch", flag, req.branchName], { reject: false });
   }
   return { removed: true };
 }
@@ -254,8 +257,9 @@ export async function gitWorktreeRemove(
 export async function gitMergeToMain(
   req: GitMergeToMainRequest,
 ): Promise<GitMergeToMainResponse> {
-  await assertIsGitRepo(req.repoPath);
-  const checkout = await execa("git", ["-C", req.repoPath, "checkout", "main"], {
+  const repoPath = resolveUserPath(req.repoPath);
+  await assertIsGitRepo(repoPath);
+  const checkout = await execa("git", ["-C", repoPath, "checkout", "main"], {
     reject: false,
   });
   if (checkout.exitCode !== 0) {
@@ -267,7 +271,7 @@ export async function gitMergeToMain(
   const message = req.commitMessage ?? `Merge branch '${req.branchName}'`;
   const merge = await execa(
     "git",
-    ["-C", req.repoPath, "merge", "--no-ff", "-m", message, req.branchName],
+    ["-C", repoPath, "merge", "--no-ff", "-m", message, req.branchName],
     {
       reject: false,
       env: {
@@ -282,7 +286,7 @@ export async function gitMergeToMain(
     // Conflict (or other recoverable failure) → return ok:false rather than
     // throw, matching spec §四 "merge fails → drop back to reviewing".
     // Aborting cleans up the in-progress merge state so callers can retry.
-    await execa("git", ["-C", req.repoPath, "merge", "--abort"], { reject: false });
+    await execa("git", ["-C", repoPath, "merge", "--abort"], { reject: false });
     return {
       ok: false,
       message: merge.stderr || merge.stdout || "merge failed",
@@ -309,17 +313,18 @@ export async function gitMergeToMain(
 export async function gitPushToRemote(
   req: GitPushToRemoteRequest,
 ): Promise<GitPushToRemoteResponse> {
-  await assertIsGitRepo(req.repoPath);
+  const repoPath = resolveUserPath(req.repoPath);
+  await assertIsGitRepo(repoPath);
   const remote = req.remote ?? "origin";
   // Fail fast + clearly when the repo has no such remote (common: a local-only
   // test repo). `git push` would also error, but this gives a tidy message.
-  const remotes = await execa("git", ["-C", req.repoPath, "remote"], { reject: false });
+  const remotes = await execa("git", ["-C", repoPath, "remote"], { reject: false });
   if (remotes.exitCode !== 0 || !remotes.stdout.split("\n").map((s) => s.trim()).includes(remote)) {
     return { ok: false, message: `no '${remote}' remote configured` };
   }
   const push = await execa(
     "git",
-    ["-C", req.repoPath, "push", remote, req.branch],
+    ["-C", repoPath, "push", remote, req.branch],
     { reject: false },
   );
   if (push.exitCode !== 0) {
@@ -341,7 +346,7 @@ export async function gitPushToRemote(
  * is no broader than what the runner adapter does.
  */
 export async function gitTestsRun(req: GitTestsRunRequest): Promise<GitTestsRunResponse> {
-  const wt = resolve(req.worktreePath);
+  const wt = resolveUserPath(req.worktreePath);
   if (!(await pathExists(wt))) {
     throw new GitOpError("worktree-not-found", `worktreePath ${wt} does not exist`);
   }
@@ -379,7 +384,7 @@ export async function gitTestsRun(req: GitTestsRunRequest): Promise<GitTestsRunR
 export async function gitDiffSnapshot(
   req: GitDiffSnapshotRequest,
 ): Promise<GitDiffSnapshotResponse> {
-  const wt = resolve(req.worktreePath);
+  const wt = resolveUserPath(req.worktreePath);
   if (!(await pathExists(wt))) {
     throw new GitOpError("worktree-not-found", `worktreePath ${wt} does not exist`);
   }
