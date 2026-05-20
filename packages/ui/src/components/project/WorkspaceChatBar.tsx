@@ -33,11 +33,20 @@ export type WorkspaceChatScope =
   | { kind: "workspace" }
   | { kind: "project"; projectId: string; projectName: string };
 
+/**
+ * The task card the user last opened on this board — surfaced as a dismissible
+ * "focus chip" above the orchestrator composer and ridden along on send so the
+ * model knows which card vague phrasing ("这个" / "改一下") refers to.
+ */
+export type WorkspaceTaskFocus = { id: string; ref: string; title: string };
+
 /** Pure scope → idle placeholder mapping (unit-tested in WorkspaceChatBar.test.ts). */
 export function scopePlaceholder(scope: WorkspaceChatScope): string {
-  return scope.kind === "project"
-    ? `在「${scope.projectName}」里帮你建任务、改任务…`
-    : "让 Cogni 帮你建任务、关任务、整理项目…";
+  if (scope.kind !== "project") return "让 Cogni 帮你建任务、关任务、整理项目…";
+  // Guard a missing/blank project name so the placeholder never reads the
+  // literal「undefined」 (a half-loaded or nameless project row).
+  const name = scope.projectName?.trim() ? scope.projectName.trim() : "这个项目";
+  return `在「${name}」里帮你建任务、改任务…`;
 }
 
 export function WorkspaceChatBar({

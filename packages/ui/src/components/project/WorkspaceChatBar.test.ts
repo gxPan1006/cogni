@@ -28,4 +28,18 @@ describe("scopePlaceholder", () => {
       scopePlaceholder({ kind: "project", projectId: "p1", projectName: "贪吃蛇" }),
     ).toBe("在「贪吃蛇」里帮你建任务、改任务…");
   });
+
+  it("never renders literal 'undefined' when the project name is missing/blank", () => {
+    // The bug class behind the「undefined」placeholder: a half-loaded or
+    // nameless project. Degrade to a neutral label instead of interpolating.
+    for (const bad of [undefined, "", "   "]) {
+      const out = scopePlaceholder({
+        kind: "project",
+        projectId: "p1",
+        projectName: bad as unknown as string,
+      });
+      expect(out).not.toContain("undefined");
+      expect(out).toBe("在「这个项目」里帮你建任务、改任务…");
+    }
+  });
 });

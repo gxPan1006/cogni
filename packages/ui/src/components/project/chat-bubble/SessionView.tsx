@@ -15,6 +15,7 @@
 import { useEffect, useRef } from "react";
 import type { ThreadSummary } from "@cogni/contract";
 import type { ApiClient } from "../../../transport/api.js";
+import type { WorkspaceTaskFocus } from "../WorkspaceChatBar.js";
 import { useThreadStream } from "../../../hooks/useThreadStream.js";
 import { buildTimeline } from "../../chat-timeline.js";
 import { UserMessage, AssistantText, AssistantBlocks } from "../../ChatBlocks.js";
@@ -27,6 +28,8 @@ export function SessionView({
   draft,
   setDraft,
   placeholder,
+  focusedTask = null,
+  onClearFocus,
   onBack,
   onTitled,
 }: {
@@ -35,6 +38,9 @@ export function SessionView({
   draft: string;
   setDraft: (v: string) => void;
   placeholder: string;
+  /** The task card the user last opened on this board (focus chip + send). */
+  focusedTask?: WorkspaceTaskFocus | null;
+  onClearFocus?: () => void;
   onBack: () => void;
   /** Fired after the first user turn renames a fresh session. */
   onTitled: (id: string, title: string) => void;
@@ -54,7 +60,7 @@ export function SessionView({
   const submit = () => {
     const text = draft.trim();
     if (!text) return;
-    if (!send(draft)) return;
+    if (!send(draft, undefined, focusedTask?.id)) return;
     setDraft("");
     // First turn of an untitled session → derive a title from the message.
     if (rows.length === 0 && /^(New conversation|Workspace|Project chat)$/.test(session.title)) {
@@ -94,6 +100,26 @@ export function SessionView({
           return <AssistantBlocks key={row.key} blocks={row.blocks} streaming={row.streaming} />;
         })}
       </div>
+
+      {focusedTask && (
+        <div className="cb-focus-chip" title={`这条消息默认针对 ${focusedTask.ref}「${focusedTask.title}」`}>
+          <span className="cb-focus-chip__dot" aria-hidden="true" />
+          <span className="cb-focus-chip__text">
+            聚焦 {focusedTask.ref}·{focusedTask.title}
+          </span>
+          {onClearFocus && (
+            <button
+              className="cb-focus-chip__x"
+              onClick={onClearFocus}
+              title="取消聚焦,改为整个项目"
+              aria-label="取消聚焦这张卡"
+              type="button"
+            >
+              {Icon.x}
+            </button>
+          )}
+        </div>
+      )}
 
       <Composer
         draft={draft}

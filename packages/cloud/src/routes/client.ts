@@ -285,6 +285,7 @@ export function registerClientRoutes(
                     threadId: msg.threadId,
                     content: msg.text,
                     sourceClientId: clientId,
+                    taskId: msg.taskId,
                   });
                 } else {
                   await deps.chat.handleClientSend({

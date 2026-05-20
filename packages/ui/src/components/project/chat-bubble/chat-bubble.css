@@ -432,6 +432,58 @@
   padding: 28px 16px;
 }
 
+/* Focus chip — the last-opened task card, shown just above the composer.
+   Tells the user (and the model) "this message is about CG-12 by default". */
+.cb-focus-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 12px 6px;
+  padding: 5px 8px 5px 9px;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-radius: 8px;
+  background: var(--accent-soft, rgba(120, 110, 90, 0.08));
+  font-size: 11.5px;
+  color: var(--text, #333);
+  max-width: calc(100% - 24px);
+}
+.cb-focus-chip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, #8a7d5a);
+  flex-shrink: 0;
+}
+.cb-focus-chip__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cb-focus-chip__x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.cb-focus-chip__x:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text, #333);
+}
+.cb-focus-chip__x svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* On narrow viewports collapse panel width gracefully */
 @media (max-width: 520px) {
   .cb-panel {

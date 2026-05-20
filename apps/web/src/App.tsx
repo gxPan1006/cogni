@@ -128,6 +128,14 @@ function WebShell({ page }: { page: Page }) {
   const board = useProjectBoard(api, params.projectId ?? "");
 
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  // The last task card opened on this board → the orchestrator bubble's focus
+  // chip. Cleared when the user switches projects or dismisses the chip.
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
+  useEffect(() => { setFocusedTaskId(null); }, [params.projectId]);
+  const focusedTask = useMemo(() => {
+    const t = focusedTaskId ? board.tasks.find((x) => x.id === focusedTaskId) : undefined;
+    return t ? { id: t.id, ref: t.ref, title: t.title } : null;
+  }, [focusedTaskId, board.tasks]);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
 
@@ -403,7 +411,7 @@ function WebShell({ page }: { page: Page }) {
             onBack={() => nav("/projects")}
             onNewTask={() => setNewTaskOpen(true)}
             onOpenSettings={() => nav(`/projects/${params.projectId}/settings`)}
-            onOpenTask={(id) => setActiveTaskId(id)}
+            onOpenTask={(id) => { setActiveTaskId(id); setFocusedTaskId(id); }}
             onPrefetchTask={api.prefetchTask}
           />
         )}
@@ -422,6 +430,8 @@ function WebShell({ page }: { page: Page }) {
           <ChatBubble
             api={api}
             scope={{ kind: "project", projectId: board.project.id, projectName: board.project.name }}
+            focusedTask={focusedTask}
+            onClearFocus={() => setFocusedTaskId(null)}
           />
         )}
         {page === "chat" && (

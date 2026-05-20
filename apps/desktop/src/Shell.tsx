@@ -68,7 +68,14 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   const projectsHook = useProjects(api);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  // Last task card opened on this board → orchestrator bubble's focus chip.
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
+  useEffect(() => { setFocusedTaskId(null); }, [activeProjectId]);
   const board = useProjectBoard(api, activeProjectId ?? "");
+  const focusedTask = useMemo(() => {
+    const t = focusedTaskId ? board.tasks.find((x) => x.id === focusedTaskId) : undefined;
+    return t ? { id: t.id, ref: t.ref, title: t.title } : null;
+  }, [focusedTaskId, board.tasks]);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
 
@@ -339,7 +346,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
             onBack={() => setPage("projects")}
             onNewTask={() => setNewTaskOpen(true)}
             onOpenSettings={() => setPage("project-settings")}
-            onOpenTask={(id) => setActiveTaskId(id)}
+            onOpenTask={(id) => { setActiveTaskId(id); setFocusedTaskId(id); }}
             onPrefetchTask={api.prefetchTask}
           />
         )}
@@ -358,6 +365,8 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
           <ChatBubble
             api={api}
             scope={{ kind: "project", projectId: board.project.id, projectName: board.project.name }}
+            focusedTask={focusedTask}
+            onClearFocus={() => setFocusedTaskId(null)}
           />
         )}
         {page === "chat" && (

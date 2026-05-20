@@ -295,8 +295,8 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     // never false-stalls. Bare-dots (no frames) leaves them static → timer fires.
   }, [awaitingProgress, connected, hostOnline, reloadNonce, events.length, messages.length]);
 
-  const send = (text: string, attachments?: { name: string; size: number }[]) => {
-    const ok = api.wsClient.send(threadId, text, attachments);
+  const send = (text: string, attachments?: { name: string; size: number }[], taskId?: string) => {
+    const ok = api.wsClient.send(threadId, text, attachments, taskId);
     if (ok) {
       // #4: optimistic echo — paint the user's message instantly instead of
       // waiting for the cloud's `message` broadcast round-trip. The "pending:"

@@ -99,7 +99,17 @@ export type CloudToHost = z.infer<typeof cloudToHostSchema>;
 export const clientToCloudSchema = z.discriminatedUnion("t", [
   // SP-1 legacy (kept for compatibility while old clients are around)
   z.object({ t: z.literal("subscribe"), threadId: z.string() }),
-  z.object({ t: z.literal("send"), threadId: z.string(), text: z.string(), attachments: z.array(attachmentSchema).optional() }),
+  z.object({
+    t: z.literal("send"),
+    threadId: z.string(),
+    text: z.string(),
+    attachments: z.array(attachmentSchema).optional(),
+    // SP-4: an orchestrator (`workspace` thread) send may carry the task the
+    // user is currently focused on (the last task card they opened on this
+    // board). The cloud folds it into the runner's --append-system-prompt so
+    // the model knows which card "this" / "改一下" refers to.
+    taskId: z.string().optional(),
+  }),
   // SP-2
   z.object({ t: z.literal("subscribe-list") }),
   z.object({ t: z.literal("subscribe-thread"), threadId: z.string(), lastSeq: z.number().optional() }),

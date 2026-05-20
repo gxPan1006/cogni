@@ -5,6 +5,7 @@
  */
 import type { ThreadSummary } from "@cogni/contract";
 import type { ApiClient } from "../../../transport/api.js";
+import type { WorkspaceTaskFocus } from "../WorkspaceChatBar.js";
 import { Icon } from "../../icons.js";
 import { SessionList } from "./SessionList.js";
 import { SessionView } from "./SessionView.js";
@@ -15,6 +16,8 @@ export function ChatPanel({
   active,
   scopeLabel,
   composerPlaceholder,
+  focusedTask = null,
+  onClearFocus,
   loading,
   creating,
   error,
@@ -32,6 +35,8 @@ export function ChatPanel({
   active: ThreadSummary | null;
   scopeLabel: string;
   composerPlaceholder: string;
+  focusedTask?: WorkspaceTaskFocus | null;
+  onClearFocus?: () => void;
   loading: boolean;
   creating: boolean;
   error: string | null;
@@ -76,6 +81,8 @@ export function ChatPanel({
             draft={draft}
             setDraft={setDraft}
             placeholder={composerPlaceholder}
+            focusedTask={focusedTask}
+            onClearFocus={onClearFocus}
             onBack={onBack}
             onTitled={onTitled}
           />

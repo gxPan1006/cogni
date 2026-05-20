@@ -62,5 +62,5 @@ export type {
 // are shared; the draggable <ChatBubble> is the live entry point on the project
 // page (it superseded the bottom-anchored <WorkspaceChatBar>).
 export { WorkspaceChatBar, scopePlaceholder } from "./components/project/WorkspaceChatBar.js";
-export type { WorkspaceChatScope } from "./components/project/WorkspaceChatBar.js";
+export type { WorkspaceChatScope, WorkspaceTaskFocus } from "./components/project/WorkspaceChatBar.js";
 export { ChatBubble } from "./components/project/chat-bubble/ChatBubble.js";

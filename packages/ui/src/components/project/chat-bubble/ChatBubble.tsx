@@ -22,7 +22,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ThreadSummary } from "@cogni/contract";
 import type { ApiClient } from "../../../transport/api.js";
 import { Icon } from "../../icons.js";
-import type { WorkspaceChatScope } from "../WorkspaceChatBar.js";
+import type { WorkspaceChatScope, WorkspaceTaskFocus } from "../WorkspaceChatBar.js";
 import { scopePlaceholder } from "../WorkspaceChatBar.js";
 import { ChatPanel } from "./ChatPanel.js";
 import {
@@ -68,7 +68,19 @@ function loadSize(): Size | null {
   return null;
 }
 
-export function ChatBubble({ api, scope }: { api: ApiClient; scope: WorkspaceChatScope }) {
+export function ChatBubble({
+  api,
+  scope,
+  focusedTask = null,
+  onClearFocus,
+}: {
+  api: ApiClient;
+  scope: WorkspaceChatScope;
+  /** The last-opened task card on this board (project scope only). */
+  focusedTask?: WorkspaceTaskFocus | null;
+  /** Dismiss the focus chip (✕) — the next send goes project-wide. */
+  onClearFocus?: () => void;
+}) {
   const projectId = scope.kind === "project" ? scope.projectId : undefined;
   const scopeLabel = scope.kind === "project" ? scope.projectName : "工作区编排";
   const composerPlaceholder = scopePlaceholder(scope);
@@ -306,6 +318,8 @@ export function ChatBubble({ api, scope }: { api: ApiClient; scope: WorkspaceCha
               active={active}
               scopeLabel={scopeLabel}
               composerPlaceholder={composerPlaceholder}
+              focusedTask={focusedTask}
+              onClearFocus={onClearFocus}
               loading={loading}
               creating={creating}
               error={error}

@@ -115,7 +115,7 @@ export interface WsClient {
    *  last one detaches. The single sidebar mount is the expected caller. */
   subscribeList(sub: ListSubscription): () => void;
   /** Returns true iff the frame could be written to the socket synchronously. */
-  send(threadId: string, text: string, attachments?: { name: string; size: number }[]): boolean;
+  send(threadId: string, text: string, attachments?: { name: string; size: number }[], taskId?: string): boolean;
   resolveFallback(
     pendingMessageId: string,
     action: "switch" | "cancel",
@@ -379,10 +379,14 @@ export function createWsClient(buildUrl: () => string): WsClient {
       };
     },
 
-    send(threadId, text, attachments) {
-      return sendFrame(attachments && attachments.length > 0
-        ? { t: "send", threadId, text, attachments }
-        : { t: "send", threadId, text });
+    send(threadId, text, attachments, taskId) {
+      return sendFrame({
+        t: "send",
+        threadId,
+        text,
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
+        ...(taskId ? { taskId } : {}),
+      });
     },
 
     resolveFallback(pendingMessageId, action, targetHostId) {

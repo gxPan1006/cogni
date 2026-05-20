@@ -6,7 +6,7 @@ import { createHost } from "../db/hosts.js";
 import { HostRouter } from "../host-router.js";
 import { ClientHub } from "../client-hub.js";
 import { getOrCreateWorkspaceThread, getOrCreateProjectThread } from "../db/threads.js";
-import { createProject } from "../db/projects.js";
+import { createProject, createTask } from "../db/projects.js";
 import { WorkspaceChatDomain } from "./workspace-chat.js";
 
 /**
@@ -112,6 +112,85 @@ describe("WorkspaceChatDomain.handleClientSend", () => {
       sourceClientId: "c1",
     });
     expect(sends[0]?.hostId).toBe(host.hostId);
+    await close();
+  });
+
+  it("folds the focused task (ref/title/state) into appendSystemPrompt when taskId is sent", async () => {
+    const { db, close, user, host, hosts, clients } = await seed();
+    const sends: CloudToHost[] = [];
+    hosts.register({ hostId: host.hostId, userId: user.id, send: (m) => sends.push(m) });
+    const project = await createProject(db, {
+      userId: user.id,
+      tenantId: user.tenantId,
+      name: "贪吃蛇游戏",
+      repoPath: "/tmp/snake",
+      defaultHostId: host.hostId,
+    });
+    const task = await createTask(db, { projectId: project.id, title: "加一个计分板" });
+    const thread = await getOrCreateProjectThread(db, {
+      id: project.id,
+      userId: user.id,
+      tenantId: user.tenantId,
+      threadId: null,
+    });
+    const domain = new WorkspaceChatDomain(db, hosts, clients);
+    await domain.handleClientSend({
+      userId: user.id,
+      threadId: thread.id,
+      content: "把这个改成横屏",
+      sourceClientId: "c1",
+      taskId: task.id,
+    });
+    const frame = sends[0];
+    expect(frame?.t).toBe("dispatch");
+    if (frame?.t === "dispatch") {
+      expect(frame.message).toBe("把这个改成横屏"); // user text stays raw
+      expect(frame.appendSystemPrompt).toContain(task.ref);
+      expect(frame.appendSystemPrompt).toContain("加一个计分板");
+      expect(frame.appendSystemPrompt).toContain(`taskId=${task.id}`);
+    }
+    await close();
+  });
+
+  it("ignores a taskId that belongs to a different project (no leak)", async () => {
+    const { db, close, user, host, hosts, clients } = await seed();
+    const sends: CloudToHost[] = [];
+    hosts.register({ hostId: host.hostId, userId: user.id, send: (m) => sends.push(m) });
+    const projA = await createProject(db, { userId: user.id, tenantId: user.tenantId, name: "A", repoPath: "/tmp/a", defaultHostId: host.hostId });
+    const projB = await createProject(db, { userId: user.id, tenantId: user.tenantId, name: "B", repoPath: "/tmp/b", defaultHostId: host.hostId });
+    const taskB = await createTask(db, { projectId: projB.id, title: "B 的任务" });
+    const threadA = await getOrCreateProjectThread(db, { id: projA.id, userId: user.id, tenantId: user.tenantId, threadId: null });
+    const domain = new WorkspaceChatDomain(db, hosts, clients);
+    await domain.handleClientSend({
+      userId: user.id,
+      threadId: threadA.id,
+      content: "x",
+      sourceClientId: "c1",
+      taskId: taskB.id,
+    });
+    const frame = sends[0];
+    if (frame?.t === "dispatch") {
+      expect(frame.appendSystemPrompt).not.toContain("B 的任务");
+      expect(frame.appendSystemPrompt).not.toContain(`taskId=${taskB.id}`);
+    }
+    await close();
+  });
+
+  it("never emits literal 'undefined' for a blank project name", async () => {
+    const { db, close, user, host, hosts, clients } = await seed();
+    const sends: CloudToHost[] = [];
+    hosts.register({ hostId: host.hostId, userId: user.id, send: (m) => sends.push(m) });
+    // A project whose name is empty/whitespace — the bug class behind the
+    // literal「undefined」placeholder. The preamble must degrade gracefully.
+    const project = await createProject(db, { userId: user.id, tenantId: user.tenantId, name: "   ", repoPath: "/tmp/blank", defaultHostId: host.hostId });
+    const thread = await getOrCreateProjectThread(db, { id: project.id, userId: user.id, tenantId: user.tenantId, threadId: null });
+    const domain = new WorkspaceChatDomain(db, hosts, clients);
+    await domain.handleClientSend({ userId: user.id, threadId: thread.id, content: "x", sourceClientId: "c1" });
+    const frame = sends[0];
+    if (frame?.t === "dispatch") {
+      expect(frame.appendSystemPrompt).not.toContain("undefined");
+      expect(frame.appendSystemPrompt).toContain(`projectId=${project.id}`);
+    }
     await close();
   });
 
