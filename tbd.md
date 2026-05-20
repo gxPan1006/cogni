@@ -170,13 +170,15 @@ stopgap shell wrapper。`pnpm --filter desktop build:bundle` 产出可分发 .ap
 spec:`docs/superpowers/specs/2026-05-20-runner-host-single-binary-sidecar-design.md`。
 真机三项验收全过(二进制连云 / .app 出仓库连云 / app spawn sidecar 经 lsof 确认连云）。
 
-### S1. launchd 与 app-managed 的 double-spawn(需用户拍板)
-本机 launchd agent `com.cogni.runner-host`(commit `3ffd88c`)仍 active,KeepAlive 跑
+### S1. launchd 与 app-managed 的 double-spawn(✅ 2026-05-20 已拍板:选 A)
+本机 launchd agent `com.cogni.runner-host`(commit `3ffd88c`)曾 active,KeepAlive 跑
 `node dist/main.js`。**修好 sidecar 前**,app 从 /Applications 起的 stopgap 找不到
 dist/main.js → 起不来 → 只有 launchd 一个 daemon,反而无冲突。**修好后**,app 的
 `ensure_daemon` 会真拉起 bun daemon → 与 launchd 的 node daemon 抢同一 hostId(双连)。
-用户已选 "app-managed 为准"。拍板项:要么 `pnpm --filter @cogni/runner-host uninstall:launchd`
-彻底改吃 app-managed,要么保留 launchd 并回退 daemon.rs 的 ensure_daemon spawn。
+**决策:用户选 A(只用 app 管)** —— 已 `pnpm --filter @cogni/runner-host uninstall:launchd`
+卸掉本机 launchd(bootout + 删 plist)。app-managed 成为唯一模型,daemon.rs 不改。
+真机验证:卸 launchd 后开 app → 恰好 1 个 bun daemon(父进程=app)连云。
+注:launchd 安装脚本仍保留在 repo(opt-in,非默认路径)。
 
 ### S2. Tauri sidecar 未随 app 退出被回收(与注释不符)
 `daemon.rs` 注释称 sidecar "tied to app lifetime, does NOT survive app closing"。
