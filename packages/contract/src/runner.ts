@@ -32,6 +32,8 @@ export interface StartSessionOpts {
   mcpConfigPath?: string;
   /** SP-4: restrict the runner to these tool names. Passed as `--allowed-tools`. */
   allowedTools?: string[];
+  /** SP-4: extra system-prompt text (e.g. orchestrator preamble). Passed as `--append-system-prompt`. */
+  appendSystemPrompt?: string;
 }
 
 export interface RunnerSessionHandle {

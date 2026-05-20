@@ -78,4 +78,16 @@ describe("ClaudeCodeAdapter", () => {
       allowedTools: ["mcp__cogni__create_task"],
     });
   });
+
+  it("passes appendSystemPrompt through to the runner", async () => {
+    const seen: Array<Parameters<ClaudeRunner>[0]> = [];
+    const runner: ClaudeRunner = async function* (p) {
+      seen.push(p);
+      yield JSON.stringify({ type: "result", subtype: "success" });
+    };
+    const adapter = new ClaudeCodeAdapter(runner);
+    const session = await adapter.startSession({ cwd: "/tmp", appendSystemPrompt: "你是 Cogni 编排助手" });
+    for await (const _ of session.send("hi")) { /* drain */ }
+    expect(seen[0]).toMatchObject({ appendSystemPrompt: "你是 Cogni 编排助手" });
+  });
 });

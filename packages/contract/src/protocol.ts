@@ -59,6 +59,12 @@ export const cloudToHostSchema = z.discriminatedUnion("t", [
      * Optional; absent for ordinary chat/task dispatches.
      */
     orchestrator: z.boolean().optional(),
+    /**
+     * SP-4: extra system-prompt text for the runner turn (orchestrator
+     * preamble). The host passes it as `--append-system-prompt`. Sent on
+     * every orchestrator turn so resumed sessions keep the framing.
+     */
+    appendSystemPrompt: z.string().optional(),
   }),
   // SP-3 host RPC request envelope. The cloud assigns `rpcId`; the host
   // echoes it on the `host-rpc-response` frame. `request` is the typed

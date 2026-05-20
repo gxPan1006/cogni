@@ -71,12 +71,15 @@ export class WorkspaceChatDomain {
       });
       return;
     }
-    // Prefer the host that last owned this thread (so --resume keeps context),
-    // else fall back to any online host.
+    // Host preference: the host that last owned this thread (so --resume keeps
+    // context) → the project's default host (project-scoped chat) → any online
+    // host. The default-host step keeps a project's orchestration on the same
+    // box its tasks run on instead of an arbitrary online host.
+    const project = await getProjectByThreadId(this.db, threadId);
     const latest = await getLatestSessionForThread(this.db, threadId);
-    const preferred = latest?.hostId ?? null;
+    const preferred = latest?.hostId ?? project?.defaultHostId ?? null;
     const chosen = (preferred && online.find((h) => h.hostId === preferred)) || online[0]!;
-    await this.persistAndDispatch({ userId, threadId, content, hostId: chosen.hostId });
+    await this.persistAndDispatch({ userId, threadId, content, hostId: chosen.hostId, project });
   }
 
   private async persistAndDispatch(p: {
@@ -84,6 +87,7 @@ export class WorkspaceChatDomain {
     threadId: string;
     content: string;
     hostId: string;
+    project?: Awaited<ReturnType<typeof getProjectByThreadId>>;
   }): Promise<void> {
     const userMsg = await appendMessage(this.db, {
       threadId: p.threadId,
@@ -111,14 +115,12 @@ export class WorkspaceChatDomain {
         });
     await setRunnerSessionStatus(this.db, session.id, "running");
 
-    // Only the first turn of a new session carries the orchestrator preamble;
-    // resumed sessions already have it in their context.
-    let message = p.content;
-    if (!reusable) {
-      const project = await getProjectByThreadId(this.db, p.threadId);
-      const scope = project ? { projectId: project.id, projectName: project.name } : {};
-      message = preamble(scope) + "\n" + p.content;
-    }
+    // Orchestrator framing rides on `--append-system-prompt` every turn (set
+    // by the host from this field), so it survives `--resume` without polluting
+    // the user-visible message. The chat bubble shows only the raw user text.
+    const project = p.project ?? (await getProjectByThreadId(this.db, p.threadId));
+    const scope = project ? { projectId: project.id, projectName: project.name } : {};
+    const appendSystemPrompt = preamble(scope);
 
     const conn = this.hosts.getHostByIdForUser(p.userId, p.hostId);
     if (!conn) {
@@ -133,8 +135,9 @@ export class WorkspaceChatDomain {
         threadId: p.threadId,
         adapter: ADAPTER,
         runnerSessionId: session.runnerSessionId,
-        message,
+        message: p.content,
         orchestrator: true,
+        appendSystemPrompt,
       });
     } catch {
       await setRunnerSessionStatus(this.db, session.id, "failed");

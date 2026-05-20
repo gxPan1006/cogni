@@ -5,7 +5,8 @@ import { findOrCreateUserByEmail } from "../db/users.js";
 import { createHost } from "../db/hosts.js";
 import { HostRouter } from "../host-router.js";
 import { ClientHub } from "../client-hub.js";
-import { getOrCreateWorkspaceThread } from "../db/threads.js";
+import { getOrCreateWorkspaceThread, getOrCreateProjectThread } from "../db/threads.js";
+import { createProject } from "../db/projects.js";
 import { WorkspaceChatDomain } from "./workspace-chat.js";
 
 /**
@@ -56,7 +57,7 @@ describe("WorkspaceChatDomain.handleClientSend", () => {
     await close();
   });
 
-  it("includes an orchestrator preamble on the first turn", async () => {
+  it("carries the orchestrator preamble via appendSystemPrompt, message stays raw", async () => {
     const { db, close, user, host, hosts, domain } = await seed();
     const sends: CloudToHost[] = [];
     hosts.register({ hostId: host.hostId, userId: user.id, send: (m) => sends.push(m) });
@@ -73,9 +74,44 @@ describe("WorkspaceChatDomain.handleClientSend", () => {
     const frame = sends[0];
     expect(frame?.t).toBe("dispatch");
     if (frame?.t === "dispatch") {
-      expect(frame.message).toContain("Cogni");
-      expect(frame.message.endsWith("hi")).toBe(true);
+      // The preamble rides on --append-system-prompt, not the user message,
+      // so the chat bubble shows only the raw text.
+      expect(frame.message).toBe("hi");
+      expect(frame.appendSystemPrompt).toContain("Cogni");
     }
+    await close();
+  });
+
+  it("prefers the project's default host for a project-scoped thread", async () => {
+    const { db, close, user, host, hosts, clients } = await seed();
+    // A second online host that is NOT the project default; the domain must
+    // still pick the project's default host for a project-linked thread.
+    const other = await createHost(db, { userId: user.id, tenantId: user.tenantId, name: "Other" });
+    const sends: Array<{ hostId: string; msg: CloudToHost }> = [];
+    hosts.register({ hostId: other.hostId, userId: user.id, send: (m) => sends.push({ hostId: other.hostId, msg: m }) });
+    hosts.register({ hostId: host.hostId, userId: user.id, send: (m) => sends.push({ hostId: host.hostId, msg: m }) });
+    // Project whose default host is `host`, linked to its own orchestrator thread.
+    const project = await createProject(db, {
+      userId: user.id,
+      tenantId: user.tenantId,
+      name: "P",
+      repoPath: "/tmp/p",
+      defaultHostId: host.hostId,
+    });
+    const thread = await getOrCreateProjectThread(db, {
+      id: project.id,
+      userId: user.id,
+      tenantId: user.tenantId,
+      threadId: null,
+    });
+    const domain = new WorkspaceChatDomain(db, hosts, clients);
+    await domain.handleClientSend({
+      userId: user.id,
+      threadId: thread.id,
+      content: "建个任务",
+      sourceClientId: "c1",
+    });
+    expect(sends[0]?.hostId).toBe(host.hostId);
     await close();
   });
 

@@ -23,6 +23,12 @@ export interface DispatchInput {
    * REST instead of touching files.
    */
   orchestrator?: boolean;
+  /**
+   * SP-4: extra system-prompt text for this turn (orchestrator preamble),
+   * passed to the adapter as `--append-system-prompt`. Sent every turn so
+   * resumed sessions keep the framing.
+   */
+  appendSystemPrompt?: string;
 }
 
 /** Holds registered adapters + live session handles, runs one turn per dispatch. */
@@ -70,7 +76,12 @@ export class RunnerManager {
     // SP-4: orchestrator dispatches mount the cogni MCP server + tool allowlist;
     // ordinary chat/task dispatches leave these unset.
     const opts: StartSessionOpts = input.orchestrator
-      ? { cwd, mcpConfigPath: ensureCogniMcpConfig(), allowedTools: [...COGNI_ALLOWED_TOOLS] }
+      ? {
+          cwd,
+          mcpConfigPath: ensureCogniMcpConfig(),
+          allowedTools: [...COGNI_ALLOWED_TOOLS],
+          ...(input.appendSystemPrompt ? { appendSystemPrompt: input.appendSystemPrompt } : {}),
+        }
       : { cwd };
 
     let handle = this.sessions.get(input.sessionId);
