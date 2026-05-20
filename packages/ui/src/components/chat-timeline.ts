@@ -178,6 +178,24 @@ function lastIsUser(rows: TimelineRow[]): boolean {
   return !!last && last.kind === "user";
 }
 
+/**
+ * Whether the thread is waiting on the runner with **no visible progress** —
+ * the states where a stall timer should be armed so an undelivered turn can't
+ * spin the indicator (or the streaming caret) forever.
+ *
+ * True when the last user turn has produced nothing yet (`awaitingReply`), or
+ * the in-flight turn is streaming but has no tool *currently running* (a long
+ * Bash/build is legitimately silent, so a running tool counts as progress).
+ */
+export function isAwaitingProgress(timeline: Timeline): boolean {
+  if (timeline.awaitingReply) return true;
+  const last = timeline.rows[timeline.rows.length - 1];
+  if (last && last.kind === "assistant" && last.streaming) {
+    return !last.blocks.some((b) => b.kind === "tool" && b.status === "running");
+  }
+  return false;
+}
+
 // ─── Tool-call argument preview ──────────────────────────────────
 
 /**
