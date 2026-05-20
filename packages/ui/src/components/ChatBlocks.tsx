@@ -33,11 +33,27 @@ export {
 
 // ─── Block components ────────────────────────────────────────────
 
-export function UserMessage({ text }: { text: string }) {
+export function UserMessage({
+  text,
+  attachments,
+}: {
+  text: string;
+  attachments?: { name: string; size: number }[];
+}) {
   return (
     <div className="msg msg--user">
       <div className="msg__user-card">
         <Markdown text={text} />
+        {attachments && attachments.length > 0 && (
+          <div className="composer__attachments" style={{ padding: "6px 0 0" }}>
+            {attachments.map((a) => (
+              <span className="attach-chip" key={a.name}>
+                <span className="attach-chip__icon" aria-hidden="true">{Icon.attach}</span>
+                <span className="attach-chip__name">{a.name}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

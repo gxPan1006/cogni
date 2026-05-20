@@ -124,7 +124,7 @@ function WorkspaceChatPopup({
           <div className="wschat__empty">告诉 Cogni 你想建/改/删什么任务或项目。</div>
         )}
         {rows.map((row) => {
-          if (row.kind === "user") return <UserMessage key={row.key} text={row.text} />;
+          if (row.kind === "user") return <UserMessage key={row.key} text={row.text} attachments={row.attachments} />;
           if (row.kind === "assistant-text") return <AssistantText key={row.key} text={row.text} />;
           if (row.kind === "system") return null;
           return <AssistantBlocks key={row.key} blocks={row.blocks} streaming={row.streaming} />;

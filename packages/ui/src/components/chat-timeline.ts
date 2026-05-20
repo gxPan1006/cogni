@@ -91,7 +91,7 @@ function findToolIdx(blocks: Block[], toolId: string): number {
 // ─── Whole-thread timeline ───────────────────────────────────────
 
 export type TimelineRow =
-  | { kind: "user"; key: string; text: string }
+  | { kind: "user"; key: string; text: string; attachments?: { name: string; size: number }[] }
   | { kind: "system"; key: string; text: string }
   | { kind: "assistant"; key: string; blocks: Block[]; streaming: boolean }
   | { kind: "assistant-text"; key: string; text: string };
@@ -144,7 +144,7 @@ export function buildTimeline(messages: MessageView[], events: RunnerEvent[]): T
         ? { kind: "assistant-text", key: m.id, text: m.content }
         : m.role === "system"
           ? { kind: "system", key: m.id, text: m.content }
-          : { kind: "user", key: m.id, text: m.content },
+          : { kind: "user", key: m.id, text: m.content, attachments: m.attachments },
     );
     return { rows, awaitingReply: lastIsUser(rows) };
   }
@@ -158,7 +158,7 @@ export function buildTimeline(messages: MessageView[], events: RunnerEvent[]): T
       continue;
     }
     // user turn
-    rows.push({ kind: "user", key: m.id, text: m.content });
+    rows.push({ kind: "user", key: m.id, text: m.content, attachments: m.attachments });
     const turn = turns[ti];
     if (turn) {
       const terminated = turn.some((e) => e.type === "done" || e.type === "error");

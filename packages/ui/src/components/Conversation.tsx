@@ -120,7 +120,7 @@ export function Conversation({
               `--dangerously-skip-permissions` and reviewing-state human review
               is the safety net. */}
           {rows.map((row) => {
-            if (row.kind === "user") return <UserMessage key={row.key} text={row.text} />;
+            if (row.kind === "user") return <UserMessage key={row.key} text={row.text} attachments={row.attachments} />;
             if (row.kind === "system") {
               return (
                 <div key={row.key} className="msg msg--aux">
