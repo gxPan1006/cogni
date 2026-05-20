@@ -1,11 +1,16 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
+import type { SetProjectsRootResponse } from "@cogni/contract";
+import { expandTilde } from "./paths.js";
 
 export interface HostConfig {
   hostId: string;
   registrationToken: string;
   cloudUrl: string; // e.g. ws://localhost:8787
+  /** SP-4: per-host root for auto-created project folders; stored raw (may
+   *  contain a leading `~`), expanded on read. Optional for old configs. */
+  projectsRoot?: string;
 }
 
 export function configDir(): string {
@@ -41,4 +46,24 @@ export async function writeHostConfig(cfg: HostConfig): Promise<void> {
 /** Per-thread working directory the Claude Code adapter runs in. */
 export function threadScratchDir(threadId: string): string {
   return join(configDir(), "threads", threadId);
+}
+
+/** Resolve the host's projects-root: COGNI_PROJECTS_ROOT env (locked) →
+ *  host.json `projectsRoot` → default `~/cogni`. Always ~-expanded. */
+export function resolveProjectsRoot(configValue: string | undefined): { root: string; locked: boolean } {
+  const env = process.env.COGNI_PROJECTS_ROOT;
+  if (env && env.trim().length > 0) return { root: expandTilde(env.trim()), locked: true };
+  return {
+    root: expandTilde(configValue && configValue.trim().length > 0 ? configValue.trim() : "~/cogni"),
+    locked: false,
+  };
+}
+
+/** Persist a new projects-root into host.json (no-op + locked when env pins it). */
+export async function setProjectsRoot(projectsRoot: string): Promise<SetProjectsRootResponse> {
+  const cfg = await readHostConfig();
+  const resolved = resolveProjectsRoot(projectsRoot);
+  if (resolved.locked) return { projectsRoot: resolved.root, locked: true };
+  if (cfg) await writeHostConfig({ ...cfg, projectsRoot });
+  return { projectsRoot: resolved.root, locked: false };
 }

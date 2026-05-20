@@ -1,4 +1,4 @@
-import { readHostConfig } from "./config.js";
+import { readHostConfig, setProjectsRoot } from "./config.js";
 import { RunnerManager } from "./runner-manager.js";
 import { ClaudeCodeAdapter } from "./adapters/claude-code.js";
 import { CodexAdapter } from "./adapters/codex/index.js";
@@ -63,6 +63,7 @@ if (process.argv.includes("mcp-serve")) {
       uploadChunk: (r) => uploads.chunk(r),
       uploadCommit: (r) => uploads.commit(r),
       uploadAbort: (r) => uploads.abort(r),
+      setProjectsRoot: (req) => setProjectsRoot(req.projectsRoot),
     }),
   );
   logger.info({ hostId: config.hostId }, "runner host daemon started");

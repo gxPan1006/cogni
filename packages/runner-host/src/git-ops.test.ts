@@ -71,6 +71,15 @@ describe("gitInitIfMissing", () => {
     const res = await gitInitIfMissing({ repoPath: repo });
     expect(res.initialized).toBe(false);
   });
+
+  it.skipIf(!hasGit)("creates missing parent directories", async () => {
+    const nested = join(tmp, "a", "b", "c");
+    const res = await gitInitIfMissing({ repoPath: nested });
+    expect(res.initialized).toBe(true);
+    // .git exists ⇒ parents were created
+    const { pathExists } = (await import("./git-ops.js")).__internals;
+    expect(await pathExists(join(nested, ".git"))).toBe(true);
+  });
 });
 
 describe("gitWorktreeCreate", () => {
