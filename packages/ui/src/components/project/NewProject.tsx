@@ -26,6 +26,7 @@ import type { MergePolicy } from "@cogni/contract";
 import type { HostInfo } from "../../transport/api.js";
 import { Icon } from "../icons.js";
 import { LoadingRows, LoadingState } from "../LoadingState.js";
+import { suggestRepoPath } from "./new-project-path.js";
 import "./new-project.css";
 
 export interface NewProjectDraft {
@@ -69,6 +70,17 @@ export function NewProject({
   const [mergePolicy, setMergePolicy] = useState<MergePolicy>("require-review");
   const [initRepo, setInitRepo] = useState(true);
   const [browseOpen, setBrowseOpen] = useState(false);
+  /** True once the user hand-edits / browse-picks the path — stops auto-suggest from clobbering it. */
+  const [pathDirty, setPathDirty] = useState(false);
+
+  // Pre-fill the repo path from the selected host's projects-root while the
+  // user hasn't touched it: <root>/<sanitized name>. Recomputes as they type
+  // the name or switch hosts; stops once they edit the path themselves.
+  const selectedHost = hosts.find((h) => h.id === defaultHostId);
+  useEffect(() => {
+    if (pathDirty) return;
+    setRepoPath(suggestRepoPath(selectedHost?.projectsRoot, name));
+  }, [name, selectedHost?.projectsRoot, pathDirty]);
 
   const canSubmit =
     name.trim().length > 0 &&
@@ -112,7 +124,7 @@ export function NewProject({
                 className="input np__path-input"
                 placeholder="/Users/you/code/myapp"
                 value={repoPath}
-                onChange={(e) => setRepoPath(e.target.value)}
+                onChange={(e) => { setRepoPath(e.target.value); setPathDirty(true); }}
               />
               {onBrowseHost && (
                 <button
@@ -172,7 +184,7 @@ export function NewProject({
           <FsBrowseModal
             hostId={defaultHostId}
             browse={onBrowseHost}
-            onPick={(path) => { setRepoPath(path); setBrowseOpen(false); }}
+            onPick={(path) => { setRepoPath(path); setPathDirty(true); setBrowseOpen(false); }}
             onClose={() => setBrowseOpen(false)}
           />
         )}

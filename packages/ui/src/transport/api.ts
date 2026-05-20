@@ -75,6 +75,8 @@ export interface HostInfo {
   name: string;
   status: string;
   lastSeen?: string | null;
+  projectsRoot?: string | null;
+  projectsRootLocked?: boolean;
 }
 
 export interface DeviceRow {
@@ -217,6 +219,12 @@ export class ApiClient {
   removeHost = (id: string): Promise<{ ok: true }> =>
     this.request(`${this.cloudUrl}/api/hosts/${id}`, {
       method: "DELETE", headers: this.authHeaders(),
+    });
+
+  /** Settings → Runner Hosts: change a host's projects-root (root for auto-created project folders). */
+  setProjectsRoot = (id: string, projectsRoot: string): Promise<{ projectsRoot: string; locked: boolean }> =>
+    this.request(`${this.cloudUrl}/api/hosts/${id}/projects-root`, {
+      method: "PUT", headers: this.authHeaders(), body: JSON.stringify({ projectsRoot }),
     });
 
   // ─── Devices (auth_sessions) ──────────────────────────────────────────
