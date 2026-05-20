@@ -13,7 +13,7 @@
  * Everything else (host health, user menu, mode pill, settings entry) is
  * unchanged — same look as SP-2.
  */
-import { useState } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import type { ThreadSummary } from "@cogni/contract";
 import { Icon } from "./icons.js";
 import { LogoMark } from "./LogoMark.js";
@@ -156,11 +156,13 @@ function ChatLists(props: {
   onDeleteThread?: (id: string) => void;
   onPrefetch?: (id: string) => void;
 }) {
-  // Only one row is in rename / delete-confirm mode at a time; keeping that
-  // state here (not per-row) means switching threads or modes cleanly resets
-  // any open input, and the two modes are mutually exclusive.
+  // Only one row is in rename / delete-confirm mode (or has its ⋮ menu open) at
+  // a time; keeping that state here (not per-row) means switching threads or
+  // modes cleanly resets any open input/menu, and the modes are mutually
+  // exclusive.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [menuId, setMenuId] = useState<string | null>(null);
 
   const pinned = props.threads.filter((t) => (t as ThreadSummary & { pinned?: boolean }).pinned);
   const rest   = props.threads.filter((t) => !(t as ThreadSummary & { pinned?: boolean }).pinned);
@@ -172,15 +174,20 @@ function ChatLists(props: {
       active={t.id === props.activeThreadId}
       editing={editingId === t.id}
       confirmingDelete={confirmingId === t.id}
+      menuOpen={menuId === t.id}
+      canRename={!!props.onRenameThread}
+      canDelete={!!props.onDeleteThread}
       onClick={() => props.onSelect(t.id)}
       onPrefetch={props.onPrefetch ? () => props.onPrefetch?.(t.id) : undefined}
-      onStartRename={props.onRenameThread ? () => { setConfirmingId(null); setEditingId(t.id); } : undefined}
+      onToggleMenu={() => setMenuId((cur) => (cur === t.id ? null : t.id))}
+      onCloseMenu={() => setMenuId(null)}
+      onStartRename={() => { setMenuId(null); setConfirmingId(null); setEditingId(t.id); }}
       onCommitRename={(title) => {
         props.onRenameThread?.(t.id, title);
         setEditingId(null);
       }}
       onCancelRename={() => setEditingId(null)}
-      onStartDelete={props.onDeleteThread ? () => { setEditingId(null); setConfirmingId(t.id); } : undefined}
+      onStartDelete={() => { setMenuId(null); setEditingId(null); setConfirmingId(t.id); }}
       onConfirmDelete={() => {
         props.onDeleteThread?.(t.id);
         setConfirmingId(null);
@@ -208,7 +215,8 @@ function ChatLists(props: {
 }
 
 function ThreadRow({
-  thread, active, editing, confirmingDelete, onClick, onPrefetch,
+  thread, active, editing, confirmingDelete, menuOpen, canRename, canDelete,
+  onClick, onPrefetch, onToggleMenu, onCloseMenu,
   onStartRename, onCommitRename, onCancelRename,
   onStartDelete, onConfirmDelete, onCancelDelete,
 }: {
@@ -216,16 +224,22 @@ function ThreadRow({
   active: boolean;
   editing: boolean;
   confirmingDelete: boolean;
+  menuOpen: boolean;
+  canRename: boolean;
+  canDelete: boolean;
   onClick: () => void;
   onPrefetch?: () => void;
-  onStartRename?: () => void;
+  onToggleMenu: () => void;
+  onCloseMenu: () => void;
+  onStartRename: () => void;
   onCommitRename: (title: string) => void;
   onCancelRename: () => void;
-  onStartDelete?: () => void;
+  onStartDelete: () => void;
   onConfirmDelete: () => void;
   onCancelDelete: () => void;
 }) {
   const [draft, setDraft] = useState(thread.title);
+  const kebabRef = useRef<HTMLButtonElement>(null);
 
   if (editing) {
     const commit = () => {
@@ -272,27 +286,94 @@ function ThreadRow({
   }
 
   return (
-    <div className={"sb-thread" + (active ? " is-active" : "")}>
+    <div className={"sb-thread" + (active ? " is-active" : "") + (menuOpen ? " is-menu-open" : "")}>
       <button className="sb-thread__title" onClick={onClick} onMouseEnter={onPrefetch} title={thread.title}>
         {thread.title}
       </button>
-      {(onStartRename || onStartDelete) && (
+      {(canRename || canDelete) && (
         <span className="sb-thread__actions">
-          {onStartRename && (
-            <button
-              className="sb-thread__act"
-              title="重命名"
-              onClick={(e) => { e.stopPropagation(); setDraft(thread.title); onStartRename(); }}
-            >{Icon.edit}</button>
-          )}
-          {onStartDelete && (
-            <button
-              className="sb-thread__act sb-thread__act--danger"
-              title="删除"
-              onClick={(e) => { e.stopPropagation(); onStartDelete(); }}
-            >{Icon.trash}</button>
-          )}
+          <button
+            ref={kebabRef}
+            className={"sb-thread__act" + (menuOpen ? " is-on" : "")}
+            title="更多"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={(e) => { e.stopPropagation(); onToggleMenu(); }}
+          >{Icon.more}</button>
         </span>
+      )}
+      {menuOpen && (
+        <ThreadMenu
+          anchor={kebabRef.current}
+          onClose={onCloseMenu}
+          onRename={canRename ? () => { setDraft(thread.title); onStartRename(); } : undefined}
+          onDelete={canDelete ? onStartDelete : undefined}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Floating action menu for a thread row (⋮ → 重命名 / 删除). Rendered with
+ * `position: fixed` and positioned from the kebab's bounding rect so it escapes
+ * the sidebar's `overflow-y: auto` clip without a portal. Closes on outside
+ * click, Escape, or item selection.
+ */
+function ThreadMenu({
+  anchor, onClose, onRename, onDelete,
+}: {
+  anchor: HTMLElement | null;
+  onClose: () => void;
+  onRename?: () => void;
+  onDelete?: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const MENU_W = 184;
+    // Right-align the menu to the kebab, opening downward; clamp into the viewport.
+    const left = Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8));
+    const top = Math.min(r.bottom + 6, window.innerHeight - 120);
+    setPos({ top, left });
+  }, [anchor]);
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (ref.current?.contains(t)) return;
+      if (anchor?.contains(t)) return; // let the kebab's own click toggle it
+      onClose();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [anchor, onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className="sb-menu"
+      role="menu"
+      style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999 }}
+    >
+      {onRename && (
+        <button className="sb-menu__item" role="menuitem" onClick={() => { onClose(); onRename(); }}>
+          {Icon.edit}<span>重命名</span>
+        </button>
+      )}
+      {onRename && onDelete && <div className="sb-menu__sep" />}
+      {onDelete && (
+        <button className="sb-menu__item sb-menu__item--danger" role="menuitem" onClick={() => { onClose(); onDelete(); }}>
+          {Icon.trash}<span>删除</span>
+        </button>
       )}
     </div>
   );
