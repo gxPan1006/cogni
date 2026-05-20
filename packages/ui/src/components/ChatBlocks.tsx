@@ -21,6 +21,7 @@
 import { useState, type ReactNode } from "react";
 import { Markdown } from "./Markdown.js";
 import { Icon } from "./icons.js";
+import { AttachmentCard } from "./AttachmentCard.js";
 import { toolInputPreview, safeStringify, truncate, type Block } from "./chat-timeline.js";
 import "./chat-blocks.css";
 
@@ -43,17 +44,14 @@ export function UserMessage({
   return (
     <div className="msg msg--user">
       <div className="msg__user-card">
-        <Markdown text={text} />
         {attachments && attachments.length > 0 && (
-          <div className="composer__attachments" style={{ padding: "6px 0 0" }}>
+          <div className="att-tray msg__att-tray">
             {attachments.map((a) => (
-              <span className="attach-chip" key={a.name}>
-                <span className="attach-chip__icon" aria-hidden="true">{Icon.attach}</span>
-                <span className="attach-chip__name">{a.name}</span>
-              </span>
+              <AttachmentCard key={a.name} name={a.name} size={a.size} />
             ))}
           </div>
         )}
+        {text.trim().length > 0 && <Markdown text={text} />}
       </div>
     </div>
   );

@@ -126,6 +126,24 @@ export function useThreadStream(api: ApiClient, threadId: string) {
       if (active) setMessages(msgs);
     };
 
+    // Drop the most recent optimistic (un-acked) user message. Called when the
+    // cloud says the send didn't actually dispatch (no host online / fallback
+    // prompt) so we don't leave a phantom "sent" bubble on screen.
+    const rollbackOptimistic = () => {
+      if (!active) return;
+      setMessages((m) => {
+        for (let i = m.length - 1; i >= 0; i--) {
+          const row = m[i];
+          if (row && row.role === "user" && row.id.startsWith("pending:")) {
+            const next = m.slice(0, i).concat(m.slice(i + 1));
+            api.cache.set(cacheKey, next);
+            return next;
+          }
+        }
+        return m;
+      });
+    };
+
     // Flush the buffered catchup replay in one batch (idempotent). Called on
     // catchup-complete / catchup-too-long so the freshly-loaded history appears
     // in a single render and live events that follow append directly.
@@ -160,16 +178,30 @@ export function useThreadStream(api: ApiClient, threadId: string) {
         try {
           if (msg.t === "message") {
             setMessages((m) => {
-              const next = [
-                ...m,
-                {
-                  id: msg.messageId,
-                  threadId: msg.threadId,
-                  role: msg.role,
-                  content: msg.content,
-                  createdAt: msg.createdAt,
-                },
-              ];
+              const incoming: MessageView = {
+                id: msg.messageId,
+                threadId: msg.threadId,
+                role: msg.role,
+                content: msg.content,
+                createdAt: msg.createdAt,
+                // #3: carry attachment metadata so the bubble shows file cards
+                // on the live broadcast (not only after an HTTP reload).
+                ...(msg.attachments && msg.attachments.length > 0 ? { attachments: msg.attachments } : {}),
+              };
+              // #4: reconcile our optimistic echo — replace the matching
+              // `pending:` user message in place so it doesn't double up and
+              // adopts the persisted id. (No turn-correlation id exists, so we
+              // match on role+content; identical back-to-back sends are rare.)
+              let next: MessageView[];
+              if (msg.role === "user") {
+                const idx = m.findIndex(
+                  (x) => x.id.startsWith("pending:") && x.role === "user" && x.content === msg.content,
+                );
+                if (idx >= 0) { next = m.slice(); next[idx] = incoming; }
+                else next = [...m, incoming];
+              } else {
+                next = [...m, incoming];
+              }
               // Keep the cache in step with live appends so a switch-away /
               // switch-back shows the full conversation, not the GET snapshot.
               api.cache.set(cacheKey, next);
@@ -223,8 +255,10 @@ export function useThreadStream(api: ApiClient, threadId: string) {
               preferred: msg.preferred,
               alternatives: msg.alternatives,
             });
+            rollbackOptimistic(); // the send is parked pending the user's host choice
           } else if (msg.t === "no-host-online") {
             setPendingNoHost({ pendingMessageId: msg.pendingMessageId });
+            rollbackOptimistic(); // nothing dispatched — don't leave a phantom bubble
           } else if (msg.t === "error") {
             console.warn("cloud error frame", msg.message);
           }
@@ -261,8 +295,28 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     // never false-stalls. Bare-dots (no frames) leaves them static → timer fires.
   }, [awaitingProgress, connected, hostOnline, reloadNonce, events.length, messages.length]);
 
-  const send = (text: string, attachments?: { name: string; size: number }[]) =>
-    api.wsClient.send(threadId, text, attachments);
+  const send = (text: string, attachments?: { name: string; size: number }[]) => {
+    const ok = api.wsClient.send(threadId, text, attachments);
+    if (ok) {
+      // #4: optimistic echo — paint the user's message instantly instead of
+      // waiting for the cloud's `message` broadcast round-trip. The "pending:"
+      // id is reconciled (or rolled back) when the cloud responds.
+      const optimistic: MessageView = {
+        id: `pending:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+        threadId,
+        role: "user",
+        content: text,
+        createdAt: new Date().toISOString(),
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
+      };
+      setMessages((m) => {
+        const next = [...m, optimistic];
+        api.cache.set(`thread:${threadId}`, next);
+        return next;
+      });
+    }
+    return ok;
+  };
 
   // Re-sync this thread from the cloud: refetch history and re-subscribe so any
   // events the cloud holds past our lastSeq replay. Safe and idempotent — it

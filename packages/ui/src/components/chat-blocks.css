@@ -168,3 +168,6 @@
 .no-host__icon { color: var(--bad); display: inline-flex; flex-shrink: 0; }
 .no-host__title { font-size: 14px; font-weight: 600; }
 .no-host__sub   { font-size: 13px; color: var(--muted); margin-top: 1px; }
+
+/* Attachment cards inside a user bubble (above the text when both present). */
+.msg__att-tray:not(:last-child) { margin-bottom: 8px; }

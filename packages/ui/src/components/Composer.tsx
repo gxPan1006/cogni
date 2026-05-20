@@ -10,10 +10,44 @@
  *   - send button is a small square accent button (Enter still primary)
  *   - attach / model picker stay disabled placeholders for now
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Icon } from "./icons.js";
 import type { UploadItem } from "../hooks/useUploads.js";
+import { AttachmentCard } from "./AttachmentCard.js";
 import "./composer.css";
+
+const IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|heic|bmp|avif)$/i;
+
+/** One upload item rendered as an AttachmentCard, owning its image preview URL. */
+function ComposerAttachment({
+  item,
+  onRemove,
+  onRetry,
+}: {
+  item: UploadItem;
+  onRemove: () => void;
+  onRetry: () => void;
+}) {
+  // Image files get an inline thumbnail from the local File (revoked on unmount).
+  const previewUrl = useMemo(
+    () => (IMAGE_RE.test(item.file.name) ? URL.createObjectURL(item.file) : undefined),
+    [item.file],
+  );
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  return (
+    <AttachmentCard
+      name={item.name ?? item.file.name}
+      size={item.size ?? item.file.size}
+      previewUrl={previewUrl}
+      progress={item.progress}
+      status={item.status}
+      error={item.error}
+      onRemove={onRemove}
+      onRetry={onRetry}
+    />
+  );
+}
 
 const TEXTAREA_MAX_HEIGHT_PX = 200;
 
@@ -82,24 +116,14 @@ export function Composer({
         onDrop={uploads ? (e) => { e.preventDefault(); if (e.dataTransfer.files.length) uploads.add(e.dataTransfer.files); } : undefined}
       >
         {uploads && uploads.items.length > 0 && (
-          <div className="composer__attachments">
+          <div className="att-tray composer__att-tray">
             {uploads.items.map((it) => (
-              <div
+              <ComposerAttachment
                 key={it.localId}
-                className={"attach-chip" + (it.status === "error" ? " attach-chip--error" : "")}
-                title={it.error ?? it.file.name}
-              >
-                <span className="attach-chip__icon" aria-hidden="true">{Icon.attach}</span>
-                <span className="attach-chip__name">{it.name ?? it.file.name}</span>
-                <span className="attach-chip__size">{formatBytes(it.size ?? it.file.size)}</span>
-                {it.status === "uploading" && (
-                  <span className="attach-chip__bar"><span style={{ width: `${Math.round(it.progress * 100)}%` }} /></span>
-                )}
-                {it.status === "error" && (
-                  <button type="button" className="attach-chip__retry" onClick={() => uploads.retry(it.localId)} title="重试">↻</button>
-                )}
-                <button type="button" className="attach-chip__x" onClick={() => uploads.remove(it.localId)} aria-label="移除附件">✕</button>
-              </div>
+                item={it}
+                onRemove={() => uploads.remove(it.localId)}
+                onRetry={() => uploads.retry(it.localId)}
+              />
             ))}
           </div>
         )}
@@ -186,10 +210,4 @@ function StatusPill({ status }: { status: ComposerStatus }) {
       <span className="status-pill__text">{status.text}</span>
     </div>
   );
-}
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }

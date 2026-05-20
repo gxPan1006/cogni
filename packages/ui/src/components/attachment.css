@@ -1,0 +1,130 @@
+/* AttachmentCard — see AttachmentCard.tsx. Cohesive with the warm-sand tokens. */
+
+.att-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.att-card {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px 7px 7px;
+  max-width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-1);
+  transition: box-shadow 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+.att-card:hover {
+  box-shadow: var(--shadow-2);
+  transform: translateY(-1px);
+}
+
+/* Typed thumbnail tile */
+.att-card__tile {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+.att-card__thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.att-card__badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* Kind tints */
+.att-card--img  .att-card__tile { background: var(--accent-soft); color: var(--accent-ink); }
+.att-card--pdf  .att-card__tile { background: var(--bad-soft);    color: var(--bad); }
+.att-card--code .att-card__tile { background: var(--good-soft);   color: var(--good); }
+.att-card--doc  .att-card__tile { background: var(--warn-soft);   color: oklch(46% .09 78); }
+.att-card--zip  .att-card__tile { background: var(--surface-3);   color: var(--muted); }
+
+/* Text column */
+.att-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.att-card__name {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1.25;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.att-card__sub {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Action buttons (composer only) */
+.att-card__btn {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, opacity 0.14s ease;
+}
+.att-card__btn:hover { background: var(--surface-2); color: var(--ink); }
+.att-card__x { opacity: 0; }
+.att-card:hover .att-card__x { opacity: 1; }
+.att-card__retry { color: var(--bad); }
+
+/* Upload progress bar pinned to the bottom edge */
+.att-card__bar {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: var(--r-full);
+  background: var(--line-soft);
+  overflow: hidden;
+}
+.att-card__bar > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+/* Error state */
+.att-card--error {
+  border-color: var(--bad);
+  background: var(--bad-soft);
+}
+.att-card--error .att-card__name { color: var(--bad); }
+.att-card--error .att-card__sub { color: var(--bad); }
+.att-card--error .att-card__tile { background: oklch(88% .06 28); color: var(--bad); }
