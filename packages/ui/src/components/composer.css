@@ -140,3 +140,16 @@
   .composer-region { padding: 0 16px 16px; }
   .composer__input { font-size: 16px; }
 }
+
+/* ── Attachment chips (upload tray) ────────────── */
+.composer__attachments { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px 0; }
+.attach-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 8px;
+  background: rgba(127,127,127,0.12); font-size: 12px; max-width: 240px; }
+.attach-chip--error { background: rgba(220,60,60,0.16); color: #c0392b; }
+.attach-chip__icon { display: inline-flex; opacity: 0.7; }
+.attach-chip__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.attach-chip__size { opacity: 0.6; }
+.attach-chip__bar { position: relative; width: 40px; height: 3px; background: rgba(127,127,127,0.3); border-radius: 2px; overflow: hidden; }
+.attach-chip__bar > span { position: absolute; left: 0; top: 0; bottom: 0; background: currentColor; transition: width .15s; }
+.attach-chip__x, .attach-chip__retry { border: none; background: none; cursor: pointer; font-size: 12px; padding: 0 2px; color: inherit; opacity: 0.7; }
+.attach-chip__x:hover, .attach-chip__retry:hover { opacity: 1; }

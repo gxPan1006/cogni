@@ -19,6 +19,8 @@ export { useHosts } from "./hooks/useHosts.js";
 export { useProjects, applyProjectEvent } from "./hooks/useProjects.js";
 export { useProjectBoard, applyTaskEvent } from "./hooks/useProjectBoard.js";
 export { useTaskDetail } from "./hooks/useTaskDetail.js";
+export { useUploads } from "./hooks/useUploads.js";
+export type { UploadItem, UseUploads } from "./hooks/useUploads.js";
 
 // Components (chat core — used by desktop today, web in SP-2 batch 4)
 export { Sidebar } from "./components/Sidebar.js";

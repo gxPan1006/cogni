@@ -62,6 +62,11 @@ export function Welcome({
         )}
 
         <div className="welcome__composer-block">
+          {/* No `uploads` prop here: Welcome has no thread yet (it only collects
+              the first message and hands it to onStartChat, which creates the
+              thread downstream). uploadFile needs a threadId to target, so the
+              attach button stays disabled until the thread exists and the user
+              is in <Conversation>, where uploads are wired. */}
           <Composer
             draft={draft}
             setDraft={setDraft}

@@ -23,6 +23,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../transport/api.js";
 import { useThreadStream } from "../hooks/useThreadStream.js";
+import { useUploads } from "../hooks/useUploads.js";
 import { Composer, type ComposerStatus } from "./Composer.js";
 import { HostFallbackCard } from "./HostFallbackCard.js";
 import { NoHostBanner } from "./NoHostBanner.js";
@@ -54,6 +55,7 @@ export function Conversation({
     pendingFallback, pendingNoHost, resolveFallback,
   } = useThreadStream(api, threadId);
   const [draft, setDraft] = useState("");
+  const uploads = useUploads((file, onProgress) => api.uploadFile(threadId, file, onProgress));
   const consumedInitial = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -76,7 +78,8 @@ export function Conversation({
 
   const submit = () => {
     if (!draft.trim()) return;
-    if (send(draft)) setDraft("");
+    const attachments = uploads.takeAttachments();
+    if (send(draft, attachments)) setDraft("");
   };
 
   const { rows, awaitingReply } = buildTimeline(messages, events);
@@ -175,6 +178,7 @@ export function Conversation({
         onSubmit={submit}
         disabled={!connected || pendingFallback !== null || pendingNoHost !== null}
         status={status}
+        uploads={uploads}
       />
     </div>
   );

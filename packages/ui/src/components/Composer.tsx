@@ -12,6 +12,7 @@
  */
 import { useEffect, useRef } from "react";
 import { Icon } from "./icons.js";
+import type { UploadItem } from "../hooks/useUploads.js";
 import "./composer.css";
 
 const TEXTAREA_MAX_HEIGHT_PX = 200;
@@ -34,6 +35,7 @@ export function Composer({
   disabled,
   status,
   placeholder,
+  uploads,
 }: {
   draft: string;
   setDraft: (v: string) => void;
@@ -43,8 +45,17 @@ export function Composer({
   status?: ComposerStatus;
   /** Override the idle textarea placeholder (e.g. orchestrator scope hint). */
   placeholder?: string;
+  /** Optional upload tray. When present, the attach button + drag-drop activate. */
+  uploads?: {
+    items: UploadItem[];
+    busy: boolean;
+    add: (files: FileList | File[]) => void;
+    remove: (localId: string) => void;
+    retry: (localId: string) => void;
+  };
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Autosize: reset to 0 then read scrollHeight so it grows AND shrinks.
   useEffect(() => {
@@ -55,7 +66,7 @@ export function Composer({
   }, [draft]);
 
   const hasText = draft.trim().length > 0;
-  const canSubmit = hasText && !disabled;
+  const canSubmit = hasText && !disabled && !(uploads?.busy ?? false);
 
   return (
     <div className={"composer-region" + (disabled ? " composer-region--disabled" : "")}>
@@ -67,7 +78,32 @@ export function Composer({
           e.preventDefault();
           if (canSubmit) onSubmit();
         }}
+        onDragOver={uploads ? (e) => { e.preventDefault(); } : undefined}
+        onDrop={uploads ? (e) => { e.preventDefault(); if (e.dataTransfer.files.length) uploads.add(e.dataTransfer.files); } : undefined}
       >
+        {uploads && uploads.items.length > 0 && (
+          <div className="composer__attachments">
+            {uploads.items.map((it) => (
+              <div
+                key={it.localId}
+                className={"attach-chip" + (it.status === "error" ? " attach-chip--error" : "")}
+                title={it.error ?? it.file.name}
+              >
+                <span className="attach-chip__icon" aria-hidden="true">{Icon.attach}</span>
+                <span className="attach-chip__name">{it.name ?? it.file.name}</span>
+                <span className="attach-chip__size">{formatBytes(it.size ?? it.file.size)}</span>
+                {it.status === "uploading" && (
+                  <span className="attach-chip__bar"><span style={{ width: `${Math.round(it.progress * 100)}%` }} /></span>
+                )}
+                {it.status === "error" && (
+                  <button type="button" className="attach-chip__retry" onClick={() => uploads.retry(it.localId)} title="重试">↻</button>
+                )}
+                <button type="button" className="attach-chip__x" onClick={() => uploads.remove(it.localId)} aria-label="移除附件">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <textarea
           ref={textareaRef}
           className="composer__input"
@@ -85,12 +121,23 @@ export function Composer({
         />
 
         <div className="composer__bar">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            style={{ display: "none" }}
+            onChange={(e) => {
+              if (uploads && e.target.files && e.target.files.length) uploads.add(e.target.files);
+              e.target.value = ""; // allow re-selecting the same file
+            }}
+          />
           <button
             type="button"
             className="composer__icon-btn"
-            disabled
-            title="附件功能将在 SP-2 版本支持"
+            disabled={disabled || !uploads}
+            title={uploads ? "添加附件" : "附件功能不可用"}
             aria-label="Attach file"
+            onClick={() => fileInputRef.current?.click()}
           >
             {Icon.attach}
           </button>
@@ -139,4 +186,10 @@ function StatusPill({ status }: { status: ComposerStatus }) {
       <span className="status-pill__text">{status.text}</span>
     </div>
   );
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
