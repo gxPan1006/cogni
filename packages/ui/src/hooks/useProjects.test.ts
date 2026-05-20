@@ -68,6 +68,22 @@ describe("applyProjectEvent — WS frame reducer", () => {
     });
     expect(next).toEqual(cur);
   });
+
+  it("removes the matching project on 'deleted'", () => {
+    const cur = [mkProject("p1"), mkProject("p2")];
+    const next = applyProjectEvent(cur, {
+      t: "project-event", kind: "deleted", project: mkProject("p1"),
+    });
+    expect(next.map((p) => p.id)).toEqual(["p2"]);
+  });
+
+  it("removes the last project on 'deleted' → empty list", () => {
+    const cur = [mkProject("p1")];
+    const next = applyProjectEvent(cur, {
+      t: "project-event", kind: "deleted", project: mkProject("p1"),
+    });
+    expect(next).toEqual([]);
+  });
 });
 
 describe("useProjects — api wrapper integration (shape-only)", () => {

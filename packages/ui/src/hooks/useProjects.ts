@@ -3,7 +3,7 @@
  *
  * Composed of: one HTTP `GET /api/projects` on mount + a long-lived
  * `subscribe-projects` WS subscription that pushes `project-event` frames
- * (kind: "created" | "updated" | "archived"). Each frame is reduced into the
+ * (kind: "created" | "updated" | "archived" | "deleted"). Each frame is reduced into the
  * local list so the sidebar and main-area list stay in sync across:
  *   - Tabs / app instances of the same user (Sidebar reflects creates from web)
  *   - Background lifecycle changes (project archived from settings → sidebar
@@ -39,6 +39,11 @@ export function applyProjectEvent(
   if (frame.kind === "created") {
     if (cur.some((p) => p.id === frame.project.id)) return cur;
     return [frame.project, ...cur];
+  }
+  if (frame.kind === "deleted") {
+    // Hard delete (cascade on the cloud): drop the card. WS push is the source
+    // of truth — the board/list card fades out without a refresh.
+    return cur.filter((p) => p.id !== frame.project.id);
   }
   // updated | archived both project the full row; replace in place to keep
   // ordering stable (no jump on archive — the `archivedAt` field flips and
