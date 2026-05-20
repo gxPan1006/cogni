@@ -1,0 +1,144 @@
+/**
+ * SP-4 WorkspaceChatDomain — the orchestrator floating-bar's send/dispatch
+ * path. Mirrors ChatDomain's send pipeline but (a) tags every dispatch frame
+ * with `orchestrator: true` so the host mounts the cogni MCP server, and
+ * (b) prefixes the first turn of a new session with an orchestrator preamble
+ * that tells the runner it can directly mutate projects/tasks via cogni tools.
+ *
+ * What the user sees: the bottom Workspace Chat bar (on the list page and
+ * inside a project board). Typing a request like "建个任务" + Enter shows the
+ * user's bubble immediately, then the orchestrator runner streams its reply
+ * and any project/task changes fan out live to the board/list. With no host
+ * connected, the bar surfaces a "no host online" state instead.
+ *
+ * Per the locked design decision #4, the runner's event stream (text / done /
+ * tool-call) is handled by the existing `ChatDomain.handleHostEvent` — this
+ * class deliberately does NOT implement handleHostEvent. It only owns
+ * send → persist → dispatch.
+ */
+import { randomUUID } from "node:crypto";
+import type { AnyDb } from "../db/users.js";
+import type { HostRouter } from "../host-router.js";
+import type { ClientHub } from "../client-hub.js";
+import { appendMessage, touchThread } from "../db/threads.js";
+import { getProjectByThreadId } from "../db/projects.js";
+import {
+  getLatestSessionForThread,
+  openRunnerSession,
+  setRunnerSessionStatus,
+} from "../db/sessions.js";
+
+const ADAPTER = "claude-code";
+
+/**
+ * Build the system preamble prepended to the first user turn of a new
+ * orchestrator session. Scope is either project-level (a project references
+ * this thread) or workspace-level (cross-project).
+ */
+function preamble(scope: { projectName?: string; projectId?: string }): string {
+  const where = scope.projectId
+    ? `你正在项目「${scope.projectName}」(projectId=${scope.projectId})内工作,任务相关工具默认用这个 projectId。`
+    : `你在工作区级编排,跨所有项目。用 list_projects 找 projectId,指代不清时先向用户澄清。`;
+  return [
+    "你是 Cogni 的工作区编排助手。通过 cogni 工具直接增删改项目和任务。",
+    where,
+    "策略:用户意图明确就立即执行(含删除/取消,无需二次确认),执行后简述做了什么。",
+    "破坏性操作前若目标不唯一,先用 list_tasks/list_projects 确认再动手。",
+    "---",
+  ].join("\n");
+}
+
+export class WorkspaceChatDomain {
+  constructor(
+    private readonly db: AnyDb,
+    private readonly hosts: HostRouter,
+    private readonly clients: ClientHub,
+  ) {}
+
+  async handleClientSend(input: {
+    userId: string;
+    threadId: string;
+    content: string;
+    sourceClientId: string;
+  }): Promise<void> {
+    const { userId, threadId, content, sourceClientId } = input;
+    const online = this.hosts.getOnlineHostsForUser(userId);
+    if (online.length === 0) {
+      this.clients.sendToConn(sourceClientId, {
+        t: "no-host-online",
+        threadId,
+        pendingMessageId: randomUUID(),
+      });
+      return;
+    }
+    // Prefer the host that last owned this thread (so --resume keeps context),
+    // else fall back to any online host.
+    const latest = await getLatestSessionForThread(this.db, threadId);
+    const preferred = latest?.hostId ?? null;
+    const chosen = (preferred && online.find((h) => h.hostId === preferred)) || online[0]!;
+    await this.persistAndDispatch({ userId, threadId, content, hostId: chosen.hostId });
+  }
+
+  private async persistAndDispatch(p: {
+    userId: string;
+    threadId: string;
+    content: string;
+    hostId: string;
+  }): Promise<void> {
+    const userMsg = await appendMessage(this.db, {
+      threadId: p.threadId,
+      role: "user",
+      content: p.content,
+    });
+    await touchThread(this.db, p.threadId);
+    this.clients.broadcast(p.threadId, {
+      t: "message",
+      threadId: p.threadId,
+      messageId: userMsg.id,
+      role: "user",
+      content: userMsg.content,
+      createdAt: userMsg.createdAt,
+    });
+
+    const latest = await getLatestSessionForThread(this.db, p.threadId);
+    const reusable = latest && latest.hostId === p.hostId && latest.status !== "closed";
+    const session = reusable
+      ? latest
+      : await openRunnerSession(this.db, {
+          threadId: p.threadId,
+          hostId: p.hostId,
+          adapter: ADAPTER,
+        });
+    await setRunnerSessionStatus(this.db, session.id, "running");
+
+    // Only the first turn of a new session carries the orchestrator preamble;
+    // resumed sessions already have it in their context.
+    let message = p.content;
+    if (!reusable) {
+      const project = await getProjectByThreadId(this.db, p.threadId);
+      const scope = project ? { projectId: project.id, projectName: project.name } : {};
+      message = preamble(scope) + "\n" + p.content;
+    }
+
+    const conn = this.hosts.getHostByIdForUser(p.userId, p.hostId);
+    if (!conn) {
+      await setRunnerSessionStatus(this.db, session.id, "failed");
+      this.clients.sendToUser(p.userId, { t: "host-status", online: false });
+      return;
+    }
+    try {
+      conn.send({
+        t: "dispatch",
+        sessionId: session.id,
+        threadId: p.threadId,
+        adapter: ADAPTER,
+        runnerSessionId: session.runnerSessionId,
+        message,
+        orchestrator: true,
+      });
+    } catch {
+      await setRunnerSessionStatus(this.db, session.id, "failed");
+      this.clients.sendToUser(p.userId, { t: "host-status", online: false });
+    }
+  }
+}
