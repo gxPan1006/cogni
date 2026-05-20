@@ -20,6 +20,7 @@ export interface MessageView {
   role: Role;
   content: string;
   createdAt: string;
+  attachments?: { name: string; size: number }[];
 }
 /** GET /api/threads/:id/events?since=N */
 export interface EventView {

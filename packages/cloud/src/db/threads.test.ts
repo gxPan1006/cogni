@@ -106,6 +106,35 @@ describe("thread repository", () => {
   });
 });
 
+describe("appendMessage attachments", () => {
+  it("stores and returns attachment metadata", async () => {
+    const { db, close } = await makeTestDb();
+    const user = await findOrCreateUserByEmail(db, "att@x.com");
+    const thread = await createThread(db, { userId: user.id, tenantId: user.tenantId });
+    const msg = await appendMessage(db, {
+      threadId: thread.id,
+      role: "user",
+      content: "see file",
+      attachments: [{ name: "a.pdf", size: 12 }],
+    });
+    expect(msg.attachments).toEqual([{ name: "a.pdf", size: 12 }]);
+    const detail = await getThreadDetail(db, thread.id);
+    expect(detail?.messages[0]?.attachments).toEqual([{ name: "a.pdf", size: 12 }]);
+    await close();
+  });
+
+  it("omits attachments when none were provided", async () => {
+    const { db, close } = await makeTestDb();
+    const user = await findOrCreateUserByEmail(db, "noatt@x.com");
+    const thread = await createThread(db, { userId: user.id, tenantId: user.tenantId });
+    const msg = await appendMessage(db, { threadId: thread.id, role: "user", content: "hi" });
+    expect(msg.attachments).toBeUndefined();
+    const detail = await getThreadDetail(db, thread.id);
+    expect(detail?.messages[0]?.attachments).toBeUndefined();
+    await close();
+  });
+});
+
 describe("SP-4 orchestrator thread helpers", () => {
   it("getOrCreateWorkspaceThread is idempotent per user and marks kind=workspace", async () => {
     const { db, close } = await makeTestDb();

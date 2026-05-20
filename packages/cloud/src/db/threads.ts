@@ -94,11 +94,22 @@ export async function softDeleteThread(
 
 export async function appendMessage(
   db: AnyDb,
-  input: { threadId: string; role: Role; content: string },
+  input: {
+    threadId: string;
+    role: Role;
+    content: string;
+    attachments?: { name: string; size: number }[];
+  },
 ): Promise<MessageView> {
   const [row] = await db
     .insert(messages)
-    .values({ threadId: input.threadId, role: input.role, content: input.content })
+    .values({
+      threadId: input.threadId,
+      role: input.role,
+      content: input.content,
+      attachmentsJson:
+        input.attachments && input.attachments.length > 0 ? input.attachments : null,
+    })
     .returning();
   return toMessageView(row!);
 }
@@ -282,5 +293,10 @@ function toMessageView(r: typeof messages.$inferSelect): MessageView {
     role: r.role as Role,
     content: r.content,
     createdAt: r.createdAt.toISOString(),
+    // Only surface `attachments` when the row actually carried metadata, so
+    // attachment-free messages stay shaped exactly as before.
+    ...(r.attachmentsJson
+      ? { attachments: r.attachmentsJson as { name: string; size: number }[] }
+      : {}),
   };
 }

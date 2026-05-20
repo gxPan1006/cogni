@@ -95,6 +95,10 @@ export const messages = pgTable("messages", {
   role: text("role").notNull(),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  // File-upload feature: lightweight attachment metadata `[{name,size}]` so the
+  // chat bubble can re-render file chips after reload. Bytes are NEVER stored —
+  // only this metadata. NULL when the message carried no attachments.
+  attachmentsJson: jsonb("attachments_json"),
 });
 
 export const runnerSessions = pgTable("runner_sessions", {
