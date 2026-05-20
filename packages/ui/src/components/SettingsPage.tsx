@@ -10,7 +10,7 @@
  */
 import { useState } from "react";
 import { Icon } from "./icons.js";
-import type { ApiClient } from "../transport/api.js";
+import type { ApiClient, HostInfo } from "../transport/api.js";
 import { useIdentities } from "../hooks/useIdentities.js";
 import { useDevices } from "../hooks/useDevices.js";
 import { useHosts } from "../hooks/useHosts.js";
@@ -227,8 +227,8 @@ function HostsPage({ api }: { api: ApiClient }) {
         {!loading && hosts.map((h) => {
           const isEditing = editingId === h.id;
           return (
+            <div key={h.id}>
             <Row
-              key={h.id}
               icon={<span className={"dot " + (h.status === "online" ? "dot-online" : "dot-offline")} style={{ width: 8, height: 8 }} />}
               title={
                 isEditing ? (
@@ -280,6 +280,8 @@ function HostsPage({ api }: { api: ApiClient }) {
                 </div>
               }
             />
+            <HostProjectsRootRow api={api} host={h} />
+            </div>
           );
         })}
         <div className="settings-card__foot">
@@ -288,6 +290,60 @@ function HostsPage({ api }: { api: ApiClient }) {
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * Per-host editable "projects root" — the folder under which New Project
+ * pre-fills a repo path. Renders an input + 保存 button beneath each host row.
+ * When the host pins the root via COGNI_PROJECTS_ROOT, the field is read-only
+ * and shows a "由环境变量锁定" hint.
+ */
+function HostProjectsRootRow({ api, host }: { api: ApiClient; host: HostInfo }) {
+  const [value, setValue] = useState(host.projectsRoot ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const locked = host.projectsRootLocked === true;
+  return (
+    <div className="settings__projroot">
+      <label className="field__label">项目根目录</label>
+      <div className="np__path">
+        <input
+          className="input"
+          value={value}
+          disabled={locked || saving}
+          placeholder="~/cogni"
+          onChange={(e) => { setValue(e.target.value); setSaved(false); setError(null); }}
+        />
+        <button
+          className="btn btn-sm"
+          disabled={locked || saving || value.trim().length === 0}
+          onClick={async () => {
+            setSaving(true);
+            setError(null);
+            try {
+              const r = await api.setProjectsRoot(host.id, value.trim());
+              setValue(r.projectsRoot);
+              setSaved(true);
+            } catch (e) {
+              setError(e instanceof Error ? e.message : String(e));
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >保存</button>
+      </div>
+      <div className="field__hint">
+        {locked
+          ? "由环境变量 COGNI_PROJECTS_ROOT 锁定"
+          : error
+            ? error
+            : saved
+              ? "已保存"
+              : "新建项目时会用它预填仓库路径"}
+      </div>
+    </div>
   );
 }
 

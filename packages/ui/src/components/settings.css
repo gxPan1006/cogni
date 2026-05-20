@@ -203,3 +203,14 @@
   .settings-card__row { flex-wrap: wrap; }
   .settings-card__kv { grid-template-columns: 84px 1fr; gap: 6px 16px; }
 }
+
+/* Per-host editable projects-root, rendered beneath each host row. */
+.settings__projroot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 16px 14px 38px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.settings__projroot .np__path { width: 100%; }
+.settings__projroot .input { flex: 1; }
