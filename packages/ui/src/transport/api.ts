@@ -437,6 +437,41 @@ export class ApiClient {
     return res.blob();
   }
 
+  /**
+   * Upload one file as agent context for a thread. Uses XHR (not fetch) so we
+   * get `upload.onprogress` for the composer's per-file progress bar. Resolves
+   * with the host's final (de-duped) name + size; rejects with ApiError on
+   * non-2xx (e.g. 409 host offline, 502 host write failed).
+   */
+  uploadFile(
+    threadId: string,
+    file: File,
+    onProgress?: (fraction: number) => void,
+  ): Promise<{ name: string; size: number }> {
+    const url = `${this.cloudUrl}/api/threads/${threadId}/uploads`;
+    const token = this.cfg.getToken();
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.setRequestHeader("Content-Type", "application/octet-stream");
+      xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { resolve(JSON.parse(xhr.responseText) as { name: string; size: number }); }
+          catch { reject(new ApiError(xhr.status, "bad upload response")); }
+        } else {
+          reject(new ApiError(xhr.status, `POST ${url} → ${xhr.status}`));
+        }
+      };
+      xhr.onerror = () => reject(new ApiError(0, `POST ${url} → network error`));
+      xhr.send(file);
+    });
+  }
+
   // ─── Prefetch (hover → warm the SWR cache) ────────────────────────────
   //
   // Fire-and-forget: called from sidebar / card `onMouseEnter`. They warm the

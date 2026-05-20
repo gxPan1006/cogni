@@ -261,7 +261,8 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     // never false-stalls. Bare-dots (no frames) leaves them static → timer fires.
   }, [awaitingProgress, connected, hostOnline, reloadNonce, events.length, messages.length]);
 
-  const send = (text: string) => api.wsClient.send(threadId, text);
+  const send = (text: string, attachments?: { name: string; size: number }[]) =>
+    api.wsClient.send(threadId, text, attachments);
 
   // Re-sync this thread from the cloud: refetch history and re-subscribe so any
   // events the cloud holds past our lastSeq replay. Safe and idempotent — it
