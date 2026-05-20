@@ -349,6 +349,12 @@ describe("HostRpc envelope dispatch", () => {
         params: { path: "/Users/me" },
       }).success,
     ).toBe(true);
+    expect(
+      hostRpcRequestSchema.safeParse({
+        method: "set-projects-root",
+        params: { projectsRoot: "~/cogni" },
+      }).success,
+    ).toBe(true);
   });
 
   it("hostRpcRequestSchema rejects wrong params shape for chosen method", () => {

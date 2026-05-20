@@ -26,6 +26,10 @@ export const hostToCloudSchema = z.discriminatedUnion("t", [
     capabilities: z.array(z.enum(RUNNER_CAPABILITIES)),
     adapters: z.array(z.string()),
     version: z.string(),
+    /** SP-4: host's configured projects-root (absolute, ~-expanded). Optional for old hosts. */
+    projectsRoot: z.string().optional(),
+    /** true ⇢ root pinned by COGNI_PROJECTS_ROOT env (UI shows read-only). */
+    projectsRootLocked: z.boolean().optional(),
   }),
   z.object({ t: z.literal("heartbeat") }),
   z.object({ t: z.literal("event"), sessionId: z.string(), event: runnerEventSchema }),

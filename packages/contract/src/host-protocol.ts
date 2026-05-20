@@ -279,6 +279,21 @@ export type UploadAbortRequest = z.infer<typeof uploadAbortRequestSchema>;
 export const uploadAbortResponseSchema = z.object({ ok: z.literal(true) });
 export type UploadAbortResponse = z.infer<typeof uploadAbortResponseSchema>;
 
+// set-projects-root — configurable per-host root for auto-created project folders
+export const setProjectsRootRequestSchema = z.object({
+  /** New root; may contain a leading ~ (host expands it). */
+  projectsRoot: z.string().min(1),
+});
+export type SetProjectsRootRequest = z.infer<typeof setProjectsRootRequestSchema>;
+
+export const setProjectsRootResponseSchema = z.object({
+  /** Absolute, ~-expanded path the host will use. */
+  projectsRoot: z.string(),
+  /** true ⇢ pinned by COGNI_PROJECTS_ROOT env; the write was a no-op. */
+  locked: z.boolean(),
+});
+export type SetProjectsRootResponse = z.infer<typeof setProjectsRootResponseSchema>;
+
 // ─── Discriminated unions for typed dispatch ────────────────────────────────
 
 /**
@@ -301,6 +316,7 @@ export const hostRpcRequestSchema = z.discriminatedUnion("method", [
   z.object({ method: z.literal("upload-chunk"), params: uploadChunkRequestSchema }),
   z.object({ method: z.literal("upload-commit"), params: uploadCommitRequestSchema }),
   z.object({ method: z.literal("upload-abort"), params: uploadAbortRequestSchema }),
+  z.object({ method: z.literal("set-projects-root"), params: setProjectsRootRequestSchema }),
 ]);
 export type HostRpcRequest = z.infer<typeof hostRpcRequestSchema>;
 
@@ -319,6 +335,7 @@ export const hostRpcMethodSchema = z.enum([
   "upload-chunk",
   "upload-commit",
   "upload-abort",
+  "set-projects-root",
 ]);
 
 /**
@@ -347,6 +364,7 @@ export const hostRpcResponseSchema = z.union([
   z.object({ ok: z.literal(true), method: z.literal("upload-chunk"), result: uploadChunkResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("upload-commit"), result: uploadCommitResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("upload-abort"), result: uploadAbortResponseSchema }),
+  z.object({ ok: z.literal(true), method: z.literal("set-projects-root"), result: setProjectsRootResponseSchema }),
   z.object({
     ok: z.literal(false),
     method: hostRpcMethodSchema,
@@ -377,5 +395,6 @@ export const HOST_RPC_METHODS = [
   "upload-chunk",
   "upload-commit",
   "upload-abort",
+  "set-projects-root",
 ] as const;
 export type HostRpcMethod = (typeof HOST_RPC_METHODS)[number];

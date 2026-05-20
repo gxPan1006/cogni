@@ -47,6 +47,17 @@ describe("protocol schemas", () => {
   it("rejects host register without capabilities", () => {
     expect(hostToCloudSchema.safeParse({ t: "register", hostId: "h1", adapters: [], version: "0.0.0" }).success).toBe(false);
   });
+  it("accepts host register with projectsRoot + projectsRootLocked", () => {
+    expect(hostToCloudSchema.safeParse({
+      t: "register", hostId: "h1", capabilities: ["streaming"], adapters: ["claude-code"],
+      version: "0.0.0", projectsRoot: "/Users/x/cogni", projectsRootLocked: false,
+    }).success).toBe(true);
+  });
+  it("accepts host register without projectsRoot (back-compat)", () => {
+    expect(hostToCloudSchema.safeParse({
+      t: "register", hostId: "h1", capabilities: ["streaming"], adapters: ["claude-code"], version: "0.0.0",
+    }).success).toBe(true);
+  });
 
   // cloudToHostSchema variants
   it("parses a cloud registered message", () => {
