@@ -130,11 +130,11 @@ AI 都能做**。
 
 ## 四、数据模型
 
-- **threads**:
-  - 工作区级:每 user 一个 workspace thread,`project_id=NULL` +
-    新增标记列或约定(`kind='workspace'`)。
+- **threads**:新增 `kind` 列(`'chat' | 'workspace'`,默认 `'chat'` 保持现有
+  行为不变)。
+  - 工作区级:每 user 一个 `kind='workspace'` thread,`project_id=NULL`。
   - 项目级:复用 SP-3 已预留的 `projects.thread_id`(SP-3 注释:留给 SP-4
-    Workspace Chat)。
+    Workspace Chat),保持 `kind='chat'`。
 - **messages**:用户消息 + runner 输出落此表,浮窗 `<ChatBlocks>` 直接读。
 - **runner_sessions**:orchestrator session 行 `task_id=NULL`(与 SP-1/SP-2 chat
   session 同类),`thread_id` 指向上面的 workspace/project thread。
