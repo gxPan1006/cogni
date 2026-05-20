@@ -404,7 +404,41 @@ describe("POST /api/projects/:id/tasks", () => {
       priority: 2,
       labels: undefined,
       adapter: undefined,
+      hostId: undefined,
     });
+    await close();
+  });
+
+  it("passes a per-task hostId override the caller owns", async () => {
+    const { db, user, host, fns, req, close } = await setup();
+    const project = await dbCreateProject(db, {
+      tenantId: user.tenantId, userId: user.id, name: "Alpha",
+      repoPath: "/repos/alpha", defaultHostId: host.hostId,
+    });
+    fns.createTask.mockResolvedValue({ id: "t" } as unknown as ProjectTask);
+    const res = await req(`/api/projects/${project.id}/tasks`, {
+      method: "POST",
+      body: JSON.stringify({ title: "Hello", hostId: host.hostId }),
+    });
+    expect(res.status).toBe(201);
+    expect(fns.createTask).toHaveBeenCalledWith(
+      expect.objectContaining({ hostId: host.hostId }),
+    );
+    await close();
+  });
+
+  it("404 when the per-task hostId override is not owned by the caller", async () => {
+    const { db, user, host, fns, req, close } = await setup();
+    const project = await dbCreateProject(db, {
+      tenantId: user.tenantId, userId: user.id, name: "Alpha",
+      repoPath: "/repos/alpha", defaultHostId: host.hostId,
+    });
+    const res = await req(`/api/projects/${project.id}/tasks`, {
+      method: "POST",
+      body: JSON.stringify({ title: "Hello", hostId: "00000000-0000-0000-0000-000000000000" }),
+    });
+    expect(res.status).toBe(404);
+    expect(fns.createTask).not.toHaveBeenCalled();
     await close();
   });
 });

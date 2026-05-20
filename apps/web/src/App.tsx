@@ -302,7 +302,7 @@ function WebShell({ page }: { page: Page }) {
   const handleCreateTask = async (draft: NewTaskDraft) => {
     if (!params.projectId) return;
     try {
-      await board.createTask({ title: draft.title, description: draft.description || undefined });
+      await board.createTask({ title: draft.title, description: draft.description || undefined, hostId: draft.hostId });
       setNewTaskOpen(false);
     } catch (e) {
       handleApiError(e);
@@ -440,6 +440,8 @@ function WebShell({ page }: { page: Page }) {
         <NewTask
           onClose={() => setNewTaskOpen(false)}
           onCreate={handleCreateTask}
+          hosts={hosts}
+          defaultHostId={board.project?.defaultHostId}
         />
       )}
       {activeTaskId && (

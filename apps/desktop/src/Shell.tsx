@@ -249,7 +249,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   const handleCreateTask = async (draft: NewTaskDraft) => {
     if (!activeProjectId) return;
     try {
-      await board.createTask({ title: draft.title, description: draft.description || undefined });
+      await board.createTask({ title: draft.title, description: draft.description || undefined, hostId: draft.hostId });
       setNewTaskOpen(false);
     } catch (e) {
       handleApiError(e);
@@ -375,6 +375,8 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
         <NewTask
           onClose={() => setNewTaskOpen(false)}
           onCreate={handleCreateTask}
+          hosts={hosts}
+          defaultHostId={board.project?.defaultHostId}
         />
       )}
       {activeTaskId && (

@@ -328,7 +328,8 @@ export class ProjectOrchestrator {
    * stays queued for the next tick.
    */
   private async tryDispatchTask(project: Project, task: ProjectTask): Promise<boolean> {
-    const hostId = project.defaultHostId;
+    // SP-3+1: per-task host override falls back to the project default.
+    const hostId = task.hostId ?? project.defaultHostId;
     const branchName = `task/${task.ref.toLowerCase()}`;
     // Per-task worktree lives under `<repo>/.worktrees/<ref>`. The leading
     // slash is required — without it the path resolves OUTSIDE repoPath

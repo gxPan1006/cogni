@@ -8,25 +8,34 @@
  */
 import { useState } from "react";
 import { Icon } from "../icons.js";
+import type { HostInfo } from "../../transport/api.js";
 import "./new-task.css";
 
-export type NewTaskDraft = { title: string; description: string };
+export type NewTaskDraft = { title: string; description: string; hostId?: string };
 
 export function NewTask({
   onClose,
   onCreate,
+  hosts = [],
+  defaultHostId,
 }: {
   onClose: () => void;
   onCreate?: (draft: NewTaskDraft) => void | Promise<void>;
+  /** Hosts the user can pick from; when ≤1 the picker is hidden. */
+  hosts?: HostInfo[];
+  /** The project's default host id, shown as the picker's default option. */
+  defaultHostId?: string;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  // "" = use project default; otherwise an explicit host override.
+  const [hostId, setHostId] = useState("");
 
   const canSubmit = title.trim().length > 0;
 
   const submit = () => {
     if (!canSubmit) return;
-    void onCreate?.({ title, description });
+    void onCreate?.({ title, description, hostId: hostId || undefined });
   };
 
   return (
@@ -50,6 +59,22 @@ export function NewTask({
             <textarea className="input nt__textarea" placeholder="补充上下文、约束、验收标准" value={description} onChange={(e) => setDescription(e.target.value)} rows={6} />
             <div className="field__hint">描述会作为任务的初始 user message 注入对话。</div>
           </div>
+          {hosts.length > 1 && (
+            <div className="field">
+              <div className="field__label">运行 host</div>
+              <select className="input" value={hostId} onChange={(e) => setHostId(e.target.value)}>
+                <option value="">
+                  项目默认{defaultHostId ? `（${hosts.find((h) => h.id === defaultHostId)?.name ?? "默认 host"}）` : ""}
+                </option>
+                {hosts.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name}{h.status === "online" ? "" : "（离线）"}
+                  </option>
+                ))}
+              </select>
+              <div className="field__hint">默认跑在项目的默认 host；可为这个任务单独指定。</div>
+            </div>
+          )}
         </div>
 
         <footer className="modal__foot">

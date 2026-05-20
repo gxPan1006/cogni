@@ -28,6 +28,21 @@ async function seedUserAndHost(email = "seed@x.com") {
   return { db, close, user: u, host };
 }
 
+describe("projects.createTask hostId override", () => {
+  it("persists a per-task hostId when provided, null otherwise", async () => {
+    const { db, close, user, host } = await seedUserAndHost();
+    const project = await createProject(db, {
+      tenantId: user.tenantId, userId: user.id, name: "P",
+      repoPath: "/repos/p", defaultHostId: host.hostId,
+    });
+    const pinned = await createTask(db, { projectId: project.id, title: "pinned", hostId: host.hostId });
+    const unpinned = await createTask(db, { projectId: project.id, title: "unpinned" });
+    expect(pinned.hostId).toBe(host.hostId);
+    expect(unpinned.hostId).toBeNull();
+    await close();
+  });
+});
+
 describe("projects.createProject + listProjects", () => {
   it("creates a project with defaults applied", async () => {
     const { db, close, user, host } = await seedUserAndHost();

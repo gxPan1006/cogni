@@ -219,6 +219,12 @@ export interface CreateTaskInput {
   /** Initial state — almost always omitted (defaults to "queued"). */
   state?: TaskState;
   /**
+   * SP-3+1 per-task host override. When set, the orchestrator dispatches this
+   * task to this host instead of `project.defaultHostId`. Caller must verify
+   * the host belongs to the project's owner.
+   */
+  hostId?: string;
+  /**
    * Thread the runner's event stream gets written into. ProjectDomain creates
    * a fresh thread for every task during `createTask` (so the drawer's
    * embedded `<ChatBlocks>` has somewhere to subscribe before the runner
@@ -253,6 +259,7 @@ export async function createTask(db: AnyDb, input: CreateTaskInput): Promise<Pro
         labels: input.labels ?? [],
         orderIndex,
         adapter: input.adapter ?? null,
+        hostId: input.hostId ?? null,
         executionThreadId: input.executionThreadId ?? null,
       })
       .returning();

@@ -43,6 +43,8 @@ export interface CreateTaskInput {
   description?: string;
   priority?: 0 | 1 | 2 | 3 | 4;
   labels?: string[];
+  /** SP-3+1 per-task host override; omit to use the project's default host. */
+  hostId?: string;
 }
 
 /** The full GET /tasks/:id payload — task + its run history. */

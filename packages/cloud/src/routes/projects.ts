@@ -92,6 +92,8 @@ const createTaskSchema = z.object({
   priority: prioritySchema.optional(),
   labels: z.array(z.string().min(1).max(40)).max(20).optional(),
   adapter: z.string().optional(),
+  /** SP-3+1 per-task host override (must belong to the caller). */
+  hostId: z.string().uuid().optional(),
 });
 
 const replySchema = z.object({
@@ -346,6 +348,9 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
     if (!deps.projectDomain) {
       return c.json({ error: "project domain unavailable" }, 503);
     }
+    if (parsed.data.hostId && !(await ownedHost(deps, parsed.data.hostId, userId))) {
+      return c.json({ error: "host not found" }, 404);
+    }
     try {
       const task = await deps.projectDomain.createTask({
         projectId: project.id,
@@ -354,6 +359,7 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
         priority: parsed.data.priority,
         labels: parsed.data.labels,
         adapter: parsed.data.adapter,
+        hostId: parsed.data.hostId,
       });
       return c.json(task, 201);
     } catch (err) {
