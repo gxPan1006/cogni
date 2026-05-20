@@ -259,6 +259,14 @@ export function createWsClient(buildUrl: () => string): WsClient {
       }
       return;
     }
+    // SP-3 task comment feed (主页面). Routed to per-task subscribers only —
+    // the board does not render comments. Filtered by the comment's taskId.
+    if (frame.t === "task-comment") {
+      for (const s of taskSubs) {
+        if (s.taskId === frame.comment.taskId) s.onFrame(frame);
+      }
+      return;
+    }
     // SP-2 list-channel frames. Sidebar (and any future list-aware mount)
     // attaches via `subscribeList`; the cloud only pushes these to clients
     // that sent `subscribe-list`, so the fan-out here is unconditional.
