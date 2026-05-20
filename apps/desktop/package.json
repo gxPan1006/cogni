@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "pnpm --filter @cogni/contract build && tsc && vite build",
+    "build:bundle": "node scripts/build-bundle.mjs",
     "typecheck": "pnpm --filter @cogni/contract build && tsc --noEmit",
     "preview": "vite preview",
     "tauri": "tauri"

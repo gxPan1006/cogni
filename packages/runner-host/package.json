@@ -9,6 +9,7 @@
   "bin": { "cogni-runner-host": "./dist/main.js" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:binary": "node scripts/build-binary.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "tsx src/main.ts",
     "start": "node dist/main.js",

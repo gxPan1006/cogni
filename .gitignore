@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# Bun-compiled runner-host single binary (~55MB) — generated, never committed
+dist-bin/
 build/
 *.log
 .DS_Store
