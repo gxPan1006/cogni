@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { makeTestDb } from "./test-db.js";
 import { findOrCreateUserByEmail } from "./users.js";
 import { createHost } from "./hosts.js";
-import { createThread } from "./threads.js";
+import { createThread, createOrchestratorThread } from "./threads.js";
 import { openRunnerSession } from "./sessions.js";
 import {
   createProject,
@@ -417,6 +417,34 @@ describe("projects.deleteTask + deleteProject + getProjectByThreadId", () => {
     expect(
       await getProjectByThreadId(db, "00000000-0000-0000-0000-000000000000"),
     ).toBeNull();
+    await close();
+  });
+
+  it("getProjectByThreadId resolves a project-scoped orchestrator session via threads.project_id", async () => {
+    const { db, close, user, host } = await seedUserAndHost();
+    const project = await createProject(db, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      name: "P",
+      repoPath: "/tmp/p",
+      defaultHostId: host.hostId,
+    });
+    // A second, multi-session orchestrator thread (NOT in projects.thread_id)
+    // must still resolve back to the project for scope detection.
+    const session = await createOrchestratorThread(db, {
+      userId: user.id,
+      tenantId: user.tenantId,
+      projectId: project.id,
+    });
+    const resolved = await getProjectByThreadId(db, session.id);
+    expect(resolved?.id).toBe(project.id);
+
+    // A workspace-level session (no project_id) resolves to no project.
+    const wsSession = await createOrchestratorThread(db, {
+      userId: user.id,
+      tenantId: user.tenantId,
+    });
+    expect(await getProjectByThreadId(db, wsSession.id)).toBeNull();
     await close();
   });
 });

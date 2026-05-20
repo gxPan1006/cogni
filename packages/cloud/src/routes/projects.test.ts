@@ -848,3 +848,66 @@ describe("GET /api/projects/:id/chat-thread", () => {
     await close();
   });
 });
+
+describe("orchestrator-threads (multi-session chat bubble)", () => {
+  it("creates and lists workspace-scoped sessions, newest first", async () => {
+    const { req, close } = await setup();
+    const a = (await (await req("/api/orchestrator-threads", { method: "POST", body: "{}" })).json()) as {
+      id: string;
+      title: string;
+    };
+    const b = (await (await req("/api/orchestrator-threads", { method: "POST", body: "{}" })).json()) as {
+      id: string;
+    };
+    expect(a.title).toBe("New conversation");
+    const list = (await (await req("/api/orchestrator-threads")).json()) as Array<{ id: string }>;
+    const ids = list.map((t) => t.id);
+    expect(ids).toContain(a.id);
+    expect(ids).toContain(b.id);
+    // newest (b) before older (a)
+    expect(ids.indexOf(b.id)).toBeLessThan(ids.indexOf(a.id));
+    await close();
+  });
+
+  it("scopes sessions to a project and keeps them out of the workspace list", async () => {
+    const { db, user, host, req, close } = await setup();
+    const project = await dbCreateProject(db, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      name: "P",
+      repoPath: "/repos/p",
+      defaultHostId: host.hostId,
+    });
+    const scoped = (await (
+      await req("/api/orchestrator-threads", { method: "POST", body: JSON.stringify({ projectId: project.id }) })
+    ).json()) as { id: string };
+
+    const projList = (await (
+      await req(`/api/orchestrator-threads?projectId=${project.id}`)
+    ).json()) as Array<{ id: string }>;
+    expect(projList.map((t) => t.id)).toContain(scoped.id);
+
+    const wsList = (await (await req("/api/orchestrator-threads")).json()) as Array<{ id: string }>;
+    expect(wsList.map((t) => t.id)).not.toContain(scoped.id);
+    await close();
+  });
+
+  it("404 creating a session in another user's project", async () => {
+    const { db, req, close } = await setup();
+    const bob = await findOrCreateUserByEmail(db, "bob2@x.com");
+    const bobHost = await createHost(db, { userId: bob.id, tenantId: bob.tenantId, name: "Bob" });
+    const bobProject = await dbCreateProject(db, {
+      tenantId: bob.tenantId,
+      userId: bob.id,
+      name: "Bob",
+      repoPath: "/repos/bob",
+      defaultHostId: bobHost.hostId,
+    });
+    const res = await req("/api/orchestrator-threads", {
+      method: "POST",
+      body: JSON.stringify({ projectId: bobProject.id }),
+    });
+    expect(res.status).toBe(404);
+    await close();
+  });
+});

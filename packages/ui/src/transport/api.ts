@@ -172,6 +172,24 @@ export class ApiClient {
   getProjectChatThread = (projectId: string): Promise<{ threadId: string }> =>
     this.request(`${this.cloudUrl}/api/projects/${projectId}/chat-thread`, { headers: this.authHeaders() });
 
+  /**
+   * List orchestrator chat sessions for a scope (floating chat bubble).
+   * No projectId → workspace-level sessions; with projectId → that project's.
+   */
+  listOrchestratorThreads = (projectId?: string): Promise<ThreadSummary[]> =>
+    this.request(
+      `${this.cloudUrl}/api/orchestrator-threads${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`,
+      { headers: this.authHeaders() },
+    );
+
+  /** Open a fresh orchestrator session in a scope. */
+  createOrchestratorThread = (projectId?: string): Promise<ThreadSummary> =>
+    this.request(`${this.cloudUrl}/api/orchestrator-threads`, {
+      method: "POST",
+      headers: this.authHeaders(),
+      body: JSON.stringify(projectId ? { projectId } : {}),
+    });
+
   renameThread = (id: string, title: string): Promise<{ ok: true }> =>
     this.request(`${this.cloudUrl}/api/threads/${id}`, {
       method: "PATCH", headers: this.authHeaders(), body: JSON.stringify({ title }),

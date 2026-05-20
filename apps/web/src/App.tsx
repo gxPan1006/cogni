@@ -33,7 +33,7 @@ import {
   ProjectsList, ProjectBoard, TaskDetail,
   NewProject, NewTask, ProjectSettings,
   useProjects, useProjectBoard, Icon,
-  WorkspaceChatBar,
+  ChatBubble,
   type HostInfo, type ProjectListItem, type NewProjectDraft, type NewTaskDraft,
 } from "@cogni/ui";
 import { api, ApiError } from "./api.js";
@@ -405,9 +405,9 @@ function WebShell({ page }: { page: Page }) {
             onArchive={handleArchiveProject}
           />
         )}
-        {page === "projects" && <WorkspaceChatBar api={api} scope={{ kind: "workspace" }} />}
+        {page === "projects" && <ChatBubble api={api} scope={{ kind: "workspace" }} />}
         {page === "project" && board.project && (
-          <WorkspaceChatBar
+          <ChatBubble
             api={api}
             scope={{ kind: "project", projectId: board.project.id, projectName: board.project.name }}
           />

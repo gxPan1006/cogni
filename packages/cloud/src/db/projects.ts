@@ -1,5 +1,5 @@
 import { eq, and, isNull, desc, asc, sql } from "drizzle-orm";
-import { projects, projectTasks, taskRuns } from "./schema.js";
+import { projects, projectTasks, taskRuns, threads } from "./schema.js";
 import type { AnyDb } from "./users.js";
 import type {
   Project,
@@ -294,10 +294,19 @@ export async function getProjectByThreadId(
   db: AnyDb,
   threadId: string,
 ): Promise<Project | null> {
+  // Resolve scope via threads.project_id (the multi-session source of truth),
+  // not the legacy 1:1 projects.thread_id pointer — a project now owns many
+  // orchestrator sessions and only one of them is in projects.thread_id.
+  const [t] = await db
+    .select({ projectId: threads.projectId })
+    .from(threads)
+    .where(eq(threads.id, threadId))
+    .limit(1);
+  if (!t?.projectId) return null;
   const rows = await db
     .select()
     .from(projects)
-    .where(eq(projects.threadId, threadId))
+    .where(eq(projects.id, t.projectId))
     .limit(1);
   return rows[0] ? rowToProject(rows[0]) : null;
 }

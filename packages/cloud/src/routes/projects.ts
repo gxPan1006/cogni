@@ -15,7 +15,12 @@ import {
   getTask,
   listTaskRuns,
 } from "../db/projects.js";
-import { getOrCreateWorkspaceThread, getOrCreateProjectThread } from "../db/threads.js";
+import {
+  getOrCreateWorkspaceThread,
+  getOrCreateProjectThread,
+  listOrchestratorThreads,
+  createOrchestratorThread,
+} from "../db/threads.js";
 import { hosts as hostsTable } from "../db/schema.js";
 import { eq, and, isNull } from "drizzle-orm";
 import { artifactFileResponse, pathUnder } from "./artifact-file.js";
@@ -231,6 +236,33 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
       threadId: project.threadId ?? null,
     });
     return c.json({ threadId: t.id });
+  });
+
+  // ─── Multi-session orchestrator endpoints (floating chat bubble) ──────────
+  // The bubble lists / opens many orchestrator sessions per scope. `projectId`
+  // query/body param selects project scope; omit it for workspace scope.
+
+  app.get("/api/orchestrator-threads", async (c) => {
+    const { userId, tenantId: _t } = c.get("claims");
+    const projectId = c.req.query("projectId");
+    if (projectId) {
+      const project = await ownedProject(deps, projectId, userId, _t);
+      if (!project) return c.json({ error: "not found" }, 404);
+      return c.json(await listOrchestratorThreads(deps.db, { userId, projectId: project.id }));
+    }
+    return c.json(await listOrchestratorThreads(deps.db, { userId }));
+  });
+
+  app.post("/api/orchestrator-threads", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const raw = (await c.req.json().catch(() => ({}))) as { projectId?: unknown };
+    const projectId = typeof raw.projectId === "string" ? raw.projectId : undefined;
+    if (projectId) {
+      const project = await ownedProject(deps, projectId, userId, tenantId);
+      if (!project) return c.json({ error: "not found" }, 404);
+      return c.json(await createOrchestratorThread(deps.db, { userId, tenantId, projectId: project.id }));
+    }
+    return c.json(await createOrchestratorThread(deps.db, { userId, tenantId }));
   });
 
   app.post("/api/projects", async (c) => {

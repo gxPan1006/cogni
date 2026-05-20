@@ -188,7 +188,9 @@ export async function getOrCreateWorkspaceThread(
 /**
  * Project-scoped orchestrator thread. Reuses `projects.thread_id` if set;
  * otherwise lazily creates a kind='workspace' thread and back-links it on the
- * project row so subsequent calls return the same thread.
+ * project row so subsequent calls return the same thread. Also stamps
+ * `threads.project_id` so scope detection (`getProjectByThreadId`) works off the
+ * new multi-session column.
  */
 export async function getOrCreateProjectThread(
   db: AnyDb,
@@ -202,10 +204,59 @@ export async function getOrCreateProjectThread(
       tenantId: project.tenantId,
       title: "Project chat",
       kind: "workspace",
+      projectId: project.id,
     })
     .returning();
   await db.update(projects).set({ threadId: row!.id }).where(eq(projects.id, project.id));
   return { id: row!.id };
+}
+
+/**
+ * List the orchestrator chat sessions for one scope, newest first.
+ *   - workspace scope (projectId omitted): the user's kind='workspace' threads
+ *     NOT bound to any project (cross-project orchestration).
+ *   - project scope: every (non-deleted) thread stamped with this projectId.
+ *
+ * Backs the floating chat bubble's session list. Returns the same
+ * `ThreadSummary` shape as `listThreads` so the UI reuses its row renderer.
+ */
+export async function listOrchestratorThreads(
+  db: AnyDb,
+  input: { userId: string; projectId?: string },
+): Promise<ThreadSummary[]> {
+  const where = input.projectId
+    ? and(eq(threads.projectId, input.projectId), isNull(threads.deletedAt))
+    : and(
+        eq(threads.userId, input.userId),
+        eq(threads.kind, "workspace"),
+        isNull(threads.projectId),
+        isNull(threads.deletedAt),
+      );
+  const rows = await db.select().from(threads).where(where).orderBy(desc(threads.updatedAt));
+  return rows.map((r) => ({ id: r.id, title: r.title, updatedAt: r.updatedAt.toISOString() }));
+}
+
+/**
+ * Open a fresh orchestrator session ("Start a new conversation" in the bubble).
+ * kind='workspace' so sends route to `WorkspaceChatDomain`; project_id scopes it
+ * (NULL ⇢ workspace-level). Title starts as "New conversation" and the client
+ * renames it from the first user message.
+ */
+export async function createOrchestratorThread(
+  db: AnyDb,
+  input: { userId: string; tenantId: string; projectId?: string },
+): Promise<ThreadSummary> {
+  const [row] = await db
+    .insert(threads)
+    .values({
+      userId: input.userId,
+      tenantId: input.tenantId,
+      title: "New conversation",
+      kind: "workspace",
+      projectId: input.projectId ?? null,
+    })
+    .returning();
+  return { id: row!.id, title: row!.title, updatedAt: row!.updatedAt.toISOString() };
 }
 
 function toMessageView(r: typeof messages.$inferSelect): MessageView {

@@ -56,6 +56,9 @@ export type {
   ArtifactSource,
 } from "./components/project/index.js";
 
-// SP-4 workspace chat orchestrator dock (bottom-anchored, expands upward).
+// SP-4 workspace chat orchestrator. `scopePlaceholder` + `WorkspaceChatScope`
+// are shared; the draggable <ChatBubble> is the live entry point on the project
+// page (it superseded the bottom-anchored <WorkspaceChatBar>).
 export { WorkspaceChatBar, scopePlaceholder } from "./components/project/WorkspaceChatBar.js";
 export type { WorkspaceChatScope } from "./components/project/WorkspaceChatBar.js";
+export { ChatBubble } from "./components/project/chat-bubble/ChatBubble.js";

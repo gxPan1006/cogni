@@ -73,6 +73,14 @@ export const threads = pgTable("threads", {
   // (workspace-level or project-level). `WorkspaceChatDomain` claims sends on
   // 'workspace' threads; everything else stays on `ChatDomain`.
   kind: text("kind").notNull().default("chat"),
+  // SP-4 multi-session: which project an orchestrator thread is scoped to.
+  // NULL ⇢ workspace-level (cross-project) orchestrator OR an ordinary chat;
+  // non-NULL ⇢ project-scoped orchestrator session. This is the source of
+  // truth for `getProjectByThreadId` (a project can now own MANY orchestrator
+  // sessions, so the old 1:1 `projects.thread_id` pointer no longer suffices).
+  // ON DELETE SET NULL so hard-deleting a project leaves its chat history as
+  // orphaned workspace-level threads instead of blocking the delete.
+  projectId: uuid("project_id").references((): any => projects.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   // Soft delete (matches hosts.removed_at / projects.archived_at): a deleted
