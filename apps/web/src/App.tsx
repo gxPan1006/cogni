@@ -415,6 +415,7 @@ function WebShell({ page }: { page: Page }) {
             onOpenSettings={() => nav(`/projects/${params.projectId}/settings`)}
             onOpenTask={(id) => { setActiveTaskId(id); setFocusedTaskId(id); }}
             onPrefetchTask={api.prefetchTask}
+            onMoveTask={(taskId, to) => void api.moveTaskState(taskId, to)}
           />
         )}
         {page === "project-settings" && params.projectId && (

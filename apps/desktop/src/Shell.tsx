@@ -350,6 +350,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
             onOpenSettings={() => setPage("project-settings")}
             onOpenTask={(id) => { setActiveTaskId(id); setFocusedTaskId(id); }}
             onPrefetchTask={api.prefetchTask}
+            onMoveTask={(taskId, to) => void api.moveTaskState(taskId, to)}
           />
         )}
         {page === "project-settings" && activeProjectId && (
