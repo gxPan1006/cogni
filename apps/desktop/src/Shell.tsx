@@ -35,6 +35,7 @@ import {
   ProjectsList, ProjectBoard, TaskDetail,
   NewProject, NewTask, ProjectSettings,
   useProjects, useProjectBoard,
+  WorkspaceChatBar,
   type ProjectListItem, type NewProjectDraft, type NewTaskDraft,
 } from "@cogni/ui";
 
@@ -337,6 +338,13 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
             onClose={() => setPage("project")}
             onUpdate={handleUpdateProject}
             onArchive={handleArchiveProject}
+          />
+        )}
+        {page === "projects" && <WorkspaceChatBar api={api} scope={{ kind: "workspace" }} />}
+        {page === "project" && board.project && (
+          <WorkspaceChatBar
+            api={api}
+            scope={{ kind: "project", projectId: board.project.id, projectName: board.project.name }}
           />
         )}
         {page === "chat" && (
