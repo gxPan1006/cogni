@@ -5,6 +5,7 @@ import {
   mergePolicySchema,
   prioritySchema,
   attachmentSchema,
+  taskStateSchema,
   type Project,
   type ProjectTask,
   type TaskRun,
@@ -119,6 +120,12 @@ const replySchema = z.object({
 const fsBrowseSchema = z.object({
   path: z.string().optional(),
 });
+
+/** Body of POST /api/tasks/:taskId/comments — an inert human note. */
+const commentBodySchema = z.object({ body: z.string().min(1).max(8000) });
+
+/** Body of PATCH /api/tasks/:taskId/state — the kanban drag target column. */
+const moveStateSchema = z.object({ to: taskStateSchema });
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -594,6 +601,77 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
     try {
       await deps.projectDomain.cancelTask(owned.task.id);
       return c.json({ ok: true });
+    } catch (err) {
+      const { status, body } = domainErrorResponse(err);
+      return c.json(body, status);
+    }
+  });
+
+  // ─── Task comment feed (主页面) ───────────────────────────────────────────
+  // The TaskDetail overview tab lists worker handoff notes + inert human
+  // comments. Posting a comment never contacts the runner — it's folded into
+  // the runner context only when the task is next (re)dispatched.
+
+  app.get("/api/tasks/:taskId/comments", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const owned = await ownedTask(deps, c.req.param("taskId"), userId, tenantId);
+    if (!owned) return c.json({ error: "not found" }, 404);
+    if (!deps.projectDomain) return c.json({ error: "project domain unavailable" }, 503);
+    return c.json(await deps.projectDomain.listComments(owned.task.id));
+  });
+
+  app.post("/api/tasks/:taskId/comments", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const owned = await ownedTask(deps, c.req.param("taskId"), userId, tenantId);
+    if (!owned) return c.json({ error: "not found" }, 404);
+    if (!deps.projectDomain) return c.json({ error: "project domain unavailable" }, 503);
+    const parsed = commentBodySchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: "invalid body", details: parsed.error.flatten() }, 400);
+    }
+    try {
+      const comment = await deps.projectDomain.addUserComment({
+        taskId: owned.task.id,
+        userId,
+        body: parsed.data.body,
+      });
+      return c.json(comment, 201);
+    } catch (err) {
+      const { status, body } = domainErrorResponse(err);
+      return c.json(body, status);
+    }
+  });
+
+  app.delete("/api/tasks/:taskId/comments/:commentId", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const owned = await ownedTask(deps, c.req.param("taskId"), userId, tenantId);
+    if (!owned) return c.json({ error: "not found" }, 404);
+    if (!deps.projectDomain) return c.json({ error: "project domain unavailable" }, 503);
+    try {
+      await deps.projectDomain.deleteUserComment(c.req.param("commentId"));
+      return c.json({ ok: true });
+    } catch (err) {
+      const { status, body } = domainErrorResponse(err);
+      return c.json(body, status);
+    }
+  });
+
+  // ─── Kanban drag-to-column ────────────────────────────────────────────────
+  // Dropping a task card onto a column issues this single mutation; the domain
+  // maps the target column to the corresponding lifecycle action + side effects.
+
+  app.patch("/api/tasks/:taskId/state", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const owned = await ownedTask(deps, c.req.param("taskId"), userId, tenantId);
+    if (!owned) return c.json({ error: "not found" }, 404);
+    if (!deps.projectDomain) return c.json({ error: "project domain unavailable" }, 503);
+    const parsed = moveStateSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: "invalid body", details: parsed.error.flatten() }, 400);
+    }
+    try {
+      const task = await deps.projectDomain.moveTaskToState(owned.task.id, parsed.data.to);
+      return c.json(task);
     } catch (err) {
       const { status, body } = domainErrorResponse(err);
       return c.json(body, status);
