@@ -1,5 +1,5 @@
 import { eq, and, desc, asc, isNull } from "drizzle-orm";
-import { threads, messages } from "./schema.js";
+import { threads, messages, projects } from "./schema.js";
 import type { AnyDb } from "./users.js";
 import type { ThreadSummary, ThreadDetail, MessageView, Role } from "@cogni/contract";
 
@@ -138,6 +138,74 @@ export async function getFirstTurnIfDefaultTitle(
   const userMsg = msgs.find((m) => m.role === "user");
   if (!userMsg) return null;
   return { firstUserMessage: userMsg.content };
+}
+
+// ─── SP-4 orchestrator thread helpers ────────────────────────────────────────
+
+/** Returns the thread's `kind` ('chat' | 'workspace'), or null if it doesn't exist. */
+export async function getThreadKind(db: AnyDb, threadId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ kind: threads.kind })
+    .from(threads)
+    .where(eq(threads.id, threadId))
+    .limit(1);
+  return row?.kind ?? null;
+}
+
+/**
+ * Workspace-level orchestrator thread — one per user, not referenced by any
+ * project. Idempotent: reuses the existing (non-deleted) workspace thread for
+ * the user, otherwise creates one with kind='workspace'.
+ */
+export async function getOrCreateWorkspaceThread(
+  db: AnyDb,
+  input: { userId: string; tenantId: string },
+): Promise<{ id: string }> {
+  const [existing] = await db
+    .select({ id: threads.id })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.userId, input.userId),
+        eq(threads.kind, "workspace"),
+        isNull(threads.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (existing) return { id: existing.id };
+  const [row] = await db
+    .insert(threads)
+    .values({
+      userId: input.userId,
+      tenantId: input.tenantId,
+      title: "Workspace",
+      kind: "workspace",
+    })
+    .returning();
+  return { id: row!.id };
+}
+
+/**
+ * Project-scoped orchestrator thread. Reuses `projects.thread_id` if set;
+ * otherwise lazily creates a kind='workspace' thread and back-links it on the
+ * project row so subsequent calls return the same thread.
+ */
+export async function getOrCreateProjectThread(
+  db: AnyDb,
+  project: { id: string; userId: string; tenantId: string; threadId: string | null },
+): Promise<{ id: string }> {
+  if (project.threadId) return { id: project.threadId };
+  const [row] = await db
+    .insert(threads)
+    .values({
+      userId: project.userId,
+      tenantId: project.tenantId,
+      title: "Project chat",
+      kind: "workspace",
+    })
+    .returning();
+  await db.update(projects).set({ threadId: row!.id }).where(eq(projects.id, project.id));
+  return { id: row!.id };
 }
 
 function toMessageView(r: typeof messages.$inferSelect): MessageView {

@@ -18,6 +18,7 @@ import * as schema from "./schema.js";
 // accept a forward reference at CREATE TABLE time.
 // 2026-05-20 delta:
 //   • threads: added deleted_at (soft delete for sidebar conversation delete)
+//   • threads: added kind (SP-4 workspace-chat orchestrator threads)
 //   • users: added password_hash (email+password auth)
 const DDL = `
 CREATE TABLE tenants (id uuid primary key default gen_random_uuid(), name text not null, created_at timestamp not null default now());
@@ -26,7 +27,7 @@ CREATE TABLE user_identities (user_id uuid not null references users(id) on dele
 CREATE TABLE hosts (id uuid primary key default gen_random_uuid(), tenant_id uuid not null references tenants(id), user_id uuid not null references users(id), name text not null, status text not null default 'offline', registration_token text not null unique, capabilities_json jsonb not null default '[]', last_seen timestamp, removed_at timestamp, created_at timestamp not null default now());
 CREATE TABLE auth_sessions (id uuid primary key default gen_random_uuid(), user_id uuid not null references users(id) on delete cascade, device_name text not null, user_agent text, ip text, created_at timestamp not null default now(), last_seen_at timestamp not null default now(), revoked_at timestamp);
 CREATE INDEX auth_sessions_user_idx ON auth_sessions(user_id) WHERE revoked_at IS NULL;
-CREATE TABLE threads (id uuid primary key default gen_random_uuid(), tenant_id uuid not null references tenants(id), user_id uuid not null references users(id), title text not null default 'New chat', created_at timestamp not null default now(), updated_at timestamp not null default now(), deleted_at timestamp);
+CREATE TABLE threads (id uuid primary key default gen_random_uuid(), tenant_id uuid not null references tenants(id), user_id uuid not null references users(id), title text not null default 'New chat', kind text not null default 'chat', created_at timestamp not null default now(), updated_at timestamp not null default now(), deleted_at timestamp);
 CREATE TABLE messages (id uuid primary key default gen_random_uuid(), thread_id uuid not null references threads(id), role text not null, content text not null, created_at timestamp not null default now());
 CREATE TABLE runner_sessions (id uuid primary key default gen_random_uuid(), thread_id uuid not null references threads(id), host_id uuid references hosts(id), adapter text not null, runner_session_id text, status text not null default 'idle', closed_at timestamp, task_id uuid, created_at timestamp not null default now());
 CREATE TABLE events (id uuid primary key default gen_random_uuid(), thread_id uuid not null references threads(id), session_id uuid not null references runner_sessions(id), seq integer not null, type text not null, payload_json jsonb not null, created_at timestamp not null default now(), constraint events_thread_seq_uq unique (thread_id, seq));

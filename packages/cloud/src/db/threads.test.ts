@@ -3,7 +3,9 @@ import { eq } from "drizzle-orm";
 import { makeTestDb } from "./test-db.js";
 import { messages } from "./schema.js";
 import { findOrCreateUserByEmail } from "./users.js";
-import { createThread, listThreads, getThreadDetail, appendMessage, touchThread, threadBelongsToUser, updateThreadTitle, softDeleteThread } from "./threads.js";
+import { createThread, listThreads, getThreadDetail, appendMessage, touchThread, threadBelongsToUser, updateThreadTitle, softDeleteThread, getOrCreateWorkspaceThread, getOrCreateProjectThread, getThreadKind } from "./threads.js";
+import { createHost } from "./hosts.js";
+import { createProject, getProject } from "./projects.js";
 
 describe("thread repository", () => {
   it("creates, lists, appends messages, and reads back detail", async () => {
@@ -90,6 +92,59 @@ describe("thread repository", () => {
 
     await softDeleteThread(db, thread.id);
     expect(await updateThreadTitle(db, thread.id, "too late")).toBeNull();
+    await close();
+  });
+});
+
+describe("SP-4 orchestrator thread helpers", () => {
+  it("getOrCreateWorkspaceThread is idempotent per user and marks kind=workspace", async () => {
+    const { db, close } = await makeTestDb();
+    const user = await findOrCreateUserByEmail(db, "ws@x.com");
+    const a = await getOrCreateWorkspaceThread(db, { userId: user.id, tenantId: user.tenantId });
+    const b = await getOrCreateWorkspaceThread(db, { userId: user.id, tenantId: user.tenantId });
+    expect(a.id).toBe(b.id);
+    expect(await getThreadKind(db, a.id)).toBe("workspace");
+    await close();
+  });
+
+  it("getThreadKind returns 'chat' for an ordinary thread and null for unknown", async () => {
+    const { db, close } = await makeTestDb();
+    const user = await findOrCreateUserByEmail(db, "kind@x.com");
+    const thread = await createThread(db, { userId: user.id, tenantId: user.tenantId });
+    expect(await getThreadKind(db, thread.id)).toBe("chat");
+    expect(await getThreadKind(db, "00000000-0000-0000-0000-000000000000")).toBeNull();
+    await close();
+  });
+
+  it("getOrCreateProjectThread reuses projects.thread_id and lazily creates a workspace thread", async () => {
+    const { db, close } = await makeTestDb();
+    const user = await findOrCreateUserByEmail(db, "proj@x.com");
+    const host = await createHost(db, { userId: user.id, tenantId: user.tenantId, name: "Mac" });
+    const project = await createProject(db, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      name: "P",
+      repoPath: "/tmp/p",
+      defaultHostId: host.hostId,
+    });
+    // First call creates + links a thread.
+    const a = await getOrCreateProjectThread(db, {
+      id: project.id,
+      userId: user.id,
+      tenantId: user.tenantId,
+      threadId: project.threadId ?? null,
+    });
+    expect(await getThreadKind(db, a.id)).toBe("workspace");
+    const linked = await getProject(db, project.id);
+    expect(linked?.threadId).toBe(a.id);
+    // Second call (now that thread_id is set) returns the same thread.
+    const b = await getOrCreateProjectThread(db, {
+      id: project.id,
+      userId: user.id,
+      tenantId: user.tenantId,
+      threadId: linked!.threadId,
+    });
+    expect(b.id).toBe(a.id);
     await close();
   });
 });

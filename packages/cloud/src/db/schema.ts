@@ -69,6 +69,10 @@ export const threads = pgTable("threads", {
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
   userId: uuid("user_id").notNull().references(() => users.id),
   title: text("title").notNull().default("New chat"),
+  // SP-4: 'chat' = ordinary conversation; 'workspace' = orchestrator thread
+  // (workspace-level or project-level). `WorkspaceChatDomain` claims sends on
+  // 'workspace' threads; everything else stays on `ChatDomain`.
+  kind: text("kind").notNull().default("chat"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   // Soft delete (matches hosts.removed_at / projects.archived_at): a deleted
