@@ -60,10 +60,12 @@ import {
 import { openRunnerSession, getLatestSessionForThread } from "../../db/sessions.js";
 import type { ClientHub } from "../../client-hub.js";
 import type { HostRouter } from "../../host-router.js";
-import type { Project, ProjectTask, TaskState, CloudToHost } from "@cogni/contract";
+import type { Project, ProjectTask, TaskState, TaskComment, CloudToHost } from "@cogni/contract";
 import { HostRpcError, type HostRpcClient, type HostRpcLogger } from "./host-rpc.js";
 import { evaluateAndApplyMergeGate } from "./merge-gate.js";
 import { transitionTask, StateMismatch } from "./lifecycle.js";
+import { gatherUnconsumedUserComments, markCommentsConsumed } from "../../db/task-comments.js";
+import { renderCommentsForRunner } from "./comments.js";
 
 const TICK_INTERVAL_MS = 5_000;
 const HOST_OFFLINE_THRESHOLD_MS = 60_000;
@@ -328,6 +330,9 @@ export class ProjectOrchestrator {
    * stays queued for the next tick.
    */
   private async tryDispatchTask(project: Project, task: ProjectTask): Promise<boolean> {
+    // Unconsumed human comments to fold into this dispatch (declared at
+    // function scope so we can stamp them with the run id after createTaskRun).
+    let unconsumed: TaskComment[] = [];
     // SP-3+1: per-task host override falls back to the project default.
     const hostId = task.hostId ?? project.defaultHostId;
     const branchName = `task/${task.ref.toLowerCase()}`;
@@ -420,6 +425,7 @@ export class ProjectOrchestrator {
         "- When done implementing, run `git add -A && git commit -m \"<concise summary>\"` before reporting completion.",
         "- Do not ask the user clarifying questions with AskUserQuestion. If details are missing, make a conservative product-minded assumption, write it down briefly in the final response, and continue.",
         "- If the task is exploratory / Q&A only (no deliverable), say so explicitly and don't force a commit.",
+        "- Before reporting completion or asking a question, your FINAL message must be a structured handoff note with three short parts: (1) 做了什么 — what you did; (2) 交付物在哪 — where the deliverable is (files / branch); (3) 下一步人类该检查什么 — what the human should review next.",
         "",
       ].join("\n");
       const messageParts: string[] = [];
@@ -432,6 +438,15 @@ export class ProjectOrchestrator {
       messageParts.push(task.title);
       if (task.description) {
         messageParts.push("", task.description);
+      }
+      // Inject any inert human comments dropped since the last run as a
+      // `# 人类补充说明` block — the user's notes ride into the runner's initial
+      // context. They're stamped consumed below once createTaskRun gives us a
+      // run id, so a later dispatch won't re-inject them.
+      unconsumed = await gatherUnconsumedUserComments(this.deps.db, task.id);
+      const commentBlock = renderCommentsForRunner(unconsumed);
+      if (commentBlock) {
+        messageParts.push("", commentBlock);
       }
       const frame: CloudToHost = {
         t: "dispatch",
@@ -471,12 +486,15 @@ export class ProjectOrchestrator {
       throw err;
     }
     const priorRuns = await listTaskRuns(this.deps.db, task.id);
-    await createTaskRun(this.deps.db, {
+    const run = await createTaskRun(this.deps.db, {
       taskId: task.id,
       runnerSessionId: session.id,
       attemptNumber: priorRuns.length + 1,
       startedAt: updated.startedAt ? new Date(updated.startedAt) : new Date(),
     });
+    if (unconsumed.length > 0) {
+      await markCommentsConsumed(this.deps.db, unconsumed.map((c) => c.id), run.id);
+    }
 
     this.broadcastTask(updated, "state-changed");
     this.broadcastProject(project, "updated");

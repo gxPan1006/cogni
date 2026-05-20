@@ -127,6 +127,28 @@ describe("ProjectOrchestrator dispatch", () => {
     await f.close();
   });
 
+  it("injects unconsumed human comments into the dispatch message and stamps them consumed", async () => {
+    const f = await seedFixture();
+    f.setHandler(okWorktreeFlow);
+    const { insertComment, gatherUnconsumedUserComments } = await import("../../db/task-comments.js");
+    await insertComment(f.db, {
+      taskId: f.task.id,
+      author: "user",
+      body: "用深色主题",
+      state: "queued",
+      authorUserId: f.user.id,
+    });
+
+    await f.orchestrator.tick();
+
+    const frame = f.hostSend.mock.calls[0]?.[0] as CloudToHost;
+    expect(frame.message).toContain("# 人类补充说明");
+    expect(frame.message).toContain("用深色主题");
+    // The comment was carried into a run and stamped consumed.
+    expect(await gatherUnconsumedUserComments(f.db, f.task.id)).toEqual([]);
+    await f.close();
+  });
+
   it("respects concurrency limit (concurrencyLimit=1, two queued → only one dispatches)", async () => {
     const f = await seedFixture();
     f.setHandler(okWorktreeFlow);
