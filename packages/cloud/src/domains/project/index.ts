@@ -35,6 +35,8 @@ import {
   getTask as dbGetTask,
   getTaskByThreadId as dbGetTaskByThreadId,
   listTaskRuns as dbListTaskRuns,
+  deleteTask as dbDeleteTask,
+  deleteProject as dbDeleteProject,
   type CreateProjectInput,
   type CreateTaskInput,
   type UpdateProjectPatch,
@@ -375,6 +377,56 @@ export class ProjectDomain {
     });
     this.broadcastTask(updated, "state-changed");
     return updated;
+  }
+
+  /**
+   * SP-4 hard-delete a task. Idempotent (no-op if already gone). If the task
+   * is non-terminal we cancel it first (closes runner session + removes
+   * worktree via `cancelTask`), then delete the row and broadcast a
+   * task-event(deleted) so the kanban card disappears for every viewer.
+   */
+  async deleteTask(taskId: string): Promise<void> {
+    const task = await dbGetTask(this.deps.db, taskId);
+    if (!task) return; // idempotent
+    const terminal =
+      task.state === "done" || task.state === "failed" || task.state === "cancelled";
+    if (!terminal) {
+      try {
+        await this.cancelTask(taskId);
+      } catch (err) {
+        this.deps.logger?.warn?.(
+          { taskId, err: String(err) },
+          "deleteTask: cancel before delete failed; deleting anyway",
+        );
+      }
+    }
+    await dbDeleteTask(this.deps.db, taskId);
+    this.deps.clients.broadcastProject(task.projectId, { t: "task-event", kind: "deleted", task });
+    this.deps.clients.broadcastTask(task.id, { t: "task-event", kind: "deleted", task });
+  }
+
+  /**
+   * SP-4 hard-delete a project + all its tasks (no undo window). Deletes each
+   * task through `deleteTask` (so running runners are cancelled first), then
+   * removes the project row and broadcasts project-event(deleted) — the
+   * project vanishes from the list page and its board for every viewer.
+   */
+  async deleteProject(projectId: string): Promise<void> {
+    const project = await dbGetProject(this.deps.db, projectId);
+    if (!project) return; // idempotent
+    const tasks = await dbListTasksByProject(this.deps.db, projectId);
+    for (const t of tasks) await this.deleteTask(t.id);
+    await dbDeleteProject(this.deps.db, projectId);
+    this.deps.clients.broadcastProjects(project.userId, {
+      t: "project-event",
+      kind: "deleted",
+      project,
+    });
+    this.deps.clients.broadcastProject(project.id, {
+      t: "project-event",
+      kind: "deleted",
+      project,
+    });
   }
 
   /** Drawer "Review" tab fetches diff on-demand via host RPC. */
