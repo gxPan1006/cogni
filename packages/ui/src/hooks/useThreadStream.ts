@@ -49,6 +49,12 @@ export function useThreadStream(api: ApiClient, threadId: string) {
   // Survives subscribe/unsubscribe and (re)connects for this hook instance.
   // Reset to 0 only when the threadId changes.
   const lastSeqRef = useRef<number>(0);
+  // The initial catchup replay is buffered and flushed in a single batch on
+  // `catchup-complete` (see effect). Without this, switching into a thread
+  // paints the text first and then lets tool-call pills pop in one event at a
+  // time as the replay frames arrive — the "loading flash" on session switch.
+  const caughtUpRef = useRef(false);
+  const replayBufferRef = useRef<RunnerEvent[]>([]);
 
   // Bind `connected` to the shared connection — independent of threadId so
   // switching threads doesn't flap the pill.
@@ -60,18 +66,25 @@ export function useThreadStream(api: ApiClient, threadId: string) {
 
   // Subscription lifecycle — owns thread-scoped state.
   useEffect(() => {
-    setEvents([]);
     setPendingFallback(null);
     setPendingNoHost(null);
-    lastSeqRef.current = 0;
+    caughtUpRef.current = false;
+    replayBufferRef.current = [];
 
-    // SWR seed: render the last-seen messages for THIS thread synchronously so
-    // switching back is instant and flash-free. When there's no cache, clear to
-    // [] immediately — we must never leave the previous thread's messages on
-    // screen during the getThread round-trip (that was the chat "flash").
+    // SWR seed: render the last-seen messages AND event stream for THIS thread
+    // synchronously, so switching back to an already-seen thread paints the full
+    // conversation — prose *and* tool-call pills — in one frame, with no
+    // text-first-then-pills flash. When there's no cache, clear to [] so we
+    // never leave the previous thread's view on screen during the round-trip.
+    // lastSeqRef is seeded from the cached tail so the subscribe only replays
+    // the events we haven't seen.
     const cacheKey = `thread:${threadId}`;
+    const evCacheKey = `events:${threadId}`;
     const cached = api.cache.get<MessageView[]>(cacheKey);
+    const cachedEv = api.cache.get<{ events: RunnerEvent[]; lastSeq: number }>(evCacheKey);
     setMessages(cached ?? []);
+    setEvents(cachedEv?.events ?? []);
+    lastSeqRef.current = cachedEv?.lastSeq ?? 0;
 
     // Guards a stale getThread/catchup resolving after the user already moved
     // on — without this the late promise would clobber the new thread's view.
@@ -79,6 +92,22 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     const commitMessages = (msgs: MessageView[]) => {
       api.cache.set(cacheKey, msgs);
       if (active) setMessages(msgs);
+    };
+
+    // Flush the buffered catchup replay in one batch (idempotent). Called on
+    // catchup-complete / catchup-too-long so the freshly-loaded history appears
+    // in a single render and live events that follow append directly.
+    const flushReplay = () => {
+      if (caughtUpRef.current) return;
+      caughtUpRef.current = true;
+      const buffered = replayBufferRef.current;
+      replayBufferRef.current = [];
+      if (buffered.length === 0 || !active) return;
+      setEvents((s) => {
+        const next = [...s, ...buffered];
+        api.cache.set(evCacheKey, { events: next, lastSeq: lastSeqRef.current });
+        return next;
+      });
     };
 
     api
@@ -119,7 +148,18 @@ export function useThreadStream(api: ApiClient, threadId: string) {
             // in-flight tail (no terminator yet) from completed turns.
             if (msg.seq <= lastSeqRef.current) return;
             lastSeqRef.current = msg.seq;
-            setEvents((s) => [...s, msg.event]);
+            if (!caughtUpRef.current) {
+              // Initial catchup replay — buffer it, flushed as one batch on
+              // catchup-complete so history doesn't paint pill-by-pill.
+              replayBufferRef.current.push(msg.event);
+            } else {
+              const seq = msg.seq;
+              setEvents((s) => {
+                const next = [...s, msg.event];
+                api.cache.set(evCacheKey, { events: next, lastSeq: seq });
+                return next;
+              });
+            }
           } else if (msg.t === "host-status") {
             setHostOnline(msg.online);
           } else if (msg.t === "host-meta") {
@@ -129,6 +169,8 @@ export function useThreadStream(api: ApiClient, threadId: string) {
             setHostOnline(msg.status === "online");
           } else if (msg.t === "catchup-complete") {
             if (msg.latestSeq > lastSeqRef.current) lastSeqRef.current = msg.latestSeq;
+            // Initial replay done — paint the buffered history in one batch.
+            flushReplay();
           } else if (msg.t === "catchup-too-long") {
             const targetSeq = msg.latestSeq;
             void api
@@ -138,6 +180,9 @@ export function useThreadStream(api: ApiClient, threadId: string) {
                 lastSeqRef.current = targetSeq;
               })
               .catch((err) => console.error("catchup-too-long: getThread failed", err));
+            // No replay is coming (too many events) — stop buffering so live
+            // events append directly. History stays text-only (degraded mode).
+            flushReplay();
           } else if (msg.t === "host-fallback-prompt") {
             setPendingFallback({
               pendingMessageId: msg.pendingMessageId,
