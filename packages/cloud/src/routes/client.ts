@@ -294,6 +294,7 @@ export function registerClientRoutes(
                     content: msg.text,
                     sourceClientId: clientId,
                     attachments: msg.attachments,
+                    model: msg.model,
                   });
                 }
               }

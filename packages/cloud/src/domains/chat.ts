@@ -20,6 +20,7 @@ interface PendingFallback {
   threadId: string;
   content: string;
   attachments?: Attachment[];
+  model?: string;
   expiresAt: number;
 }
 
@@ -102,8 +103,9 @@ export class ChatDomain {
     content: string;
     sourceClientId: string;
     attachments?: Attachment[];
+    model?: string;
   }): Promise<void> {
-    const { userId, threadId, content, sourceClientId, attachments } = input;
+    const { userId, threadId, content, sourceClientId, attachments, model } = input;
     const pendingMessageId = randomUUID();
 
     const latest = await getLatestSessionForThread(this.db, threadId);
@@ -119,7 +121,7 @@ export class ChatDomain {
     if (preferredHostId === null) {
       const chosen = onlineHosts[0];
       if (chosen) {
-        await this.persistAndDispatch({ userId, threadId, content, hostId: chosen.hostId, attachments });
+        await this.persistAndDispatch({ userId, threadId, content, hostId: chosen.hostId, attachments, model });
       }
       return;
     }
@@ -127,7 +129,7 @@ export class ChatDomain {
     // Preferred is online → reuse / new session on it.
     const preferredOnline = onlineHosts.find((h) => h.hostId === preferredHostId);
     if (preferredOnline) {
-      await this.persistAndDispatch({ userId, threadId, content, hostId: preferredOnline.hostId, attachments });
+      await this.persistAndDispatch({ userId, threadId, content, hostId: preferredOnline.hostId, attachments, model });
       return;
     }
 
@@ -143,7 +145,7 @@ export class ChatDomain {
     });
     this.sweepPendings();
     this.pendingFallbacks.set(pendingMessageId, {
-      userId, threadId, content, attachments, expiresAt: Date.now() + PENDING_TTL_MS,
+      userId, threadId, content, attachments, model, expiresAt: Date.now() + PENDING_TTL_MS,
     });
   }
 
@@ -179,7 +181,7 @@ export class ChatDomain {
     }
     await this.persistAndDispatch({
       userId: input.userId, threadId: pending.threadId, content: pending.content,
-      hostId: input.targetHostId, attachments: pending.attachments,
+      hostId: input.targetHostId, attachments: pending.attachments, model: pending.model,
     });
   }
 
@@ -242,7 +244,7 @@ export class ChatDomain {
   // --- private ---
 
   private async persistAndDispatch(p: {
-    userId: string; threadId: string; content: string; hostId: string; attachments?: Attachment[];
+    userId: string; threadId: string; content: string; hostId: string; attachments?: Attachment[]; model?: string;
   }): Promise<void> {
     const userMsg = await appendMessage(this.db, {
       threadId: p.threadId, role: "user", content: p.content, attachments: p.attachments,
@@ -283,6 +285,7 @@ export class ChatDomain {
         runnerSessionId: session.runnerSessionId,
         message: withAttachmentPreamble(p.content, p.attachments),
         ...(p.attachments && p.attachments.length > 0 ? { attachments: p.attachments } : {}),
+        ...(p.model ? { model: p.model } : {}),
       });
     } catch {
       await setRunnerSessionStatus(this.db, session.id, "failed");
