@@ -4,6 +4,44 @@ Audit trail for /fanout batches in cogni. Each batch records what was paralleliz
 
 ---
 
+## Default project folder + configurable host projects-root — 2026-05-20 (contract-first, then 3-agent fanout)
+
+**Goal**: new-project flow pre-fills the repo path from a configurable per-host "projects root" (default `~/cogni`), and the root is editable in Settings. Spec: `docs/superpowers/specs/2026-05-20-default-project-folder-design.md`. Plan: `docs/superpowers/plans/2026-05-20-default-project-folder.md` (12 tasks). Triggered by a stuck-`queued` task whose `repoPath="~/code/cc-view"` never expanded `~` on the host.
+
+**Structure**: not pure fanout — the contract layer (Task 1: `set-projects-root` RPC + register `projectsRoot` fields) is imported by all three downstream packages, so it was landed serially first (frozen) before fanning out. The tilde root-cause fix (`paths.ts`) was the prerequisite, also landed first.
+
+| Phase | Mode | Work | Commit |
+|---|---|---|---|
+| Prereq (me) | serial | tilde fix (`expandTilde`/`resolveUserPath`, all git-ops/fs-browse routed through it) | `ad809e2` |
+| Prereq (me) | serial | spec + plan docs | `200171d` |
+| Contract (me) | serial | Task 1: contract RPC + register fields (80 contract tests) | `1c66c6d` |
+| A runner-host | fanout | Tasks 2-5: projects-root resolution, `set-projects-root` handler, register report, `mkdir -p` | `9138c86` |
+| B cloud | fanout | Tasks 6-8: schema cols + migration, persist+serve, `PUT /api/hosts/:id/projects-root` | `aad40f5` |
+| C ui | fanout | Tasks 9-11: `HostInfo` fields + api, NewProject pre-fill, Settings editor | `6d78a36` |
+
+Merges: `6065f12` (A), `bcdb23b` (B), `cf836ef` (C) — `--no-ff` into `feat/default-project-folder`.
+
+**Sovereignty**: A=`packages/runner-host/**`, B=`packages/cloud/**`, C=`packages/ui/**`. All three scope-clean at the gate (no contract edits, nothing outside their dir, lockfile untouched). Zero merge conflicts (disjoint packages, no shared files).
+
+**Post-merge full sweep**: `pnpm build` clean · `pnpm -r typecheck` clean · `pnpm test` **562 pass / 0 fail (63 files)**.
+
+**Fanout效果**:
+- 3 agents, ~+522/-14 lines across 25 files.
+- Agent wallclock: A 170s, B 256s, C 130s (parallel → ~256s wall).
+- Integration gate (3 scope checks + batch merge + full sweep): ~6 min.
+- Conflicts / rejects: none.
+
+**踩坑 / 决策**:
+- Contract had to be frozen first — fanning out with an unstable contract is the #1 anti-pattern. Committing it broke runner-host's `routeRpc` exhaustiveness (TS2366) transiently; Track A owned the fix (Task 4), B/C were told to build only their own package.
+- Agent deviations accepted: B used the repo's `loadEnv()` migration convention over the plan's bare `process.env` sketch, and added an `ownedHostRow` helper (existing `ownedHost` returns only a boolean). Both sound.
+- Plan-writing footgun: the Write tool corrupted regex char-classes containing a `space-dash` range (injected NUL/0x1F bytes) in the markdown plan; caught via `od`, fixed by stripping control bytes + using `[/]` instead of a range.
+- **Not deployed**: feature sits on `feat/default-project-folder` (not merged to main, not pushed). Host changes need a desktop rebuild (`/ship`); cloud needs the one-time migration `migrate-2026-05-20-host-projects-root.ts`.
+- Unrelated `Conversation.tsx` working-tree edit (file-upload feature, `initialAttachments`) was present in the shared checkout — left untouched, not in any commit.
+
+**下一轮候选**: deploy (migration + cloud restart + desktop rebuild); slug collision auto-dedup (`-2` suffix) if users hit it.
+
+---
+
 ## Email magic-link (C-phase) — 2026-05-16 (hybrid: 2-agent fanout inside a 5-phase serial spine)
 
 **Goal**: add email magic-link login as an alternative to Google OAuth (solves GFW reachability for users in mainland China). Source spec: `docs/superpowers/specs/2026-05-16-email-magic-link-auth-design.md`. Source plan: `docs/superpowers/plans/2026-05-16-email-magic-link-auth.md` (15 tasks).
