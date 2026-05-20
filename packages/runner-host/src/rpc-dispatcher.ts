@@ -51,6 +51,8 @@ import {
   type UploadCommitResponse,
   type UploadAbortRequest,
   type UploadAbortResponse,
+  type SetProjectsRootRequest,
+  type SetProjectsRootResponse,
 } from "@cogni/contract";
 import { GitOpError } from "./git-ops.js";
 import { FsBrowseError } from "./fs-browse.js";
@@ -72,6 +74,7 @@ export interface RpcDeps {
   uploadChunk: (req: UploadChunkRequest) => Promise<UploadChunkResponse>;
   uploadCommit: (req: UploadCommitRequest) => Promise<UploadCommitResponse>;
   uploadAbort: (req: UploadAbortRequest) => Promise<UploadAbortResponse>;
+  setProjectsRoot: (req: SetProjectsRootRequest) => Promise<SetProjectsRootResponse>;
 }
 
 /**
@@ -143,6 +146,8 @@ async function routeRpc(frame: HostRpcRequest, deps: RpcDeps): Promise<HostRpcRe
       return { ok: true, method: frame.method, result: await deps.uploadCommit(frame.params) };
     case "upload-abort":
       return { ok: true, method: frame.method, result: await deps.uploadAbort(frame.params) };
+    case "set-projects-root":
+      return { ok: true, method: frame.method, result: await deps.setProjectsRoot(frame.params) };
   }
 }
 

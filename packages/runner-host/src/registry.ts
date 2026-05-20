@@ -3,6 +3,7 @@ import type { CloudToHost, HostToCloud, HostRpcRequest, HostRpcResponse, RunnerC
 import { cloudToHostSchema } from "@cogni/contract";
 import { logger } from "@cogni/shared";
 import { RunnerManager } from "./runner-manager.js";
+import { readHostConfig, resolveProjectsRoot } from "./config.js";
 import type { HostConfig } from "./config.js";
 
 /**
@@ -61,9 +62,11 @@ export function connectToCloud(
     // cloud's host-ws / client WS endpoints.
     let processing: Promise<void> = Promise.resolve();
 
-    ws.on("open", () => {
+    ws.on("open", async () => {
       attempt = 0;
       const caps = manager.capabilities();
+      const cfg = await readHostConfig();
+      const pr = resolveProjectsRoot(cfg?.projectsRoot);
       send({
         t: "register",
         hostId: config.hostId,
@@ -73,6 +76,8 @@ export function connectToCloud(
         capabilities: caps.capabilities as RunnerCapability[],
         adapters: caps.adapters,
         version: VERSION,
+        projectsRoot: pr.root,
+        projectsRootLocked: pr.locked,
       });
       heartbeat = setInterval(() => send({ t: "heartbeat" }), HEARTBEAT_MS);
       logger.info({ hostId: config.hostId }, "connected to cloud");

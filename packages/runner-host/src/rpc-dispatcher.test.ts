@@ -147,6 +147,7 @@ function deps(over: Partial<RpcDeps>): RpcDeps {
     gitMergeToMain: stub, gitPushToRemote: stub, gitTestsRun: stub,
     gitDiffSnapshot: stub, fsBrowse: stub, readFile: stub, generateThreadTitle: stub,
     uploadBegin: stub, uploadChunk: stub, uploadCommit: stub, uploadAbort: stub,
+    setProjectsRoot: stub,
     ...over,
   } as RpcDeps;
 }
@@ -169,5 +170,19 @@ describe("dispatchHostRpc upload arms", () => {
       deps({ uploadCommit }),
     );
     expect(resp).toMatchObject({ ok: false, method: "upload-commit", error: { code: "upload-not-found" } });
+  });
+
+  it("routes set-projects-root", async () => {
+    const setProjectsRoot = vi.fn().mockResolvedValue({ projectsRoot: "/Users/x/cogni", locked: false });
+    const resp = await dispatchHostRpc(
+      { method: "set-projects-root", params: { projectsRoot: "~/cogni" } },
+      deps({ setProjectsRoot }),
+    );
+    expect(setProjectsRoot).toHaveBeenCalled();
+    expect(resp).toEqual({
+      ok: true,
+      method: "set-projects-root",
+      result: { projectsRoot: "/Users/x/cogni", locked: false },
+    });
   });
 });

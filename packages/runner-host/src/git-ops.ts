@@ -24,7 +24,7 @@
  * into `{ ok: false, error: { code, message } }` frames.
  */
 
-import { access, stat } from "node:fs/promises";
+import { access, mkdir, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { execa } from "execa";
 import { resolveUserPath } from "./paths.js";
@@ -116,8 +116,10 @@ export async function gitInitIfMissing(
   if (await pathExists(`${repoPath}${sep}.git`)) {
     return { initialized: false };
   }
-  // Confirm the parent directory exists; if not, we let `git init` fail
-  // with its own error (more helpful than a manufactured one).
+  // Auto-created default folders may sit under a not-yet-existing root
+  // (e.g. ~/cogni/<name> when ~/cogni is new). git init creates the leaf but
+  // not deep parents reliably across versions — mkdir -p first.
+  await mkdir(repoPath, { recursive: true });
   await execa("git", ["init", "-b", "main", repoPath], { reject: true });
   // Make an empty initial commit so `worktree add -b` has a valid HEAD.
   // `--allow-empty` avoids requiring a tracked file.
