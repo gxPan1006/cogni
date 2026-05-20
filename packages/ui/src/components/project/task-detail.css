@@ -287,3 +287,53 @@
   .td__head { padding: 14px 16px 16px; }
   .td__scroll { padding: 16px 16px 24px; }
 }
+
+/* ── Comment feed (主页面) ──────────────────────
+   A wrapping card grid below the Actions row. Worker handoff notes + inert
+   human comments + a trailing dashed "+" card that opens an inline composer. */
+.tc { margin-top: 16px; }
+.tc__head {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+.tc__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px;
+}
+.tc__card {
+  border-radius: var(--r-3);
+  border: 1px solid var(--line-soft);
+  background: var(--bg-sunk);
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+  min-height: 110px;
+  text-align: left;
+}
+.tc__card--worker { background: var(--accent-soft); border-color: var(--accent-soft); }
+.tc__card-head { display: flex; align-items: center; gap: 6px; }
+.tc__avatar { font-size: 14px; display: inline-flex; color: var(--muted); }
+.tc__card--worker .tc__avatar { color: var(--accent-ink); }
+.tc__chip { font-size: 11px; font-weight: 600; }
+.tc__badge {
+  font-size: 10px; color: var(--muted);
+  border: 1px solid var(--line); border-radius: var(--r-full);
+  padding: 1px 6px;
+}
+.tc__del {
+  margin-left: auto; background: none; border: none; cursor: pointer;
+  opacity: 0.5; color: var(--muted); display: inline-flex; font-size: 13px;
+  padding: 0;
+}
+.tc__del:hover { opacity: 1; color: var(--bad); }
+.tc__card-body { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.tc__time { font-size: 11px; color: var(--muted); margin-top: auto; }
+.tc__card--add {
+  cursor: pointer; align-items: center; justify-content: center;
+  border-style: dashed; color: var(--muted); gap: 4px;
+}
+.tc__card--add:hover { border-color: var(--accent); color: var(--accent); }
+.tc__add-plus { font-size: 22px; line-height: 1; display: inline-flex; }
+.tc__add-hint { font-size: 12px; }
+.tc__card--compose { min-height: auto; grid-column: 1 / -1; padding: 8px; }
