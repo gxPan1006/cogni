@@ -227,6 +227,58 @@ export const readFileResponseSchema = z.object({
 });
 export type ReadFileResponse = z.infer<typeof readFileResponseSchema>;
 
+// ─── File upload (agent-context attachments) ────────────────────────────────
+// Inbound counterpart to read-file. The cloud streams an HTTP upload to the
+// host in base64 chunks; the host stages the file under
+// ~/.cogni/uploads/<threadId>/ and the runner-manager copies this turn's files
+// into <cwd>/.cogni-uploads/ at dispatch. 50MB cap enforced cumulatively host-side.
+
+export const uploadScopeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("thread"), threadId: z.string() }),
+]);
+export type UploadScope = z.infer<typeof uploadScopeSchema>;
+
+export const uploadBeginRequestSchema = z.object({
+  scope: uploadScopeSchema,
+  /** Original client filename; host reduces to basename + de-dupes. */
+  fileName: z.string(),
+  /** Client-declared size for a fast pre-check; host enforces the real cap on bytes written. */
+  declaredSize: z.number().int().min(0),
+});
+export type UploadBeginRequest = z.infer<typeof uploadBeginRequestSchema>;
+
+export const uploadBeginResponseSchema = z.object({ uploadId: z.string() });
+export type UploadBeginResponse = z.infer<typeof uploadBeginResponseSchema>;
+
+export const uploadChunkRequestSchema = z.object({
+  uploadId: z.string(),
+  seq: z.number().int().min(0),
+  /** One chunk of the file, base64-encoded (binary-safe over the JSON WS frame). */
+  dataBase64: z.string(),
+});
+export type UploadChunkRequest = z.infer<typeof uploadChunkRequestSchema>;
+
+export const uploadChunkResponseSchema = z.object({ received: z.number().int().min(0) });
+export type UploadChunkResponse = z.infer<typeof uploadChunkResponseSchema>;
+
+export const uploadCommitRequestSchema = z.object({ uploadId: z.string() });
+export type UploadCommitRequest = z.infer<typeof uploadCommitRequestSchema>;
+
+export const uploadCommitResponseSchema = z.object({
+  /** Path relative to the agent cwd, e.g. ".cogni-uploads/foo.pdf". */
+  relPath: z.string(),
+  /** Final (possibly de-duped) basename, e.g. "foo-1.pdf". */
+  name: z.string(),
+  size: z.number().int().min(0),
+});
+export type UploadCommitResponse = z.infer<typeof uploadCommitResponseSchema>;
+
+export const uploadAbortRequestSchema = z.object({ uploadId: z.string() });
+export type UploadAbortRequest = z.infer<typeof uploadAbortRequestSchema>;
+
+export const uploadAbortResponseSchema = z.object({ ok: z.literal(true) });
+export type UploadAbortResponse = z.infer<typeof uploadAbortResponseSchema>;
+
 // ─── Discriminated unions for typed dispatch ────────────────────────────────
 
 /**
@@ -245,6 +297,10 @@ export const hostRpcRequestSchema = z.discriminatedUnion("method", [
   z.object({ method: z.literal("fs-browse"), params: fsBrowseRequestSchema }),
   z.object({ method: z.literal("generate-thread-title"), params: generateThreadTitleRequestSchema }),
   z.object({ method: z.literal("read-file"), params: readFileRequestSchema }),
+  z.object({ method: z.literal("upload-begin"), params: uploadBeginRequestSchema }),
+  z.object({ method: z.literal("upload-chunk"), params: uploadChunkRequestSchema }),
+  z.object({ method: z.literal("upload-commit"), params: uploadCommitRequestSchema }),
+  z.object({ method: z.literal("upload-abort"), params: uploadAbortRequestSchema }),
 ]);
 export type HostRpcRequest = z.infer<typeof hostRpcRequestSchema>;
 
@@ -259,6 +315,10 @@ export const hostRpcMethodSchema = z.enum([
   "fs-browse",
   "generate-thread-title",
   "read-file",
+  "upload-begin",
+  "upload-chunk",
+  "upload-commit",
+  "upload-abort",
 ]);
 
 /**
@@ -283,6 +343,10 @@ export const hostRpcResponseSchema = z.union([
   z.object({ ok: z.literal(true), method: z.literal("fs-browse"), result: fsBrowseResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("generate-thread-title"), result: generateThreadTitleResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("read-file"), result: readFileResponseSchema }),
+  z.object({ ok: z.literal(true), method: z.literal("upload-begin"), result: uploadBeginResponseSchema }),
+  z.object({ ok: z.literal(true), method: z.literal("upload-chunk"), result: uploadChunkResponseSchema }),
+  z.object({ ok: z.literal(true), method: z.literal("upload-commit"), result: uploadCommitResponseSchema }),
+  z.object({ ok: z.literal(true), method: z.literal("upload-abort"), result: uploadAbortResponseSchema }),
   z.object({
     ok: z.literal(false),
     method: hostRpcMethodSchema,
@@ -309,5 +373,9 @@ export const HOST_RPC_METHODS = [
   "fs-browse",
   "generate-thread-title",
   "read-file",
+  "upload-begin",
+  "upload-chunk",
+  "upload-commit",
+  "upload-abort",
 ] as const;
 export type HostRpcMethod = (typeof HOST_RPC_METHODS)[number];

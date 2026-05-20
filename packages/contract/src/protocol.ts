@@ -11,6 +11,13 @@ import { hostRpcRequestSchema, hostRpcResponseSchema } from "./host-protocol.js"
 export const sessionStatusSchema = z.enum(["running", "completed", "failed"]);
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 
+/** Lightweight attachment metadata carried on send/dispatch/message frames. */
+export const attachmentSchema = z.object({
+  name: z.string(),
+  size: z.number().int().min(0),
+});
+export type Attachment = z.infer<typeof attachmentSchema>;
+
 // ---- Runner Host → Cloud ----
 export const hostToCloudSchema = z.discriminatedUnion("t", [
   z.object({
@@ -65,6 +72,13 @@ export const cloudToHostSchema = z.discriminatedUnion("t", [
      * every orchestrator turn so resumed sessions keep the framing.
      */
     appendSystemPrompt: z.string().optional(),
+    /**
+     * Files the user attached this turn. The host copies them from its staging
+     * dir into <cwd>/.cogni-uploads/ before running, and the cloud has already
+     * prepended a preamble to `message` pointing at them. Optional/absent for
+     * turns with no attachments.
+     */
+    attachments: z.array(attachmentSchema).optional(),
   }),
   // SP-3 host RPC request envelope. The cloud assigns `rpcId`; the host
   // echoes it on the `host-rpc-response` frame. `request` is the typed
@@ -81,7 +95,7 @@ export type CloudToHost = z.infer<typeof cloudToHostSchema>;
 export const clientToCloudSchema = z.discriminatedUnion("t", [
   // SP-1 legacy (kept for compatibility while old clients are around)
   z.object({ t: z.literal("subscribe"), threadId: z.string() }),
-  z.object({ t: z.literal("send"), threadId: z.string(), text: z.string() }),
+  z.object({ t: z.literal("send"), threadId: z.string(), text: z.string(), attachments: z.array(attachmentSchema).optional() }),
   // SP-2
   z.object({ t: z.literal("subscribe-list") }),
   z.object({ t: z.literal("subscribe-thread"), threadId: z.string(), lastSeq: z.number().optional() }),
@@ -114,6 +128,7 @@ export const cloudToClientSchema = z.discriminatedUnion("t", [
     role: z.enum(["user", "assistant", "system"]),
     content: z.string(),
     createdAt: z.string(),
+    attachments: z.array(attachmentSchema).optional(),
   }),
   z.object({ t: z.literal("host-status"), online: z.boolean() }),
   z.object({ t: z.literal("error"), message: z.string() }),
