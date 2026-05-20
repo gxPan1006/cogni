@@ -13,6 +13,7 @@ import {
 import { listEventsSince, getLatestSessionForThread } from "../db/sessions.js";
 import { events as eventsTable } from "../db/schema.js";
 import { getAuthSession, touchAuthSession } from "../db/auth-sessions.js";
+import { findHostByToken } from "../db/hosts.js";
 import { getProject, getTask } from "../db/projects.js";
 import { artifactFileResponse } from "./artifact-file.js";
 import type { ServerDeps } from "../server.js";
@@ -72,6 +73,19 @@ export function registerClientRoutes(
   app.use("/api/*", async (c, next) => {
     if (c.req.path === "/api/ws") return next();
     const auth = c.req.header("Authorization");
+    // SP-4 Host-token path: a registered runner host acts as its owning user.
+    // The cogni MCP server (running on the host) sends its registrationToken so
+    // orchestrator tool-calls can hit the same REST surface as the desktop app.
+    if (auth?.startsWith("Host ")) {
+      const host = await findHostByToken(deps.db, auth.slice(5));
+      if (!host) return c.json({ error: "unauthorized" }, 401);
+      c.set("claims", {
+        userId: host.userId,
+        tenantId: host.tenantId,
+        sessionId: `host:${host.id}`,
+      });
+      return next();
+    }
     const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
     const claims = token ? await deps.auth.verifyToken(token) : null;
     if (!claims) return c.json({ error: "unauthorized" }, 401);
