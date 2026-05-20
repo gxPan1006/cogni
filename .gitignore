@@ -13,7 +13,9 @@ build/
 !apps/desktop/.env.production
 !apps/web/.env.production
 .worktrees/
-.claude/
+# Ignore .claude/ local state, but track shared project slash-commands
+.claude/*
+!.claude/commands/
 .superpowers/
 *.tsbuildinfo
 # Per-commit work logs kept locally only (per ~/.claude/CLAUDE.md convention)
