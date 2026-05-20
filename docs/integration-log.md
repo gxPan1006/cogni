@@ -4,6 +4,42 @@ Audit trail for /fanout batches in cogni. Each batch records what was paralleliz
 
 ---
 
+## Task comment cards + kanban free drag — 2026-05-21 (foundation-first, then 2-agent fanout)
+
+**Goal**: 主页面 gains a comment-card feed — worker leaves a structured handoff note at each transition, human drops inert supplementary notes that inject into the runner only at next dispatch (`consumed_by_run_id`); kanban gains free drag of any task card to any column (`moveTaskToState`). Spec: `docs/superpowers/specs/2026-05-21-task-comment-cards-design.md`. Plan: `docs/superpowers/plans/2026-05-21-task-comment-cards.md` (20 tasks).
+
+**Structure**: not pure fanout — a layered pipeline (contract → db → domain → routes; contract → ui) where all cloud-domain work concentrates in `index.ts`/`orchestrator.ts`/`routes/projects.ts`. Honest decomposition maxed at 2 clean tracks after freezing the foundation. So foundation (contract `TaskComment` + `task-comment` frame, `task_comments` table + db layer = Tasks 1-4) landed serially first, then 2 disjoint tracks fanned out.
+
+| Phase | Mode | Work | Commit |
+|---|---|---|---|
+| Foundation (me) | serial | spec + plan docs | `5cc0f68` / `aba618a` |
+| Foundation (me) | serial | Tasks 1-4: contract type + WS frame + `task_comments` table + db layer (48 tests) | `3d86e41` |
+| CLOUD | fanout | Tasks 5-13: comment domain, worker-note capture, inject-at-dispatch, addUserComment, `moveTaskToState`, preamble, REST routes (77 project-domain tests) | `98c21d4` / `88de515` |
+| UI | fanout | Tasks 14-19: api + ws routing, `useTaskComments`, `TaskComments` card grid, board free DnD | `ecc0864` |
+
+Merges: `9da8622` (CLOUD), `1c4b798` (UI) — `--no-ff` into `feat/task-comment-cards`. Integration `f32667a` (Shell `onMoveTask` wiring).
+
+**Sovereignty**: CLOUD=`packages/cloud/src/domains/project/**` + `routes/projects.ts`, UI=`packages/ui/**`. Both scope-clean at the gate (no contract/db/lockfile edits, nothing outside their dir). Zero merge conflicts (disjoint files).
+
+**Post-merge full sweep**: `pnpm build` clean · `pnpm typecheck` clean (incl. web + desktop) · `pnpm test` **612 pass / 0 fail (67 files)**. `pnpm lint` fails repo-wide (pre-existing: ESLint v9 with no `eslint.config.js`) — unrelated to this batch.
+
+**Fanout效果**:
+- 2 agents, ~+1177 lines across 15 files (CLOUD +857/-9, UI +320/-6).
+- Agent wallclock: CLOUD 468s, UI 298s (parallel → ~468s wall).
+- Integration gate (2 scope checks + batch merge + Shell wiring + full sweep): ~8 min.
+- Conflicts / rejects: none.
+
+**踩坑 / 决策**:
+- Why only 2 tracks (below the 3-6 comfort zone): the feature is a layered pipeline and the cloud half is one cohesive `index.ts`. Forcing a 3rd track (e.g. splitting UI transport from components) would have created a cross-track import dependency that breaks each agent's self-verify. 2 was the honest ceiling.
+- CLOUD self-corrected a plan bug: `running → queued` is not in `LEGAL_TRANSITIONS` (would throw `IllegalTransition`); per design §七 "active states through cancel→queue" it composed `cancelTask` → `retryTask` instead. Sound.
+- UI corrected two plan placeholders: `api.ts` has no `get/post/del/patch` helpers (uses `this.request(url,{...})`); CSS tokens are `--bg-sunk`/`--line-soft`/`--accent-soft`/`--r-3` not the plan's `--surface`/`--border`. Both verified against real source.
+- UI correctly stopped at its sovereignty edge: `onMoveTask` is threaded through the board but the two Shell call sites (`apps/web/src/App.tsx`, `apps/desktop/src/Shell.tsx`) are outside `packages/ui` — left as an integration-lead handoff. Wired in `f32667a`. Until then, drag was a guarded no-op (no regression).
+- **Not deployed**: sits on `feat/task-comment-cards` (not merged to main, not pushed). Needs the Neon migration `drizzle-kit push` (adds `task_comments`) before the cloud serves it, and a desktop rebuild for the app. UI visual checks (card grid render, worker card, add/delete, live WS, drag-to-requeue) are unverified — no Computer Use; listed for manual `/verify` or `/ship`.
+
+**下一轮候选**: deploy (migration + cloud restart + desktop rebuild via `/ship`); two-way "discussion" was explicitly deferred — comments are one-directional context, not a live runner channel.
+
+---
+
 ## Default project folder + configurable host projects-root — 2026-05-20 (contract-first, then 3-agent fanout)
 
 **Goal**: new-project flow pre-fills the repo path from a configurable per-host "projects root" (default `~/cogni`), and the root is editable in Settings. Spec: `docs/superpowers/specs/2026-05-20-default-project-folder-design.md`. Plan: `docs/superpowers/plans/2026-05-20-default-project-folder.md` (12 tasks). Triggered by a stuck-`queued` task whose `repoPath="~/code/cc-view"` never expanded `~` on the host.
