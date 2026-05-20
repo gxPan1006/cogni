@@ -218,6 +218,57 @@ describe("ChatDomain (SP-2 state machine)", () => {
     await close();
   });
 
+  it("prepends an attachment preamble and forwards attachments on dispatch", async () => {
+    const { db, close } = await makeTestDb();
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
+    const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
+    const reg = await createHost(db, { userId: u.id, tenantId: u.tenantId, name: "Mac" });
+    const hub = new ClientHub();
+    const clientSend = vi.fn();
+    hub.register({ clientId: "c1", userId: u.id, send: clientSend });
+    hub.subscribe("c1", thread.id);
+    const router = new HostRouter();
+    const hostSend = vi.fn();
+    router.register({ hostId: reg.hostId, userId: u.id, send: hostSend });
+    const chat = new ChatDomain(db, router, hub);
+
+    await chat.handleClientSend({
+      userId: u.id, threadId: thread.id, content: "summarize this", sourceClientId: "c1",
+      attachments: [{ name: "report.pdf", size: 100 }],
+    });
+
+    const dispatch = hostSend.mock.calls.map((c) => c[0]).find((m) => m.t === "dispatch");
+    expect(dispatch.attachments).toEqual([{ name: "report.pdf", size: 100 }]);
+    expect(dispatch.message).toContain(".cogni-uploads/report.pdf");
+    expect(dispatch.message).toContain("summarize this");
+    await close();
+  });
+
+  it("persists attachments on the user message and broadcasts them", async () => {
+    const { db, close } = await makeTestDb();
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
+    const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
+    const reg = await createHost(db, { userId: u.id, tenantId: u.tenantId, name: "Mac" });
+    const hub = new ClientHub();
+    const clientSend = vi.fn();
+    hub.register({ clientId: "c1", userId: u.id, send: clientSend });
+    hub.subscribe("c1", thread.id);
+    const router = new HostRouter();
+    router.register({ hostId: reg.hostId, userId: u.id, send: vi.fn() });
+    const chat = new ChatDomain(db, router, hub);
+
+    await chat.handleClientSend({
+      userId: u.id, threadId: thread.id, content: "see file", sourceClientId: "c1",
+      attachments: [{ name: "a.png", size: 10 }],
+    });
+
+    const msgFrame = clientSend.mock.calls
+      .map((c) => c[0])
+      .find((m) => m.t === "message" && m.role === "user");
+    expect(msgFrame.attachments).toEqual([{ name: "a.png", size: 10 }]);
+    await close();
+  });
+
   it("handleSessionUpdate persists the session status", async () => {
     const { db, close } = await makeTestDb();
     const u = await findOrCreateUserByEmail(db, "a@x.com");

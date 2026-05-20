@@ -19,10 +19,13 @@ interface PendingFallback {
   userId: string;
   threadId: string;
   content: string;
+  attachments?: Attachment[];
   expiresAt: number;
 }
 
 const PENDING_TTL_MS = 10 * 60 * 1000;
+
+type Attachment = { name: string; size: number };
 
 /**
  * Render an `AskUserQuestion` tool-call's `input.questions` payload into a
@@ -45,6 +48,17 @@ function formatAskUserQuestion(input: unknown): string {
     }
   }
   return "Runner needs your input to continue.";
+}
+
+/**
+ * Prepend a short note pointing the agent at the files the user attached this
+ * turn. They are materialized into the runner cwd under .cogni-uploads/ before
+ * the turn runs, so a relative path is all the agent needs.
+ */
+function withAttachmentPreamble(content: string, attachments?: { name: string }[]): string {
+  if (!attachments || attachments.length === 0) return content;
+  const list = attachments.map((a) => `- ./.cogni-uploads/${a.name}`).join("\n");
+  return `[用户上传了以下文件，位于当前工作目录的 ./.cogni-uploads/ 下：\n${list}]\n\n${content}`;
 }
 
 /**
@@ -87,8 +101,9 @@ export class ChatDomain {
     threadId: string;
     content: string;
     sourceClientId: string;
+    attachments?: Attachment[];
   }): Promise<void> {
-    const { userId, threadId, content, sourceClientId } = input;
+    const { userId, threadId, content, sourceClientId, attachments } = input;
     const pendingMessageId = randomUUID();
 
     const latest = await getLatestSessionForThread(this.db, threadId);
@@ -104,7 +119,7 @@ export class ChatDomain {
     if (preferredHostId === null) {
       const chosen = onlineHosts[0];
       if (chosen) {
-        await this.persistAndDispatch({ userId, threadId, content, hostId: chosen.hostId });
+        await this.persistAndDispatch({ userId, threadId, content, hostId: chosen.hostId, attachments });
       }
       return;
     }
@@ -112,7 +127,7 @@ export class ChatDomain {
     // Preferred is online → reuse / new session on it.
     const preferredOnline = onlineHosts.find((h) => h.hostId === preferredHostId);
     if (preferredOnline) {
-      await this.persistAndDispatch({ userId, threadId, content, hostId: preferredOnline.hostId });
+      await this.persistAndDispatch({ userId, threadId, content, hostId: preferredOnline.hostId, attachments });
       return;
     }
 
@@ -128,7 +143,7 @@ export class ChatDomain {
     });
     this.sweepPendings();
     this.pendingFallbacks.set(pendingMessageId, {
-      userId, threadId, content, expiresAt: Date.now() + PENDING_TTL_MS,
+      userId, threadId, content, attachments, expiresAt: Date.now() + PENDING_TTL_MS,
     });
   }
 
@@ -164,7 +179,7 @@ export class ChatDomain {
     }
     await this.persistAndDispatch({
       userId: input.userId, threadId: pending.threadId, content: pending.content,
-      hostId: input.targetHostId,
+      hostId: input.targetHostId, attachments: pending.attachments,
     });
   }
 
@@ -227,15 +242,16 @@ export class ChatDomain {
   // --- private ---
 
   private async persistAndDispatch(p: {
-    userId: string; threadId: string; content: string; hostId: string;
+    userId: string; threadId: string; content: string; hostId: string; attachments?: Attachment[];
   }): Promise<void> {
     const userMsg = await appendMessage(this.db, {
-      threadId: p.threadId, role: "user", content: p.content,
+      threadId: p.threadId, role: "user", content: p.content, attachments: p.attachments,
     });
     await touchThread(this.db, p.threadId);
     this.clients.broadcast(p.threadId, {
       t: "message", threadId: p.threadId, messageId: userMsg.id, role: "user",
       content: userMsg.content, createdAt: userMsg.createdAt,
+      ...(p.attachments && p.attachments.length > 0 ? { attachments: p.attachments } : {}),
     });
 
     // Reuse the same-host session across turns so Claude Code can --resume
@@ -265,7 +281,8 @@ export class ChatDomain {
         threadId: p.threadId,
         adapter: ADAPTER,
         runnerSessionId: session.runnerSessionId,
-        message: p.content,
+        message: withAttachmentPreamble(p.content, p.attachments),
+        ...(p.attachments && p.attachments.length > 0 ? { attachments: p.attachments } : {}),
       });
     } catch {
       await setRunnerSessionStatus(this.db, session.id, "failed");

@@ -292,6 +292,7 @@ export function registerClientRoutes(
                     threadId: msg.threadId,
                     content: msg.text,
                     sourceClientId: clientId,
+                    attachments: msg.attachments,
                   });
                 }
               }
