@@ -1,6 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MessageView, RunnerEvent, CloudToClient } from "@cogni/contract";
 import type { ApiClient } from "../transport/api.js";
+import { buildTimeline, isAwaitingProgress } from "../components/chat-timeline.js";
+
+/**
+ * How long a turn may sit with no visible progress (no new frame at all) before
+ * we declare it stalled and surface a failure + retry affordance instead of an
+ * infinite "• • •". Picked generously: a healthy first frame lands within a few
+ * seconds, so a full minute of total silence is unambiguous trouble — while a
+ * running tool (a long build) is excluded from the timer entirely
+ * (`isAwaitingProgress`), so this never false-flags a slow-but-healthy command.
+ */
+const STALL_TIMEOUT_MS = 60_000;
 
 type PendingFallback = {
   pendingMessageId: string;
@@ -50,6 +61,14 @@ export function useThreadStream(api: ApiClient, threadId: string) {
   const [connected, setConnected] = useState(() => api.wsClient.isConnected());
   const [pendingFallback, setPendingFallback] = useState<PendingFallback | null>(null);
   const [pendingNoHost, setPendingNoHost] = useState<PendingNoHost | null>(null);
+  // A turn that's been waiting past STALL_TIMEOUT_MS with no frame — the
+  // "reply never came back" state. Drives the failure card + retry button so a
+  // lost dispatch doesn't spin "• • •" forever.
+  const [stalled, setStalled] = useState(false);
+  // Bumped by `retry()` to force the subscription effect to tear down and
+  // re-run — a fresh getThread + re-subscribe that replays anything the cloud
+  // has past our lastSeq (recovers frames dropped by a flaky connection).
+  const [reloadNonce, setReloadNonce] = useState(0);
   // Survives subscribe/unsubscribe and (re)connects for this hook instance.
   // Reset to 0 only when the threadId changes.
   const lastSeqRef = useRef<number>(0);
@@ -59,6 +78,27 @@ export function useThreadStream(api: ApiClient, threadId: string) {
   // time as the replay frames arrive — the "loading flash" on session switch.
   const caughtUpRef = useRef(false);
   const replayBufferRef = useRef<RunnerEvent[]>([]);
+  const threadIdRef = useRef<string | null>(null);
+
+  // Reset the thread-scoped display state SYNCHRONOUSLY when threadId changes —
+  // during render, before the first paint. React's documented "adjust state on
+  // prop change" pattern (the conditional setState bails out and re-renders
+  // immediately with the new values). If we deferred this to the subscription
+  // effect (which runs *after* paint), the new thread's first frame would show
+  // the previous thread's state — or, on a cold open, the "empty conversation"
+  // placeholder — until the effect caught up. That was the load flash.
+  if (threadIdRef.current !== threadId) {
+    threadIdRef.current = threadId;
+    const seededMsgs = api.cache.get<MessageView[]>(`thread:${threadId}`) ?? [];
+    const seededEv = api.cache.get<{ events: RunnerEvent[]; lastSeq: number }>(`events:${threadId}`);
+    setMessages(seededMsgs);
+    setEvents(seededEv?.events ?? []);
+    // Show the loading skeleton only when there's no cached snapshot to paint.
+    setLoading(seededMsgs.length === 0 && (seededEv?.events.length ?? 0) === 0);
+    lastSeqRef.current = seededEv?.lastSeq ?? 0;
+    caughtUpRef.current = false;
+    replayBufferRef.current = [];
+  }
 
   // Bind `connected` to the shared connection — independent of threadId so
   // switching threads doesn't flap the pill.
@@ -68,31 +108,15 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     return ws.onConnectionChange(setConnected);
   }, [api]);
 
-  // Subscription lifecycle — owns thread-scoped state.
+  // Subscription lifecycle — fetches history + opens the live subscription.
+  // Display state (messages/events/loading/lastSeqRef) is seeded synchronously
+  // in the during-render block above; this effect only drives the async work.
   useEffect(() => {
     setPendingFallback(null);
     setPendingNoHost(null);
-    caughtUpRef.current = false;
-    replayBufferRef.current = [];
 
-    // SWR seed: render the last-seen messages AND event stream for THIS thread
-    // synchronously, so switching back to an already-seen thread paints the full
-    // conversation — prose *and* tool-call pills — in one frame, with no
-    // text-first-then-pills flash. When there's no cache, clear to [] so we
-    // never leave the previous thread's view on screen during the round-trip.
-    // lastSeqRef is seeded from the cached tail so the subscribe only replays
-    // the events we haven't seen.
     const cacheKey = `thread:${threadId}`;
     const evCacheKey = `events:${threadId}`;
-    const cached = api.cache.get<MessageView[]>(cacheKey);
-    const cachedEv = api.cache.get<{ events: RunnerEvent[]; lastSeq: number }>(evCacheKey);
-    setMessages(cached ?? []);
-    setEvents(cachedEv?.events ?? []);
-    lastSeqRef.current = cachedEv?.lastSeq ?? 0;
-    // Only show the loading state when we have nothing cached to paint. With a
-    // cached snapshot we render it instantly and revalidate in the background.
-    const hasSeed = (cached?.length ?? 0) > 0 || (cachedEv?.events.length ?? 0) > 0;
-    setLoading(!hasSeed);
 
     // Guards a stale getThread/catchup resolving after the user already moved
     // on — without this the late promise would clobber the new thread's view.
@@ -123,8 +147,7 @@ export function useThreadStream(api: ApiClient, threadId: string) {
       .then((d) => commitMessages(d.messages ?? []))
       .catch((e) => {
         console.error("failed to load thread history", e);
-        // Keep whatever we seeded from cache rather than blanking on error.
-        if (active && !cached) setMessages([]);
+        // Keep whatever was seeded from cache during render rather than blanking.
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -215,9 +238,36 @@ export function useThreadStream(api: ApiClient, threadId: string) {
       active = false;
       unsubscribe();
     };
-  }, [api, threadId]);
+  }, [api, threadId, reloadNonce]);
+
+  // Stall detection. Arm a one-shot timer whenever the thread is waiting on the
+  // runner with no visible progress (see `isAwaitingProgress`). Any new
+  // message/event re-runs this effect → clears the old timer and `stalled`, so
+  // each frame "resets the clock"; only true silence past STALL_TIMEOUT_MS
+  // flips `stalled`. Skipped while the socket is down or the host is offline —
+  // those have their own composer pill, and reconnect will replay what we
+  // missed.
+  const awaitingProgress = useMemo(
+    () => isAwaitingProgress(buildTimeline(messages, events)),
+    [messages, events],
+  );
+  useEffect(() => {
+    setStalled(false);
+    if (!awaitingProgress || !connected || !hostOnline) return;
+    const id = setTimeout(() => setStalled(true), STALL_TIMEOUT_MS);
+    return () => clearTimeout(id);
+  }, [awaitingProgress, connected, hostOnline, reloadNonce]);
 
   const send = (text: string) => api.wsClient.send(threadId, text);
+
+  // Re-sync this thread from the cloud: refetch history and re-subscribe so any
+  // events the cloud holds past our lastSeq replay. Safe and idempotent — it
+  // never re-sends the prompt (which, without a turn-correlation id, would
+  // duplicate the user message), so it can't corrupt the timeline.
+  const retry = () => {
+    setStalled(false);
+    setReloadNonce((n) => n + 1);
+  };
 
   const resolveFallback = (action: "switch" | "cancel", targetHostId?: string) => {
     const id = pendingFallback?.pendingMessageId;
@@ -235,6 +285,8 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     hostOnline,
     connected,
     send,
+    stalled,
+    retry,
     pendingFallback,
     pendingNoHost,
     resolveFallback,
