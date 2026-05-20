@@ -1,6 +1,35 @@
 # SP-3 TBD — 真机 dogfood 留下的后续打磨
 
-2026-05-19 第一次完整跑通"创建项目 → 新任务 → orchestrator dispatch → claude 在 worktree 干活 → reviewing → Accept → merge to main"全链路后,记录的待打磨点。**当前主链路可用**(`main` @ `96432e5` 部署在 prod),这里全是边缘场景 / 体验提升 / SP-3+1 候选,不阻塞用。
+2026-05-19 第一次完整跑通"创建项目 → 新任务 → orchestrator dispatch → claude 在 worktree 干活 → reviewing → Accept → merge to main"全链路后,记录的待打磨点。**当前主链路可用**,这里全是边缘场景 / 体验提升 / SP-3+1 候选,不阻塞用。
+
+---
+
+## 进展更新(2026-05-20)
+
+下面原始清单的状态:
+
+| 项 | 状态 | commit |
+|---|---|---|
+| #1 / #1B systemPrompt + FILE_COMMIT_RULES 注入 dispatch | ✅ 做了 | `f9b4577` |
+| #2 AskUserQuestion → needs-input | ⛔️ 用户撤销(产品决策:task 自己做合理假设继续,不停下来弹澄清) | `a4545aa` |
+| #3a merge/reject/cancel 后删 task branch | ✅ 做了 | `2e0adaa` |
+| #3b push 到 remote 开关 | ✅ 做了(5 层 + per-project checkbox) | `333e5a1` |
+| #4 launchd 持久化 runner-host | ✅ 做了(KeepAlive 自拉,真机验证) | `3ffd88c` |
+| #6 清废弃 host | ✅ 做了(DB soft-remove) | — |
+| #5 mergePolicy 改完立即 drain | ⏳ 未做(优先级低,5s 可接受) | — |
+| ProjectDomain 输入类型升 contract 层 | ⏳ 未做(SP-3+1) | — |
+
+**真机闭环达成**:claude 真写文件+commit(补了 `--dangerously-skip-permissions`,见 commit `37f62a7`,claude 之前落进 plan-mode)、Accept 实时移列、push 到 remote、branch 清理,全部生产真机端到端验证过。
+
+### 2026-05-20 新发现的待办
+
+**N1. graceful shutdown hang(部署痛点)**
+`packages/cloud/src/main.ts` 的 `shutdown()` 调 `server.close(cb)`,但 `server.close` 要等所有连接(含常连的 host WS)关闭才 fire callback → process 不退 → `systemctl restart` 时卡 `deactivating` 直到 systemd 超时 SIGKILL(每次部署多等几十秒,日志难看)。
+修法:shutdown 时先主动 `ws.close()` 所有 host/client WS(或 `injectWebSocket` 的 server 加 `closeAllConnections()`),再 `server.close`;或给 `server.close` 包一个 3s 超时强退 `process.exit(0)`。
+
+**N2. 前端实时同步(已修,留教训)**
+2026-05-20 修了 3 个前端 bug(详见 integration-log):host count 0/1 不更新(ws-client 没把 host-status/host-meta 发给 listSubs,`1a60680`)、空 projectId 订阅刷屏(`1a60680`)、**subscribe-project/task 参数顺序反了**(Track C 本地 interface `(projectId,clientId)` vs ClientHub 真实 `(clientId,projectId)`,被 `as` cast + `?.` 绕过 TS 检查 → 订阅静默注册到错误 key,`2f91af6`)。
+**教训(写计划/扇出时的 checklist)**:跨 track 共享接口**绝不用 `as` cast + optional chaining 桥接** —— 那等于关掉类型检查,运行时参数错位静默失败最难查。要么直接用真实类型(让 TS 强制),要么接口定义放 contract 层单一来源。
 
 ---
 
