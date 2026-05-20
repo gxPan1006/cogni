@@ -4,6 +4,7 @@ import type {
   FsBrowseResponse, GitDiffSnapshotResponse,
 } from "@cogni/contract";
 import { createWsClient, type WsClient } from "./ws-client.js";
+import { ClientCache } from "./cache.js";
 
 // ─── SP-3 input shapes for create / patch routes ──────────────────────────
 //
@@ -98,6 +99,15 @@ export interface IdentityRow {
  */
 export class ApiClient {
   constructor(private readonly cfg: ApiConfig) {}
+
+  /**
+   * Stale-while-revalidate cache shared by all data hooks on this client.
+   * Hooks seed their initial state from here (synchronous, flash-free) and
+   * write back on every fetch / WS delta. See `transport/cache.ts`.
+   */
+  readonly cache = new ClientCache();
+  /** Keys with a prefetch GET already in flight — dedupes hover spam. */
+  private readonly inflight = new Set<string>();
 
   get cloudUrl(): string { return this.cfg.cloudUrl; }
   get wsUrl(): string { return this.cfg.cloudUrl.replace(/^http/, "ws"); }
@@ -312,4 +322,40 @@ export class ApiClient {
       method: "POST", headers: this.authHeaders(),
       body: JSON.stringify({ path }),
     });
+
+  // ─── Prefetch (hover → warm the SWR cache) ────────────────────────────
+  //
+  // Fire-and-forget: called from sidebar / card `onMouseEnter`. They warm the
+  // same cache keys the hooks read on mount, so the click that follows renders
+  // instantly with zero flash. Each is a no-op if the key is already cached or
+  // a request for it is already in flight.
+
+  private dedupe(key: string, run: () => Promise<unknown>): void {
+    if (!key || this.cache.has(key) || this.inflight.has(key)) return;
+    this.inflight.add(key);
+    void run()
+      .catch(() => {})
+      .finally(() => this.inflight.delete(key));
+  }
+
+  /** Warm a thread's message history (matches useThreadStream's seed key). */
+  prefetchThread = (id: string): void =>
+    this.dedupe(`thread:${id}`, () =>
+      this.getThread(id).then((d) => this.cache.set(`thread:${id}`, d.messages ?? [])),
+    );
+
+  /** Warm a project's row + task list (matches useProjectBoard's seed keys). */
+  prefetchProject = (id: string): void =>
+    this.dedupe(`project:${id}`, () =>
+      Promise.all([this.getProject(id), this.listProjectTasks(id)]).then(([p, ts]) => {
+        this.cache.set(`project:${id}`, p);
+        this.cache.set(`project-tasks:${id}`, ts);
+      }),
+    );
+
+  /** Warm a task's detail envelope (matches useTaskDetail's seed key). */
+  prefetchTask = (id: string): void =>
+    this.dedupe(`task:${id}`, () =>
+      this.getTaskDetail(id).then((d) => this.cache.set(`task:${id}`, d)),
+    );
 }

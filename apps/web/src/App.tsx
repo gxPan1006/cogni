@@ -329,10 +329,12 @@ function WebShell({ page }: { page: Page }) {
         onNewChat={() => { void newChat(); }}
         onRenameThread={renameThread}
         onDeleteThread={deleteThread}
+        onPrefetch={api.prefetchThread}
         projects={sidebarProjects}
         activeProjectId={params.projectId ?? null}
         onSelectProject={(id) => nav(`/projects/${id}`)}
         onNewProject={() => setNewProjectOpen(true)}
+        onPrefetchProject={api.prefetchProject}
         onLogout={logout}
         onOpenSettings={() => nav("/settings")}
         hosts={hostStats}
@@ -365,6 +367,7 @@ function WebShell({ page }: { page: Page }) {
             loading={projectsHook.loading}
             onOpen={(id) => nav(`/projects/${id}`)}
             onNew={() => setNewProjectOpen(true)}
+            onPrefetch={api.prefetchProject}
           />
         )}
         {page === "project" && params.projectId && (
@@ -377,6 +380,7 @@ function WebShell({ page }: { page: Page }) {
             onNewTask={() => setNewTaskOpen(true)}
             onOpenSettings={() => nav(`/projects/${params.projectId}/settings`)}
             onOpenTask={(id) => setActiveTaskId(id)}
+            onPrefetchTask={api.prefetchTask}
           />
         )}
         {page === "project-settings" && params.projectId && (

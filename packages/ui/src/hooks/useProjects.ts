@@ -65,9 +65,14 @@ export function useProjects(api: ApiClient): UseProjectsResult {
   projectsRef.current = projects;
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    // SWR seed: show the last-known list synchronously so re-mounting the list
+    // (e.g. navigating back from a board) doesn't flash the skeleton grid.
+    const cached = api.cache.get<Project[]>("projects");
+    if (cached) setProjects(cached);
+    setLoading(!cached);
     try {
       const rows = await api.listProjects();
+      api.cache.set("projects", rows);
       setProjects(rows);
       setError(null);
     } catch (e) {
@@ -87,7 +92,9 @@ export function useProjects(api: ApiClient): UseProjectsResult {
     const unsubscribe = ws.subscribeProjects({
       onFrame: (frame: CloudToClient) => {
         if (frame.t !== "project-event") return;
-        setProjects(applyProjectEvent(projectsRef.current, frame));
+        const next = applyProjectEvent(projectsRef.current, frame);
+        api.cache.set("projects", next);
+        setProjects(next);
       },
     });
     return unsubscribe;
@@ -97,7 +104,11 @@ export function useProjects(api: ApiClient): UseProjectsResult {
     const created = await api.createProject(input);
     // Optimistically prepend so the UI advances even before the WS push lands.
     // The WS handler above de-dupes by id.
-    setProjects((prev) => (prev.some((p) => p.id === created.id) ? prev : [created, ...prev]));
+    setProjects((prev) => {
+      const next = prev.some((p) => p.id === created.id) ? prev : [created, ...prev];
+      api.cache.set("projects", next);
+      return next;
+    });
     return created;
   }, [api]);
 

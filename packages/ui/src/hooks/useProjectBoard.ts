@@ -70,12 +70,22 @@ export function useProjectBoard(api: ApiClient, projectId: string): UseProjectBo
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // SWR seed. When this project is cached, render it synchronously and skip
+    // the skeleton entirely. When it isn't, reset project to null so the
+    // skeleton shows instead of the PREVIOUS project's name/tasks lingering
+    // through the round-trip (the project→project "flash"). Tasks mirror this.
+    const cachedP = api.cache.get<Project>(`project:${projectId}`);
+    const cachedT = api.cache.get<ProjectTask[]>(`project-tasks:${projectId}`);
+    setProject(cachedP ?? null);
+    setTasks(cachedT ?? []);
+    setLoading(!cachedP);
     try {
       const [p, ts] = await Promise.all([
         api.getProject(projectId),
         api.listProjectTasks(projectId),
       ]);
+      api.cache.set(`project:${projectId}`, p);
+      api.cache.set(`project-tasks:${projectId}`, ts);
       setProject(p);
       setTasks(ts);
       setError(null);
@@ -99,7 +109,9 @@ export function useProjectBoard(api: ApiClient, projectId: string): UseProjectBo
       projectId,
       onFrame: (frame: CloudToClient) => {
         if (frame.t !== "task-event") return;
-        setTasks(applyTaskEvent(tasksRef.current, frame));
+        const next = applyTaskEvent(tasksRef.current, frame);
+        api.cache.set(`project-tasks:${projectId}`, next);
+        setTasks(next);
       },
     });
 
@@ -109,6 +121,7 @@ export function useProjectBoard(api: ApiClient, projectId: string): UseProjectBo
       onFrame: (frame: CloudToClient) => {
         if (frame.t !== "project-event") return;
         if (frame.project.id !== projectId) return;
+        api.cache.set(`project:${projectId}`, frame.project);
         setProject(frame.project);
       },
     });
@@ -121,7 +134,11 @@ export function useProjectBoard(api: ApiClient, projectId: string): UseProjectBo
 
   const createTask = useCallback(async (input: CreateTaskInput): Promise<ProjectTask> => {
     const created = await api.createProjectTask(projectId, input);
-    setTasks((prev) => (prev.some((t) => t.id === created.id) ? prev : [created, ...prev]));
+    setTasks((prev) => {
+      const next = prev.some((t) => t.id === created.id) ? prev : [created, ...prev];
+      api.cache.set(`project-tasks:${projectId}`, next);
+      return next;
+    });
     return created;
   }, [api, projectId]);
 

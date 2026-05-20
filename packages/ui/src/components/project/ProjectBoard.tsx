@@ -63,6 +63,7 @@ export function ProjectBoard({
   onNewTask,
   onOpenSettings,
   onOpenTask,
+  onPrefetchTask,
 }: {
   project: Project | null;
   tasks: ProjectTask[];
@@ -72,6 +73,8 @@ export function ProjectBoard({
   onNewTask?: () => void;
   onOpenSettings?: () => void;
   onOpenTask?: (id: string) => void;
+  /** Hover-prefetch a task's detail into the SWR cache (flash-free drawer). */
+  onPrefetchTask?: (id: string) => void;
 }) {
   const [view, setView] = useState<View>("swarm");
 
@@ -121,7 +124,18 @@ export function ProjectBoard({
         </div>
       </header>
 
-      <div className="project__body">
+      {/* Event-delegated hover prefetch: each task card/row carries a
+          `data-task-id`, so one listener here warms the drawer cache without
+          threading a callback through every view + card variant. */}
+      <div
+        className="project__body"
+        onMouseOver={(e) => {
+          if (!onPrefetchTask) return;
+          const el = (e.target as HTMLElement).closest<HTMLElement>("[data-task-id]");
+          const id = el?.dataset.taskId;
+          if (id) onPrefetchTask(id);
+        }}
+      >
         {view === "columns"  && <ColumnsView  tasks={tasks} hostMap={hostMap} onOpenTask={onOpenTask} />}
         {view === "swarm"    && <SwarmView    tasks={tasks} hostMap={hostMap} onOpenTask={onOpenTask} />}
         {view === "timeline" && <TimelineView tasks={tasks} hostMap={hostMap} onOpenTask={onOpenTask} />}
@@ -226,7 +240,7 @@ function ColumnCard({ task, hostMap, onOpen }: { task: ProjectTask; hostMap: Map
   const activity = inferActivity(task);
   const elapsed = inferElapsed(task);
   return (
-    <button className={cls} onClick={() => onOpen?.(task.id)}>
+    <button className={cls} data-task-id={task.id} onClick={() => onOpen?.(task.id)}>
       <div className="kb-card__head">
         <span className="kb-card__ref">{task.ref}</span>
         <StatePill state={task.state} />
@@ -281,7 +295,7 @@ function SwarmView({ tasks, hostMap, onOpenTask }: { tasks: ProjectTask[]; hostM
       <SwarmSection state="queued" title="排队" count={queued.length}>
         <div className="sw__list">
           {queued.map((t) => (
-            <button key={t.id} className="sw__row" onClick={() => onOpenTask?.(t.id)}>
+            <button key={t.id} className="sw__row" data-task-id={t.id} onClick={() => onOpenTask?.(t.id)}>
               <span className="kb-card__ref">{t.ref}</span>
               <span className="sw__row-title">{t.title}</span>
               <span className="sw__row-meta">等可用 runner</span>
@@ -293,7 +307,7 @@ function SwarmView({ tasks, hostMap, onOpenTask }: { tasks: ProjectTask[]; hostM
         <SwarmSection state="done" title="今日完成" count={done.length}>
           <div className="sw__list">
             {done.map((t) => (
-              <button key={t.id} className="sw__row sw__row--dim" onClick={() => onOpenTask?.(t.id)}>
+              <button key={t.id} className="sw__row sw__row--dim" data-task-id={t.id} onClick={() => onOpenTask?.(t.id)}>
                 <span className="kb-card__ref">{t.ref}</span>
                 <span className="sw__row-title">{t.title}</span>
                 <span className="sw__row-meta">{inferElapsed(t) ?? "—"}</span>
@@ -330,7 +344,7 @@ function Pod({ task, hostMap, onOpen }: { task: ProjectTask; hostMap: Map<string
   const elapsed = inferElapsed(task) ?? "—";
   const activity = inferActivity(task);
   return (
-    <button className={cls} onClick={() => onOpen?.(task.id)}>
+    <button className={cls} data-task-id={task.id} onClick={() => onOpen?.(task.id)}>
       <div className="pod__head">
         <div className="pod__host">
           <span className={"dot " + (host?.status === "online" ? "dot-online" : "dot-offline")} />
@@ -392,7 +406,7 @@ function TimelineView({ tasks, hostMap, onOpenTask }: { tasks: ProjectTask[]; ho
           const color = STATE_COLOR[t.state];
           const activity = inferActivity(t);
           return (
-            <button key={t.id} className="tl__row" onClick={() => onOpenTask?.(t.id)}>
+            <button key={t.id} className="tl__row" data-task-id={t.id} onClick={() => onOpenTask?.(t.id)}>
               <div className="tl__row-label">
                 <span className="kb-card__ref">{t.ref}</span>
                 <span className="tl__row-title">{t.title}</span>

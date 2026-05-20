@@ -48,12 +48,16 @@ export function Sidebar(props: {
   onRenameThread?: (id: string, title: string) => void;
   /** Delete a conversation. When omitted, the trash affordance is hidden. */
   onDeleteThread?: (id: string) => void;
+  /** Hover-prefetch a thread's history into the SWR cache (no-op flash on click). */
+  onPrefetch?: (id: string) => void;
 
   // project mode (SP-3)
   projects?: SidebarProject[];
   activeProjectId?: string | null;
   onSelectProject?: (id: string) => void;
   onNewProject?: () => void;
+  /** Hover-prefetch a project's board into the SWR cache. */
+  onPrefetchProject?: (id: string) => void;
 
   onLogout: () => void;
   onOpenSettings?: () => void;
@@ -119,7 +123,7 @@ export function Sidebar(props: {
       <div className="sb__body">
         {isChat
           ? <ChatLists {...props} onSelect={selectThread} />
-          : <ProjectLists {...props} onSelectProject={selectProject} />}
+          : <ProjectLists {...props} onSelectProject={selectProject} onPrefetchProject={props.onPrefetchProject} />}
       </div>
 
       {props.hosts && (
@@ -149,6 +153,7 @@ function ChatLists(props: {
   onSelect: (id: string) => void;
   onRenameThread?: (id: string, title: string) => void;
   onDeleteThread?: (id: string) => void;
+  onPrefetch?: (id: string) => void;
 }) {
   // Only one row is in rename / delete-confirm mode at a time; keeping that
   // state here (not per-row) means switching threads or modes cleanly resets
@@ -167,6 +172,7 @@ function ChatLists(props: {
       editing={editingId === t.id}
       confirmingDelete={confirmingId === t.id}
       onClick={() => props.onSelect(t.id)}
+      onPrefetch={props.onPrefetch ? () => props.onPrefetch?.(t.id) : undefined}
       onStartRename={props.onRenameThread ? () => { setConfirmingId(null); setEditingId(t.id); } : undefined}
       onCommitRename={(title) => {
         props.onRenameThread?.(t.id, title);
@@ -201,7 +207,7 @@ function ChatLists(props: {
 }
 
 function ThreadRow({
-  thread, active, editing, confirmingDelete, onClick,
+  thread, active, editing, confirmingDelete, onClick, onPrefetch,
   onStartRename, onCommitRename, onCancelRename,
   onStartDelete, onConfirmDelete, onCancelDelete,
 }: {
@@ -210,6 +216,7 @@ function ThreadRow({
   editing: boolean;
   confirmingDelete: boolean;
   onClick: () => void;
+  onPrefetch?: () => void;
   onStartRename?: () => void;
   onCommitRename: (title: string) => void;
   onCancelRename: () => void;
@@ -265,7 +272,7 @@ function ThreadRow({
 
   return (
     <div className={"sb-thread" + (active ? " is-active" : "")}>
-      <button className="sb-thread__title" onClick={onClick} title={thread.title}>
+      <button className="sb-thread__title" onClick={onClick} onMouseEnter={onPrefetch} title={thread.title}>
         {thread.title}
       </button>
       {(onStartRename || onStartDelete) && (
@@ -296,11 +303,13 @@ function ProjectLists(props: {
   projects?: SidebarProject[];
   activeProjectId?: string | null;
   onSelectProject?: (id: string) => void;
+  onPrefetchProject?: (id: string) => void;
 }) {
   const list = props.projects ?? [];
   const pinned   = list.filter((p) => p.pinned && !p.archived);
   const active   = list.filter((p) => !p.pinned && !p.archived);
   const archived = list.filter((p) => p.archived);
+  const onPrefetch = (id: string) => props.onPrefetchProject?.(id);
 
   return (
     <>
@@ -309,7 +318,7 @@ function ProjectLists(props: {
           <div className="sb__section-head">PINNED</div>
           <div className="sb__section-body">
             {pinned.map((p) => (
-              <ProjectButton key={p.id} project={p} active={p.id === props.activeProjectId} onClick={() => props.onSelectProject?.(p.id)} />
+              <ProjectButton key={p.id} project={p} active={p.id === props.activeProjectId} onClick={() => props.onSelectProject?.(p.id)} onPrefetch={() => onPrefetch(p.id)} />
             ))}
           </div>
         </section>
@@ -320,7 +329,7 @@ function ProjectLists(props: {
         <div className="sb__section-body">
           {active.length > 0
             ? active.map((p) => (
-                <ProjectButton key={p.id} project={p} active={p.id === props.activeProjectId} onClick={() => props.onSelectProject?.(p.id)} />
+                <ProjectButton key={p.id} project={p} active={p.id === props.activeProjectId} onClick={() => props.onSelectProject?.(p.id)} onPrefetch={() => onPrefetch(p.id)} />
               ))
             : <div className="sb__empty">还没有项目</div>}
         </div>
@@ -331,7 +340,7 @@ function ProjectLists(props: {
           <div className="sb__section-head">已归档</div>
           <div className="sb__section-body">
             {archived.map((p) => (
-              <ProjectButton key={p.id} project={p} active={p.id === props.activeProjectId} onClick={() => props.onSelectProject?.(p.id)} dim />
+              <ProjectButton key={p.id} project={p} active={p.id === props.activeProjectId} onClick={() => props.onSelectProject?.(p.id)} onPrefetch={() => onPrefetch(p.id)} dim />
             ))}
           </div>
         </section>
@@ -340,13 +349,14 @@ function ProjectLists(props: {
   );
 }
 
-function ProjectButton({ project, active, onClick, dim }: { project: SidebarProject; active: boolean; onClick: () => void; dim?: boolean }) {
+function ProjectButton({ project, active, onClick, onPrefetch, dim }: { project: SidebarProject; active: boolean; onClick: () => void; onPrefetch?: () => void; dim?: boolean }) {
   const live = project.liveRunners;
   const queued = project.queuedCount;
   return (
     <button
       className={"sb-project" + (active ? " is-active" : "") + (dim ? " sb-project--dim" : "")}
       onClick={onClick}
+      onMouseEnter={onPrefetch}
       title={project.name}
     >
       <div className="sb-project__row">

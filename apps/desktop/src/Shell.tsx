@@ -292,10 +292,12 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
         onNewChat={() => { void newChat(); }}
         onRenameThread={renameThread}
         onDeleteThread={deleteThread}
+        onPrefetch={api.prefetchThread}
         projects={sidebarProjects}
         activeProjectId={activeProjectId}
         onSelectProject={openProject}
         onNewProject={() => setNewProjectOpen(true)}
+        onPrefetchProject={api.prefetchProject}
         onLogout={onLogout}
         onOpenSettings={() => setPage("settings")}
         hosts={hostStats}
@@ -311,6 +313,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
             loading={projectsHook.loading}
             onOpen={openProject}
             onNew={() => setNewProjectOpen(true)}
+            onPrefetch={api.prefetchProject}
           />
         )}
         {page === "project" && activeProjectId && (
@@ -323,6 +326,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
             onNewTask={() => setNewTaskOpen(true)}
             onOpenSettings={() => setPage("project-settings")}
             onOpenTask={(id) => setActiveTaskId(id)}
+            onPrefetchTask={api.prefetchTask}
           />
         )}
         {page === "project-settings" && activeProjectId && (

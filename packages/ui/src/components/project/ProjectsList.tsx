@@ -47,11 +47,14 @@ export function ProjectsList({
   loading = false,
   onOpen,
   onNew,
+  onPrefetch,
 }: {
   items: ProjectListItem[];
   loading?: boolean;
   onOpen?: (id: string) => void;
   onNew?: () => void;
+  /** Hover-prefetch a project's board into the SWR cache (flash-free open). */
+  onPrefetch?: (id: string) => void;
 }) {
   const [q, setQ] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -113,14 +116,14 @@ export function ProjectsList({
         )}
         {pinned.length > 0 && (
           <Section title="PINNED" icon={Icon.spark}>
-            <Grid items={pinned} onOpen={onOpen} />
+            <Grid items={pinned} onOpen={onOpen} onPrefetch={onPrefetch} />
           </Section>
         )}
 
         <Section title="进行中" subtitle={`${active.length} 个`}>
           {active.length === 0
             ? <EmptyActive onNew={onNew} />
-            : <Grid items={active} onOpen={onOpen} />}
+            : <Grid items={active} onOpen={onOpen} onPrefetch={onPrefetch} />}
         </Section>
 
         {archived.length > 0 && (
@@ -130,7 +133,7 @@ export function ProjectsList({
             open={showArchived}
             onToggle={() => setShowArchived(!showArchived)}
           >
-            {showArchived && <Grid items={archived} onOpen={onOpen} dim />}
+            {showArchived && <Grid items={archived} onOpen={onOpen} onPrefetch={onPrefetch} dim />}
           </Section>
         )}
       </div>
@@ -174,21 +177,21 @@ function Section({
 
 // ─── Grid + card ─────────────────────────────────────────
 
-function Grid({ items, onOpen, dim }: { items: ProjectListItem[]; onOpen?: (id: string) => void; dim?: boolean }) {
+function Grid({ items, onOpen, onPrefetch, dim }: { items: ProjectListItem[]; onOpen?: (id: string) => void; onPrefetch?: (id: string) => void; dim?: boolean }) {
   return (
     <div className={"projects-list__grid" + (dim ? " projects-list__grid--dim" : "")}>
-      {items.map((it) => <ProjectCard key={it.project.id} item={it} onOpen={onOpen} />)}
+      {items.map((it) => <ProjectCard key={it.project.id} item={it} onOpen={onOpen} onPrefetch={onPrefetch} />)}
     </div>
   );
 }
 
-function ProjectCard({ item, onOpen }: { item: ProjectListItem; onOpen?: (id: string) => void }) {
+function ProjectCard({ item, onOpen, onPrefetch }: { item: ProjectListItem; onOpen?: (id: string) => void; onPrefetch?: (id: string) => void }) {
   const { project, liveRunners, queuedCount, needsInputCount, health } = item;
   const totalRunners = liveRunners + queuedCount;
   const updatedAtLabel = item.updatedAtLabel ?? "";
 
   return (
-    <button className="project-card" onClick={() => onOpen?.(project.id)}>
+    <button className="project-card" onClick={() => onOpen?.(project.id)} onMouseEnter={() => onPrefetch?.(project.id)}>
       <div className="project-card__head">
         <span className={`project-card__health project-card__health--${health}`} title={`Health: ${health}`} />
         {needsInputCount > 0 && (

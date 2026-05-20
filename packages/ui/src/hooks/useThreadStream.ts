@@ -60,12 +60,29 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     setPendingNoHost(null);
     lastSeqRef.current = 0;
 
+    // SWR seed: render the last-seen messages for THIS thread synchronously so
+    // switching back is instant and flash-free. When there's no cache, clear to
+    // [] immediately — we must never leave the previous thread's messages on
+    // screen during the getThread round-trip (that was the chat "flash").
+    const cacheKey = `thread:${threadId}`;
+    const cached = api.cache.get<MessageView[]>(cacheKey);
+    setMessages(cached ?? []);
+
+    // Guards a stale getThread/catchup resolving after the user already moved
+    // on — without this the late promise would clobber the new thread's view.
+    let active = true;
+    const commitMessages = (msgs: MessageView[]) => {
+      api.cache.set(cacheKey, msgs);
+      if (active) setMessages(msgs);
+    };
+
     api
       .getThread(threadId)
-      .then((d) => setMessages(d.messages ?? []))
+      .then((d) => commitMessages(d.messages ?? []))
       .catch((e) => {
         console.error("failed to load thread history", e);
-        setMessages([]);
+        // Keep whatever we seeded from cache rather than blanking on error.
+        if (active && !cached) setMessages([]);
       });
 
     const unsubscribe = api.wsClient.subscribeThread({
@@ -74,16 +91,22 @@ export function useThreadStream(api: ApiClient, threadId: string) {
       onFrame: (msg: CloudToClient) => {
         try {
           if (msg.t === "message") {
-            setMessages((m) => [
-              ...m,
-              {
-                id: msg.messageId,
-                threadId: msg.threadId,
-                role: msg.role,
-                content: msg.content,
-                createdAt: msg.createdAt,
-              },
-            ]);
+            setMessages((m) => {
+              const next = [
+                ...m,
+                {
+                  id: msg.messageId,
+                  threadId: msg.threadId,
+                  role: msg.role,
+                  content: msg.content,
+                  createdAt: msg.createdAt,
+                },
+              ];
+              // Keep the cache in step with live appends so a switch-away /
+              // switch-back shows the full conversation, not the GET snapshot.
+              api.cache.set(cacheKey, next);
+              return next;
+            });
           } else if (msg.t === "event") {
             if (msg.seq > lastSeqRef.current) lastSeqRef.current = msg.seq;
             // The cloud broadcasts the persisted assistant `message` BEFORE the
@@ -105,7 +128,7 @@ export function useThreadStream(api: ApiClient, threadId: string) {
             void api
               .getThread(threadId)
               .then((d) => {
-                setMessages(d.messages ?? []);
+                commitMessages(d.messages ?? []);
                 lastSeqRef.current = targetSeq;
               })
               .catch((err) => console.error("catchup-too-long: getThread failed", err));
@@ -126,7 +149,10 @@ export function useThreadStream(api: ApiClient, threadId: string) {
       },
     });
 
-    return unsubscribe;
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [api, threadId]);
 
   const send = (text: string) => api.wsClient.send(threadId, text);

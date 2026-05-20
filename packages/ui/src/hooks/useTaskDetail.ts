@@ -19,7 +19,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { ProjectTask, TaskRun, CloudToClient } from "@cogni/contract";
-import type { ApiClient } from "../transport/api.js";
+import type { ApiClient, TaskDetailResponse } from "../transport/api.js";
 
 export interface UseTaskDetailResult {
   task: ProjectTask | null;
@@ -41,9 +41,16 @@ export function useTaskDetail(api: ApiClient, taskId: string): UseTaskDetailResu
   const [error, setError] = useState<Error | null>(null);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    // SWR seed: a cached task detail renders the drawer instantly on re-open;
+    // otherwise reset to null/[] so we show the drawer's loading state rather
+    // than the previously-opened card's content during the round-trip.
+    const cached = api.cache.get<TaskDetailResponse>(`task:${taskId}`);
+    setTask(cached?.task ?? null);
+    setRuns(cached?.runs ?? []);
+    setLoading(!cached);
     try {
       const detail = await api.getTaskDetail(taskId);
+      api.cache.set(`task:${taskId}`, detail);
       setTask(detail.task);
       setRuns(detail.runs);
       setError(null);
@@ -65,8 +72,13 @@ export function useTaskDetail(api: ApiClient, taskId: string): UseTaskDetailResu
         if (frame.t !== "task-event") return;
         if (frame.task.id !== taskId) return;
         if (frame.kind === "deleted") {
+          api.cache.delete(`task:${taskId}`);
           setTask(null);
         } else {
+          // Keep the cached envelope's task row in step with live updates so a
+          // re-open shows the latest state. Runs are left as last fetched.
+          const prev = api.cache.get<TaskDetailResponse>(`task:${taskId}`);
+          api.cache.set(`task:${taskId}`, { task: frame.task, runs: prev?.runs ?? [] });
           setTask(frame.task);
         }
       },
