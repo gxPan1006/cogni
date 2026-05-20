@@ -4,6 +4,7 @@ import type { AnyDb } from "./client.js";
 
 export type { AnyDb };
 export interface AppUser { id: string; tenantId: string; email: string; }
+export interface AppUserWithPassword extends AppUser { passwordHash: string | null; }
 
 /**
  * Email-keyed user lookup. The single source of identity in cogni is the
@@ -29,4 +30,27 @@ export async function findOrCreateUserByEmail(
     .values({ tenantId: tenant!.id, email: lowered })
     .returning();
   return { id: created!.id, tenantId: created!.tenantId, email: created!.email };
+}
+
+/**
+ * Read-only, case-insensitive lookup by email. Returns null when no user has
+ * that email. Includes `passwordHash` so password-login can verify in one
+ * query. Does NOT create — used by the password login / reset paths where a
+ * miss must look identical to a wrong password (anti-enumeration).
+ */
+export async function findUserByEmail(
+  db: AnyDb, email: string,
+): Promise<AppUserWithPassword | null> {
+  const lowered = email.toLowerCase();
+  const rows = await db.select().from(users).where(eq(users.email, lowered)).limit(1);
+  const u = rows[0];
+  if (!u) return null;
+  return { id: u.id, tenantId: u.tenantId, email: u.email, passwordHash: u.passwordHash };
+}
+
+/** Set (or overwrite) a user's password hash. */
+export async function setUserPassword(
+  db: AnyDb, userId: string, passwordHash: string,
+): Promise<void> {
+  await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
 }

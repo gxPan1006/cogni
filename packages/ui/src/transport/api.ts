@@ -235,6 +235,55 @@ export class ApiClient {
       body: JSON.stringify({ magic }),
     });
 
+  // ─── Auth (email + password) ──────────────────────────────────────────
+  /**
+   * Email + password login. Returns a 30-day JWT on success; throws ApiError
+   * (401) on any failure — UI must show one generic "邮箱或密码不正确" message,
+   * never reveal whether the email exists.
+   */
+  passwordLogin = (email: string, password: string): Promise<{ token: string }> =>
+    this.request(`${this.cloudUrl}/auth/password/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+  /**
+   * Start registration. The cloud sends a verification email (or, if the email
+   * already has a password, a recovery email) and always returns {ok:true}
+   * (anti-enumeration). The user finishes by clicking the emailed link.
+   */
+  passwordRegister = (email: string, password: string, origin: "desktop" | "web"): Promise<{ ok: true }> =>
+    this.request(`${this.cloudUrl}/auth/password/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, origin }),
+    });
+
+  /** Exchange a verify token (from the registration email link) for a JWT. */
+  passwordVerify = (token: string): Promise<{ token: string }> =>
+    this.request(`${this.cloudUrl}/auth/password/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+
+  /** Request a password reset email. Always {ok:true} (anti-enumeration). */
+  passwordResetRequest = (email: string, origin: "desktop" | "web"): Promise<{ ok: true }> =>
+    this.request(`${this.cloudUrl}/auth/password/reset/request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, origin }),
+    });
+
+  /** Set a new password using a reset token (from the reset email link). */
+  passwordResetConfirm = (token: string, password: string): Promise<{ token: string }> =>
+    this.request(`${this.cloudUrl}/auth/password/reset/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password }),
+    });
+
   // ─── SP-3 Projects ────────────────────────────────────────────────────
   //
   // Endpoints below mirror spec §六 ("Cloud HTTP Routes"). All return

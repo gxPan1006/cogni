@@ -37,13 +37,15 @@ import {
 } from "@cogni/ui";
 import { api, ApiError } from "./api.js";
 import { useAuthWeb } from "./useAuth-web.js";
-import { GoogleAuthCallback, EmailAuthCallback } from "./AuthCallback.js";
+import { GoogleAuthCallback, EmailAuthCallback, PasswordVerifyCallback, PasswordResetCallback } from "./AuthCallback.js";
 
 export default function App() {
   return (
     <Routes>
       <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
       <Route path="/auth/email/callback" element={<EmailAuthCallback />} />
+      <Route path="/auth/password/callback" element={<PasswordVerifyCallback />} />
+      <Route path="/auth/password/reset" element={<PasswordResetCallback />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/settings" element={<RequireAuth><WebShell page="settings" /></RequireAuth>} />
       <Route path="/chat/:threadId" element={<RequireAuth><WebShell page="chat" /></RequireAuth>} />
@@ -64,10 +66,19 @@ function RequireAuth({ children }: { children: ReactNode }) {
 }
 
 function LoginPage() {
-  const { token, loginWithGoogle, loginWithEmail } = useAuthWeb();
+  const {
+    token, loginWithGoogle, loginWithEmail,
+    passwordLogin, passwordRegister, passwordResetRequest,
+  } = useAuthWeb();
   if (token) return <Navigate to="/chat" replace />;
   return (
-    <Login onLoginWithGoogle={loginWithGoogle} onLoginWithEmail={loginWithEmail} />
+    <Login
+      onLoginWithGoogle={loginWithGoogle}
+      onLoginWithEmail={loginWithEmail}
+      onPasswordLogin={passwordLogin}
+      onPasswordRegister={passwordRegister}
+      onPasswordResetRequest={passwordResetRequest}
+    />
   );
 }
 

@@ -1,5 +1,5 @@
 import { useAuthCore } from "@cogni/ui";
-import { api } from "./api.js";
+import { api, ApiError } from "./api.js";
 
 /**
  * Web's redirect-based shim around the platform-agnostic useAuthCore.
@@ -36,5 +36,29 @@ export function useAuthWeb() {
     await api.sendMagicLink(email, "web");
   };
 
-  return { ...core, loginWithGoogle, loginWithEmail };
+  // Email+password. Login redeems a JWT inline (acceptToken); register / reset
+  // only kick off an email — the JWT comes later when the user clicks the link
+  // (handled by PasswordVerifyCallback / PasswordResetCallback).
+  const passwordLogin = async (email: string, password: string): Promise<void> => {
+    try {
+      const { token } = await api.passwordLogin(email, password);
+      core.acceptToken(token);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) throw new Error("邮箱或密码不正确");
+      if (e instanceof ApiError && e.status === 429) throw new Error("尝试过于频繁,请稍后再试");
+      throw new Error("网络错误,请重试");
+    }
+  };
+  const passwordRegister = async (email: string, password: string): Promise<void> => {
+    await api.passwordRegister(email, password, "web");
+  };
+  const passwordResetRequest = async (email: string): Promise<void> => {
+    await api.passwordResetRequest(email, "web");
+  };
+
+  return {
+    ...core,
+    loginWithGoogle, loginWithEmail,
+    passwordLogin, passwordRegister, passwordResetRequest,
+  };
 }

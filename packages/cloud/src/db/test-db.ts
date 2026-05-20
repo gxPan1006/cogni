@@ -18,9 +18,10 @@ import * as schema from "./schema.js";
 // accept a forward reference at CREATE TABLE time.
 // 2026-05-20 delta:
 //   • threads: added deleted_at (soft delete for sidebar conversation delete)
+//   • users: added password_hash (email+password auth)
 const DDL = `
 CREATE TABLE tenants (id uuid primary key default gen_random_uuid(), name text not null, created_at timestamp not null default now());
-CREATE TABLE users (id uuid primary key default gen_random_uuid(), tenant_id uuid not null references tenants(id), email text not null unique, created_at timestamp not null default now());
+CREATE TABLE users (id uuid primary key default gen_random_uuid(), tenant_id uuid not null references tenants(id), email text not null unique, password_hash text, created_at timestamp not null default now());
 CREATE TABLE user_identities (user_id uuid not null references users(id) on delete cascade, kind text not null, sub text not null, created_at timestamp not null default now(), constraint user_identities_pk unique (kind, sub));
 CREATE TABLE hosts (id uuid primary key default gen_random_uuid(), tenant_id uuid not null references tenants(id), user_id uuid not null references users(id), name text not null, status text not null default 'offline', registration_token text not null unique, capabilities_json jsonb not null default '[]', last_seen timestamp, removed_at timestamp, created_at timestamp not null default now());
 CREATE TABLE auth_sessions (id uuid primary key default gen_random_uuid(), user_id uuid not null references users(id) on delete cascade, device_name text not null, user_agent text, ip text, created_at timestamp not null default now(), last_seen_at timestamp not null default now(), revoked_at timestamp);

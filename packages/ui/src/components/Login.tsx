@@ -1,55 +1,105 @@
 /**
  * Login — pre-auth landing page.
  *
- * State machine (unchanged from SP-1):
- *   form     — initial; show email input + Google button
- *   sending  — POST /auth/email/send in flight; disable inputs
- *   sent     — email queued; show "check your inbox" + 60s resend cooldown
- *   error    — inline error, keep email pre-filled
+ * Two shapes, picked by which handlers the host passes:
+ *   - Magic-link only (desktop today): pass just `onLoginWithGoogle` +
+ *     `onLoginWithEmail`. Renders Google → email → "发送登录链接".
+ *   - Full email+password (web): also pass `onPasswordLogin` /
+ *     `onPasswordRegister` / `onPasswordResetRequest`. Renders a 登录 / 注册
+ *     toggle with email+password fields, a 忘记密码 link, plus Google and the
+ *     magic-link fallback.
  *
- * Visual rewrite:
- *   - Two-column layout: brand panel on the left, form card on the right
- *   - Brand panel shows the wordmark + tagline + "2 of 3 hosts online" line
- *     (purely decorative copy at this stage; SP-2 may surface real counts)
- *   - Form card: Google button → divider → email input → submit
+ * Behavior the user sees:
+ *   - 登录: type email+password → click 登录 → on success the chat shell loads;
+ *     on failure an inline "邮箱或密码不正确" line, fields kept.
+ *   - 注册: type email+password → click 注册 → card flips to "去邮箱确认" (we
+ *     never reveal whether the email already existed). They click the emailed
+ *     link to finish.
+ *   - 忘记密码: type email → "发送重置链接" → same "check your inbox" card.
+ *   - 发送登录链接 (magic): unchanged from before.
  */
 import { useEffect, useState } from "react";
 import { LogoMark } from "./LogoMark.js";
 import "./login.css";
 
-type State =
-  | { kind: "form"; email: string; error?: string }
-  | { kind: "sending"; email: string }
-  | { kind: "sent"; email: string; resendAt: number }
-  | { kind: "error"; email: string; reason: string };
+type Mode = "login" | "register" | "forgot";
+type SentChannel = "magic" | "register" | "forgot";
+
+type Status =
+  | { kind: "idle"; error?: string }
+  | { kind: "submitting" }
+  | { kind: "sent"; channel: SentChannel; email: string; resendAt: number };
 
 const RESEND_COOLDOWN_MS = 60_000;
 
-export function Login({
-  onLoginWithGoogle,
-  onLoginWithEmail,
-}: {
+export interface LoginProps {
   onLoginWithGoogle: () => void;
+  /** Magic-link send. */
   onLoginWithEmail: (email: string) => Promise<void>;
-}) {
-  const [state, setState] = useState<State>({ kind: "form", email: "" });
+  /** Email+password login. When omitted, the password UI is hidden entirely. */
+  onPasswordLogin?: (email: string, password: string) => Promise<void>;
+  /** Start password registration (sends a verification email). */
+  onPasswordRegister?: (email: string, password: string) => Promise<void>;
+  /** Send a password reset email. */
+  onPasswordResetRequest?: (email: string) => Promise<void>;
+}
+
+export function Login(props: LoginProps) {
+  const passwordEnabled = Boolean(props.onPasswordLogin);
+  const [mode, setMode] = useState<Mode>("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    if (state.kind !== "sent") return;
+    if (status.kind !== "sent") return;
     const id = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(id);
-  }, [state.kind]);
+  }, [status.kind]);
 
-  const submitEmail = async (email: string) => {
-    setState({ kind: "sending", email });
+  const fail = (e: unknown) =>
+    setStatus({ kind: "idle", error: e instanceof Error ? e.message : "网络错误,请重试" });
+
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setStatus({ kind: "idle" });
+    setPassword("");
+  };
+
+  const sendMagic = async (to: string) => {
+    setStatus({ kind: "submitting" });
     try {
-      await onLoginWithEmail(email);
-      setState({ kind: "sent", email, resendAt: Date.now() + RESEND_COOLDOWN_MS });
-    } catch (e) {
-      const reason = e instanceof Error ? e.message : "网络错误,请重试";
-      setState({ kind: "error", email, reason });
+      await props.onLoginWithEmail(to);
+      setStatus({ kind: "sent", channel: "magic", email: to, resendAt: Date.now() + RESEND_COOLDOWN_MS });
+    } catch (e) { fail(e); }
+  };
+
+  const submit = async () => {
+    const e = email.trim();
+    if (!e.includes("@")) { setStatus({ kind: "idle", error: "请输入合法的邮箱地址" }); return; }
+    if (mode !== "forgot" && password.length < 8) {
+      setStatus({ kind: "idle", error: "密码至少 8 位" }); return;
     }
+    setStatus({ kind: "submitting" });
+    try {
+      if (mode === "login") {
+        await props.onPasswordLogin!(e, password);
+        // success → host routes away; keep "submitting" so inputs stay disabled
+      } else if (mode === "register") {
+        await props.onPasswordRegister!(e, password);
+        setStatus({ kind: "sent", channel: "register", email: e, resendAt: Date.now() + RESEND_COOLDOWN_MS });
+      } else {
+        await props.onPasswordResetRequest!(e);
+        setStatus({ kind: "sent", channel: "forgot", email: e, resendAt: Date.now() + RESEND_COOLDOWN_MS });
+      }
+    } catch (err) { fail(err); }
+  };
+
+  const resend = (to: string) => {
+    if (status.kind !== "sent") return;
+    if (status.channel === "magic") void sendMagic(to);
+    else void submit();
   };
 
   return (
@@ -76,8 +126,22 @@ export function Login({
 
       <section className="login__form-col">
         <div className="login__card">
-          {state.kind === "sent" ? <SentView state={state} now={now} onResend={submitEmail} onReset={() => setState({ kind: "form", email: "" })} />
-                                  : <FormView state={state} onState={setState} onGoogle={onLoginWithGoogle} onSubmit={submitEmail} />}
+          {status.kind === "sent"
+            ? <SentView status={status} now={now} onResend={resend} onReset={() => switchMode("login")} />
+            : <FormView
+                mode={mode}
+                passwordEnabled={passwordEnabled}
+                email={email}
+                password={password}
+                error={status.kind === "idle" ? status.error : undefined}
+                submitting={status.kind === "submitting"}
+                onEmail={setEmail}
+                onPassword={setPassword}
+                onMode={switchMode}
+                onGoogle={props.onLoginWithGoogle}
+                onSubmit={submit}
+                onSendMagic={() => void sendMagic(email.trim())}
+              />}
         </div>
       </section>
     </div>
@@ -85,24 +149,53 @@ export function Login({
 }
 
 function FormView({
-  state, onState, onGoogle, onSubmit,
+  mode, passwordEnabled, email, password, error, submitting,
+  onEmail, onPassword, onMode, onGoogle, onSubmit, onSendMagic,
 }: {
-  state: Exclude<State, { kind: "sent" }>;
-  onState: (s: State) => void;
+  mode: Mode;
+  passwordEnabled: boolean;
+  email: string;
+  password: string;
+  error: string | undefined;
+  submitting: boolean;
+  onEmail: (v: string) => void;
+  onPassword: (v: string) => void;
+  onMode: (m: Mode) => void;
   onGoogle: () => void;
-  onSubmit: (email: string) => Promise<void>;
+  onSubmit: () => void;
+  onSendMagic: () => void;
 }) {
-  const email = state.email;
-  const error = state.kind === "error" ? state.reason : state.kind === "form" ? state.error : undefined;
-  const isSubmitting = state.kind === "sending";
+  const titles: Record<Mode, { eyebrow: string; title: string; sub: string; cta: string }> = {
+    login:    { eyebrow: "WELCOME",    title: "登录 Cogni",   sub: "一个账号,所有设备同步", cta: "登录" },
+    register: { eyebrow: "GET STARTED", title: "注册 Cogni",  sub: "用邮箱和密码创建账号",   cta: "注册" },
+    forgot:   { eyebrow: "RESET",      title: "重置密码",     sub: "我们会把重置链接发到你的邮箱", cta: "发送重置链接" },
+  };
+  const t = titles[mode];
 
   return (
     <>
-      <div className="login__eyebrow">WELCOME</div>
-      <div className="login__card-title">登录 Cogni</div>
-      <div className="login__card-sub">一个账号,所有设备同步</div>
+      <div className="login__eyebrow">{t.eyebrow}</div>
+      <div className="login__card-title">{t.title}</div>
+      <div className="login__card-sub">{t.sub}</div>
 
-      <button className="login__google" onClick={onGoogle} disabled={isSubmitting}>
+      {passwordEnabled && mode !== "forgot" && (
+        <div className="login__tabs" role="tablist">
+          <button
+            role="tab"
+            className={`login__tab ${mode === "login" ? "login__tab--active" : ""}`}
+            disabled={submitting}
+            onClick={() => onMode("login")}
+          >登录</button>
+          <button
+            role="tab"
+            className={`login__tab ${mode === "register" ? "login__tab--active" : ""}`}
+            disabled={submitting}
+            onClick={() => onMode("register")}
+          >注册</button>
+        </div>
+      )}
+
+      <button className="login__google" onClick={onGoogle} disabled={submitting}>
         <GoogleGlyph />
         <span>用 Google 登录</span>
       </button>
@@ -115,15 +208,7 @@ function FormView({
 
       <form
         className="login__form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const trimmed = email.trim();
-          if (!trimmed.includes("@")) {
-            onState({ kind: "form", email, error: "请输入合法的邮箱地址" });
-            return;
-          }
-          void onSubmit(trimmed);
-        }}
+        onSubmit={(e) => { e.preventDefault(); if (passwordEnabled) onSubmit(); else onSendMagic(); }}
       >
         <label className="login__label">邮箱</label>
         <input
@@ -131,15 +216,56 @@ function FormView({
           className="login__input"
           placeholder="you@somewhere.com"
           value={email}
-          disabled={isSubmitting}
+          disabled={submitting}
           autoComplete="email"
-          onChange={(e) => onState({ kind: "form", email: e.target.value })}
+          onChange={(e) => onEmail(e.target.value)}
         />
+
+        {passwordEnabled && mode !== "forgot" && (
+          <>
+            <label className="login__label">密码</label>
+            <input
+              type="password"
+              className="login__input"
+              placeholder={mode === "register" ? "至少 8 位" : "你的密码"}
+              value={password}
+              disabled={submitting}
+              autoComplete={mode === "register" ? "new-password" : "current-password"}
+              onChange={(e) => onPassword(e.target.value)}
+            />
+          </>
+        )}
+
         {error && <div className="login__error">{error}</div>}
-        <button type="submit" className="btn btn-primary login__submit" disabled={isSubmitting}>
-          {isSubmitting ? "发送中…" : "发送登录链接"}
-        </button>
+
+        {passwordEnabled ? (
+          <button type="submit" className="btn btn-primary login__submit" disabled={submitting}>
+            {submitting ? "处理中…" : t.cta}
+          </button>
+        ) : (
+          <button type="submit" className="btn btn-primary login__submit" disabled={submitting}>
+            {submitting ? "发送中…" : "发送登录链接"}
+          </button>
+        )}
       </form>
+
+      {passwordEnabled && (
+        <div className="login__alts">
+          {mode === "login" && (
+            <button className="login__link" disabled={submitting} onClick={() => onMode("forgot")}>
+              忘记密码?
+            </button>
+          )}
+          {mode === "forgot" && (
+            <button className="login__link" disabled={submitting} onClick={() => onMode("login")}>
+              ← 返回登录
+            </button>
+          )}
+          <button className="login__link" disabled={submitting} onClick={onSendMagic}>
+            改用邮箱登录链接
+          </button>
+        </div>
+      )}
 
       <p className="login__legal">
         登录即代表同意《服务条款》与《隐私政策》。SP-1 是开发版本。
@@ -149,23 +275,29 @@ function FormView({
 }
 
 function SentView({
-  state, now, onResend, onReset,
+  status, now, onResend, onReset,
 }: {
-  state: Extract<State, { kind: "sent" }>;
+  status: Extract<Status, { kind: "sent" }>;
   now: number;
   onResend: (email: string) => void;
   onReset: () => void;
 }) {
-  const remaining = Math.max(0, Math.ceil((state.resendAt - now) / 1000));
+  const remaining = Math.max(0, Math.ceil((status.resendAt - now) / 1000));
+  const copy: Record<SentChannel, { eyebrow: string; title: string }> = {
+    magic:    { eyebrow: "CHECK YOUR EMAIL", title: "登录链接已发送" },
+    register: { eyebrow: "CHECK YOUR EMAIL", title: "确认邮件已发送" },
+    forgot:   { eyebrow: "CHECK YOUR EMAIL", title: "重置链接已发送" },
+  };
+  const c = copy[status.channel];
   return (
     <>
-      <div className="login__eyebrow login__eyebrow--good">CHECK YOUR EMAIL</div>
-      <div className="login__card-title">登录链接已发送</div>
+      <div className="login__eyebrow login__eyebrow--good">{c.eyebrow}</div>
+      <div className="login__card-title">{c.title}</div>
       <div className="login__card-sub">
-        我们把链接发到了 <strong>{state.email}</strong>。<br/>
-        在任意设备上点开都可以,15 分钟内有效。
+        我们把链接发到了 <strong>{status.email}</strong>。<br/>
+        在任意设备上点开都可以,30 分钟内有效。
       </div>
-      <button className="btn btn-primary login__submit" disabled={remaining > 0} onClick={() => onResend(state.email)}>
+      <button className="btn btn-primary login__submit" disabled={remaining > 0} onClick={() => onResend(status.email)}>
         {remaining > 0 ? `${remaining}s 后可重发` : "重发邮件"}
       </button>
       <button className="login__link" onClick={onReset}>

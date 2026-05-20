@@ -10,15 +10,22 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
   email: text("email").notNull().unique(),
+  // Email+password auth. Null for users who never set a password (Google /
+  // magic-link only). Encoded `scrypt$<saltBase64>$<keyBase64>` — see
+  // auth/password.ts. A non-null value is the source of truth for "can this
+  // user log in with a password"; the matching `password` identity row only
+  // mirrors it for the settings "linked methods" list.
+  passwordHash: text("password_hash"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // Auth identities for a user. A user can have multiple identities — e.g.
 // Google sign-in AND magic-link sign-in, both pointing at the same user row.
-// kind ∈ {'google', 'email', 'dev'}. sub is the issuer-specific subject:
-//   google → google `sub` claim
-//   email  → lowercased email (1:1 with users.email today; SP-2 may allow secondaries)
-//   dev    → 'manual' (only `dev|manual` exists today, written by mint-dev-token)
+// kind ∈ {'google', 'email', 'password', 'dev'}. sub is the issuer-specific subject:
+//   google   → google `sub` claim
+//   email    → lowercased email (1:1 with users.email today; SP-2 may allow secondaries)
+//   password → lowercased email (set once the user adds a password; hash lives on users.passwordHash)
+//   dev      → 'manual' (only `dev|manual` exists today, written by mint-dev-token)
 export const userIdentities = pgTable("user_identities", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   kind: text("kind").notNull(),

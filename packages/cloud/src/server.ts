@@ -15,6 +15,7 @@ import type { ProjectDomain } from "./domains/project/index.js";
 import type { EmailTransport } from "./email/transport.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerEmailRoutes } from "./routes/email.js";
+import { registerPasswordRoutes } from "./routes/password.js";
 import { registerHostWs } from "./routes/host-ws.js";
 import { registerClientRoutes } from "./routes/client.js";
 import { registerIdentitiesRoutes } from "./routes/identities.js";
@@ -87,6 +88,7 @@ export function createServer(deps: ServerDeps) {
 
   registerAuthRoutes(app, deps);                   // Google OAuth + dev-token
   registerEmailRoutes(app, deps);                  // Magic-link send/callback
+  registerPasswordRoutes(app, deps);               // Email + password register/verify/login/reset
   registerHostWs(app, upgradeWebSocket, deps);
   registerClientRoutes(app, upgradeWebSocket, deps); // also mounts the /api/* Bearer middleware
   // SP-2 settings routes — must come AFTER registerClientRoutes so they share

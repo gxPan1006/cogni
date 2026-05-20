@@ -15,20 +15,40 @@
 import nodemailer, { type Transporter } from "nodemailer";
 
 export interface SendArgs { to: string; magicUrl: string; expiresInMinutes: number; }
+/** Verify-email (password registration) + password-reset share this shape. */
+export interface LinkArgs { to: string; url: string; expiresInMinutes: number; }
 
 export interface EmailTransport {
   sendMagicLink(args: SendArgs): Promise<void>;
+  /** Confirm a new email+password registration before the account is created/merged. */
+  sendVerifyEmail(args: LinkArgs): Promise<void>;
+  /** Reset (or, for an already-registered email, recover) a password. */
+  sendPasswordReset(args: LinkArgs): Promise<void>;
 }
 
 export class FakeTransport implements EmailTransport {
   public sent: SendArgs[] = [];
+  public verifications: LinkArgs[] = [];
+  public resets: LinkArgs[] = [];
   async sendMagicLink(args: SendArgs): Promise<void> { this.sent.push(args); }
+  async sendVerifyEmail(args: LinkArgs): Promise<void> { this.verifications.push(args); }
+  async sendPasswordReset(args: LinkArgs): Promise<void> { this.resets.push(args); }
 }
 
 export class ConsoleTransport implements EmailTransport {
   async sendMagicLink(args: SendArgs): Promise<void> {
     console.log(
-      `[email/console] would send to=${args.to} url=${args.magicUrl} expiresInMinutes=${args.expiresInMinutes}`,
+      `[email/console] magic-link to=${args.to} url=${args.magicUrl} expiresInMinutes=${args.expiresInMinutes}`,
+    );
+  }
+  async sendVerifyEmail(args: LinkArgs): Promise<void> {
+    console.log(
+      `[email/console] verify-email to=${args.to} url=${args.url} expiresInMinutes=${args.expiresInMinutes}`,
+    );
+  }
+  async sendPasswordReset(args: LinkArgs): Promise<void> {
+    console.log(
+      `[email/console] password-reset to=${args.to} url=${args.url} expiresInMinutes=${args.expiresInMinutes}`,
     );
   }
 }
@@ -42,8 +62,17 @@ export interface ResendOpts {
 export class ResendTransport implements EmailTransport {
   constructor(private opts: ResendOpts) {}
 
-  async sendMagicLink(args: SendArgs): Promise<void> {
-    const text = buildMagicLinkPlainText(args);
+  sendMagicLink(args: SendArgs): Promise<void> {
+    return this.send(args.to, "登录 Cogni / Sign in to Cogni", buildMagicLinkPlainText(args));
+  }
+  sendVerifyEmail(args: LinkArgs): Promise<void> {
+    return this.send(args.to, "确认注册 Cogni / Confirm your Cogni account", buildVerifyPlainText(args));
+  }
+  sendPasswordReset(args: LinkArgs): Promise<void> {
+    return this.send(args.to, "重置 Cogni 密码 / Reset your Cogni password", buildResetPlainText(args));
+  }
+
+  private async send(to: string, subject: string, text: string): Promise<void> {
     const fetcher = this.opts.fetchImpl ?? fetch;
     const res = await fetcher("https://api.resend.com/emails", {
       method: "POST",
@@ -51,12 +80,7 @@ export class ResendTransport implements EmailTransport {
         Authorization: `Bearer ${this.opts.apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from: this.opts.from,
-        to: args.to,
-        subject: "登录 Cogni / Sign in to Cogni",
-        text,
-      }),
+      body: JSON.stringify({ from: this.opts.from, to, subject, text }),
     });
     if (!res.ok) {
       throw new Error(`resend send failed: ${res.status} ${await res.text()}`);
@@ -87,7 +111,17 @@ export interface SmtpOpts {
 export class SmtpTransport implements EmailTransport {
   constructor(private readonly opts: SmtpOpts) {}
 
-  async sendMagicLink(args: SendArgs): Promise<void> {
+  sendMagicLink(args: SendArgs): Promise<void> {
+    return this.send(args.to, "登录 Cogni / Sign in to Cogni", buildMagicLinkPlainText(args));
+  }
+  sendVerifyEmail(args: LinkArgs): Promise<void> {
+    return this.send(args.to, "确认注册 Cogni / Confirm your Cogni account", buildVerifyPlainText(args));
+  }
+  sendPasswordReset(args: LinkArgs): Promise<void> {
+    return this.send(args.to, "重置 Cogni 密码 / Reset your Cogni password", buildResetPlainText(args));
+  }
+
+  private async send(to: string, subject: string, text: string): Promise<void> {
     // Build a fresh transporter per send. nodemailer's default `pool: false`
     // would short-lived-connection per sendMail anyway, but we observed that a
     // long-lived `nodemailer.createTransport` instance, when its first call sits
@@ -110,13 +144,7 @@ export class SmtpTransport implements EmailTransport {
       ...(this.opts.tlsServername ? { tls: { servername: this.opts.tlsServername } } : {}),
     });
     try {
-      const text = buildMagicLinkPlainText(args);
-      await transporter.sendMail({
-        from: this.opts.from,
-        to: args.to,
-        subject: "登录 Cogni / Sign in to Cogni",
-        text,
-      });
+      await transporter.sendMail({ from: this.opts.from, to, subject, text });
     } finally {
       // Only close transporters we built ourselves; injected ones (tests) are
       // owned by the caller.
@@ -144,5 +172,49 @@ function buildMagicLinkPlainText(args: SendArgs): string {
     `    ${args.magicUrl}`,
     "",
     `If this wasn't you, ignore this email. The link expires in ${args.expiresInMinutes} minutes.`,
+  ].join("\n");
+}
+
+function buildVerifyPlainText(args: LinkArgs): string {
+  return [
+    "你好,",
+    "",
+    "有人用这个邮箱注册了 Cogni 账号密码。点击下面的链接以确认并完成设置:",
+    "",
+    `    ${args.url}`,
+    "",
+    `如果不是你本人,请忽略这封邮件——在确认之前不会创建任何账号。链接 ${args.expiresInMinutes} 分钟内有效。`,
+    "",
+    "─────────────────",
+    "",
+    "Hi,",
+    "",
+    "Someone signed up for Cogni with this email and a password. Click to confirm and finish setup:",
+    "",
+    `    ${args.url}`,
+    "",
+    `If this wasn't you, ignore this email — no account is created until you confirm. The link expires in ${args.expiresInMinutes} minutes.`,
+  ].join("\n");
+}
+
+function buildResetPlainText(args: LinkArgs): string {
+  return [
+    "你好,",
+    "",
+    "有人请求重置这个邮箱对应的 Cogni 密码。点击下面的链接以设置新密码:",
+    "",
+    `    ${args.url}`,
+    "",
+    `如果不是你本人,请忽略这封邮件,你的密码不会改变。链接 ${args.expiresInMinutes} 分钟内有效。`,
+    "",
+    "─────────────────",
+    "",
+    "Hi,",
+    "",
+    "Someone requested a Cogni password reset for this email. Click to set a new password:",
+    "",
+    `    ${args.url}`,
+    "",
+    `If this wasn't you, ignore this email and your password stays unchanged. The link expires in ${args.expiresInMinutes} minutes.`,
   ].join("\n");
 }
