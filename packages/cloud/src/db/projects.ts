@@ -278,6 +278,41 @@ export async function getTask(db: AnyDb, taskId: string): Promise<ProjectTask | 
 }
 
 /**
+ * Reverse lookup: find the project whose `thread_id` references the given
+ * thread. Used by `WorkspaceChatDomain` to discover the project scope of a
+ * project-level orchestrator thread. Returns null for the workspace-level
+ * thread (which no project references) or for chat-only threads.
+ */
+export async function getProjectByThreadId(
+  db: AnyDb,
+  threadId: string,
+): Promise<Project | null> {
+  const rows = await db
+    .select()
+    .from(projects)
+    .where(eq(projects.threadId, threadId))
+    .limit(1);
+  return rows[0] ? rowToProject(rows[0]) : null;
+}
+
+/** Hard-delete a single task row. `task_runs` cascade-delete; `runner_sessions.task_id` set null. */
+export async function deleteTask(db: AnyDb, taskId: string): Promise<void> {
+  await db.delete(projectTasks).where(eq(projectTasks.id, taskId));
+}
+
+/**
+ * Hard-delete a project and all its tasks (cascade) in one transaction.
+ * `projectTasks.projectId` already cascade-deletes its `task_runs`; we delete
+ * the task rows explicitly so the project row delete cannot be blocked.
+ */
+export async function deleteProject(db: AnyDb, projectId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.delete(projectTasks).where(eq(projectTasks.projectId, projectId));
+    await tx.delete(projects).where(eq(projects.id, projectId));
+  });
+}
+
+/**
  * Reverse lookup: find the task that owns a given thread. Used by the SP-3
  * needs-input bridge — when the runner emits an `AskUserQuestion` tool-call
  * on a thread, ChatDomain calls this to discover whether that thread is a

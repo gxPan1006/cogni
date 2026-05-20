@@ -16,6 +16,9 @@ import {
   updateTaskState,
   listTaskRuns,
   createTaskRun,
+  deleteTask,
+  deleteProject,
+  getProjectByThreadId,
 } from "./projects.js";
 
 async function seedUserAndHost(email = "seed@x.com") {
@@ -358,6 +361,47 @@ describe("projects.listTaskRuns + createTaskRun", () => {
     expect(runs.map((r) => r.attemptNumber)).toEqual([1, 2]);
     expect(runs[0]!.runnerSessionId).toBe(s1.id);
     expect(runs[1]!.runnerSessionId).toBe(s2.id);
+    await close();
+  });
+});
+
+describe("projects.deleteTask + deleteProject + getProjectByThreadId", () => {
+  it("deleteTask removes the row", async () => {
+    const { db, close, user, host } = await seedUserAndHost();
+    const project = await createProject(db, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      name: "P",
+      repoPath: "/tmp/p",
+      defaultHostId: host.hostId,
+    });
+    const task = await createTask(db, { projectId: project.id, title: "t" });
+    await deleteTask(db, task.id);
+    expect(await getTask(db, task.id)).toBeNull();
+    await close();
+  });
+
+  it("deleteProject cascades tasks and removes project", async () => {
+    const { db, close, user, host } = await seedUserAndHost();
+    const project = await createProject(db, {
+      tenantId: user.tenantId,
+      userId: user.id,
+      name: "P",
+      repoPath: "/tmp/p",
+      defaultHostId: host.hostId,
+    });
+    const task = await createTask(db, { projectId: project.id, title: "t" });
+    await deleteProject(db, project.id);
+    expect(await getProject(db, project.id)).toBeNull();
+    expect(await getTask(db, task.id)).toBeNull();
+    await close();
+  });
+
+  it("getProjectByThreadId finds the project linked via thread_id", async () => {
+    const { db, close } = await seedUserAndHost();
+    expect(
+      await getProjectByThreadId(db, "00000000-0000-0000-0000-000000000000"),
+    ).toBeNull();
     await close();
   });
 });
