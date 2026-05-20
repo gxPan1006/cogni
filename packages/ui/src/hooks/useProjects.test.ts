@@ -23,7 +23,7 @@ function mkProject(id: string, overrides: Partial<Project> = {}): Project {
     id, tenantId: "t", userId: "u", name: id, description: null,
     repoPath: "/r", defaultHostId: "h", threadId: null,
     mergePolicy: "require-review", testCommand: null, concurrencyLimit: 2,
-    systemPrompt: null, archivedAt: null,
+    systemPrompt: null, pushToRemote: false, archivedAt: null,
     createdAt: "2026-05-19T00:00:00Z", updatedAt: "2026-05-19T00:00:00Z",
     ...overrides,
   };

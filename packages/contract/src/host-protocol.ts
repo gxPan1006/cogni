@@ -104,6 +104,23 @@ export const gitMergeToMainResponseSchema = z.object({
 });
 export type GitMergeToMainResponse = z.infer<typeof gitMergeToMainResponseSchema>;
 
+// git-push-to-remote (SP-3+1: project.pushToRemote=true → push main after merge)
+export const gitPushToRemoteRequestSchema = z.object({
+  repoPath: z.string(),
+  /** Branch to push (always "main" today; carried explicitly for clarity). */
+  branch: z.string(),
+  /** Remote name; defaults to "origin" host-side if absent. */
+  remote: z.string().optional(),
+});
+export type GitPushToRemoteRequest = z.infer<typeof gitPushToRemoteRequestSchema>;
+
+export const gitPushToRemoteResponseSchema = z.object({
+  ok: z.boolean(),
+  /** stderr tail when ok=false: no remote configured, auth failure, rejected push, etc. */
+  message: z.string().optional(),
+});
+export type GitPushToRemoteResponse = z.infer<typeof gitPushToRemoteResponseSchema>;
+
 // git-tests-run
 export const gitTestsRunRequestSchema = z.object({
   worktreePath: z.string(),
@@ -200,6 +217,7 @@ export const hostRpcRequestSchema = z.discriminatedUnion("method", [
   z.object({ method: z.literal("git-worktree-create"), params: gitWorktreeCreateRequestSchema }),
   z.object({ method: z.literal("git-worktree-remove"), params: gitWorktreeRemoveRequestSchema }),
   z.object({ method: z.literal("git-merge-to-main"), params: gitMergeToMainRequestSchema }),
+  z.object({ method: z.literal("git-push-to-remote"), params: gitPushToRemoteRequestSchema }),
   z.object({ method: z.literal("git-tests-run"), params: gitTestsRunRequestSchema }),
   z.object({ method: z.literal("git-diff-snapshot"), params: gitDiffSnapshotRequestSchema }),
   z.object({ method: z.literal("fs-browse"), params: fsBrowseRequestSchema }),
@@ -212,6 +230,7 @@ export const hostRpcMethodSchema = z.enum([
   "git-worktree-create",
   "git-worktree-remove",
   "git-merge-to-main",
+  "git-push-to-remote",
   "git-tests-run",
   "git-diff-snapshot",
   "fs-browse",
@@ -234,6 +253,7 @@ export const hostRpcResponseSchema = z.union([
   z.object({ ok: z.literal(true), method: z.literal("git-worktree-create"), result: gitWorktreeCreateResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("git-worktree-remove"), result: gitWorktreeRemoveResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("git-merge-to-main"), result: gitMergeToMainResponseSchema }),
+  z.object({ ok: z.literal(true), method: z.literal("git-push-to-remote"), result: gitPushToRemoteResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("git-tests-run"), result: gitTestsRunResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("git-diff-snapshot"), result: gitDiffSnapshotResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("fs-browse"), result: fsBrowseResponseSchema }),
@@ -258,6 +278,7 @@ export const HOST_RPC_METHODS = [
   "git-worktree-create",
   "git-worktree-remove",
   "git-merge-to-main",
+  "git-push-to-remote",
   "git-tests-run",
   "git-diff-snapshot",
   "fs-browse",

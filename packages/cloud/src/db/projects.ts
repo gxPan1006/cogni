@@ -47,6 +47,7 @@ function rowToProject(r: typeof projects.$inferSelect): Project {
     testCommand: r.testCommand,
     concurrencyLimit: r.concurrencyLimit,
     systemPrompt: r.systemPrompt,
+    pushToRemote: r.pushToRemote,
     archivedAt: r.archivedAt ? r.archivedAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
@@ -110,6 +111,7 @@ export interface CreateProjectInput {
   testCommand?: string;
   concurrencyLimit?: number;
   systemPrompt?: string;
+  pushToRemote?: boolean;
 }
 
 export async function createProject(db: AnyDb, input: CreateProjectInput): Promise<Project> {
@@ -126,6 +128,7 @@ export async function createProject(db: AnyDb, input: CreateProjectInput): Promi
       testCommand: input.testCommand ?? null,
       concurrencyLimit: input.concurrencyLimit ?? 2,
       systemPrompt: input.systemPrompt ?? null,
+      pushToRemote: input.pushToRemote ?? false,
     })
     .returning();
   return rowToProject(row!);
@@ -171,6 +174,7 @@ export interface UpdateProjectPatch {
   testCommand?: string | null;
   concurrencyLimit?: number;
   systemPrompt?: string | null;
+  pushToRemote?: boolean;
 }
 
 export async function updateProject(
@@ -187,6 +191,7 @@ export async function updateProject(
   if (patch.testCommand !== undefined) updates.testCommand = patch.testCommand;
   if (patch.concurrencyLimit !== undefined) updates.concurrencyLimit = patch.concurrencyLimit;
   if (patch.systemPrompt !== undefined) updates.systemPrompt = patch.systemPrompt;
+  if (patch.pushToRemote !== undefined) updates.pushToRemote = patch.pushToRemote;
   const [row] = await db
     .update(projects)
     .set(updates)

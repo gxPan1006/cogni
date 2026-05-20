@@ -15,6 +15,7 @@ function depsWith(overrides: Partial<RpcDeps>): RpcDeps {
     gitWorktreeCreate: must("gitWorktreeCreate"),
     gitWorktreeRemove: must("gitWorktreeRemove"),
     gitMergeToMain: must("gitMergeToMain"),
+    gitPushToRemote: must("gitPushToRemote"),
     gitTestsRun: must("gitTestsRun"),
     gitDiffSnapshot: must("gitDiffSnapshot"),
     fsBrowse: must("fsBrowse"),

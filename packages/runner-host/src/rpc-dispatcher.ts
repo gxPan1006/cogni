@@ -31,6 +31,8 @@ import {
   type GitWorktreeRemoveResponse,
   type GitMergeToMainRequest,
   type GitMergeToMainResponse,
+  type GitPushToRemoteRequest,
+  type GitPushToRemoteResponse,
   type GitTestsRunRequest,
   type GitTestsRunResponse,
   type GitDiffSnapshotRequest,
@@ -49,6 +51,7 @@ export interface RpcDeps {
   gitWorktreeCreate: (req: GitWorktreeCreateRequest) => Promise<GitWorktreeCreateResponse>;
   gitWorktreeRemove: (req: GitWorktreeRemoveRequest) => Promise<GitWorktreeRemoveResponse>;
   gitMergeToMain: (req: GitMergeToMainRequest) => Promise<GitMergeToMainResponse>;
+  gitPushToRemote: (req: GitPushToRemoteRequest) => Promise<GitPushToRemoteResponse>;
   gitTestsRun: (req: GitTestsRunRequest) => Promise<GitTestsRunResponse>;
   gitDiffSnapshot: (req: GitDiffSnapshotRequest) => Promise<GitDiffSnapshotResponse>;
   fsBrowse: (req: FsBrowseRequest) => Promise<FsBrowseResponse>;
@@ -104,6 +107,8 @@ async function routeRpc(frame: HostRpcRequest, deps: RpcDeps): Promise<HostRpcRe
       return { ok: true, method: frame.method, result: await deps.gitWorktreeRemove(frame.params) };
     case "git-merge-to-main":
       return { ok: true, method: frame.method, result: await deps.gitMergeToMain(frame.params) };
+    case "git-push-to-remote":
+      return { ok: true, method: frame.method, result: await deps.gitPushToRemote(frame.params) };
     case "git-tests-run":
       return { ok: true, method: frame.method, result: await deps.gitTestsRun(frame.params) };
     case "git-diff-snapshot":

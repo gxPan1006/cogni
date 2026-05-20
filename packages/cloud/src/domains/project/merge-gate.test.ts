@@ -11,6 +11,7 @@ function fakeProject(over: Partial<Project> = {}): Project {
     threadId: null,
     mergePolicy: "require-review",
     testCommand: null, concurrencyLimit: 2, systemPrompt: null,
+    pushToRemote: false,
     archivedAt: null,
     createdAt: "2026-05-19T00:00:00.000Z",
     updatedAt: "2026-05-19T00:00:00.000Z",
@@ -74,6 +75,42 @@ describe("merge-gate: auto-merge policy", () => {
     );
     expect(out).toBe("done");
     expect(calls).toEqual(["git-merge-to-main", "git-worktree-remove"]);
+  });
+
+  it("pushToRemote=true: pushes main between merge and worktree-remove", async () => {
+    const calls: HostRpcRequest["method"][] = [];
+    const { rpc } = mkRpc(async (req) => {
+      calls.push(req.method);
+      if (req.method === "git-merge-to-main") return { ok: true, method: req.method, result: { ok: true } };
+      if (req.method === "git-push-to-remote") return { ok: true, method: req.method, result: { ok: true } };
+      if (req.method === "git-worktree-remove") return { ok: true, method: req.method, result: { removed: true } };
+      throw new Error(`unexpected ${req.method}`);
+    });
+    const out = await evaluateAndApplyMergeGate(
+      { hostRpc: rpc },
+      fakeProject({ mergePolicy: "auto-merge", pushToRemote: true }),
+      fakeTask(),
+    );
+    expect(out).toBe("done");
+    expect(calls).toEqual(["git-merge-to-main", "git-push-to-remote", "git-worktree-remove"]);
+  });
+
+  it("pushToRemote=true but push fails: still done (best-effort), worktree still cleaned", async () => {
+    const calls: HostRpcRequest["method"][] = [];
+    const { rpc } = mkRpc(async (req) => {
+      calls.push(req.method);
+      if (req.method === "git-merge-to-main") return { ok: true, method: req.method, result: { ok: true } };
+      if (req.method === "git-push-to-remote") return { ok: true, method: req.method, result: { ok: false, message: "no 'origin' remote configured" } };
+      if (req.method === "git-worktree-remove") return { ok: true, method: req.method, result: { removed: true } };
+      throw new Error(`unexpected ${req.method}`);
+    });
+    const out = await evaluateAndApplyMergeGate(
+      { hostRpc: rpc },
+      fakeProject({ mergePolicy: "auto-merge", pushToRemote: true }),
+      fakeTask(),
+    );
+    expect(out).toBe("done"); // push failure is non-fatal
+    expect(calls).toEqual(["git-merge-to-main", "git-push-to-remote", "git-worktree-remove"]);
   });
 
   it("returns reviewing when merge returns ok=false (conflict)", async () => {

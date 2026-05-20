@@ -104,6 +104,14 @@ export interface Project {
   testCommand: string | null;
   concurrencyLimit: number;
   systemPrompt: string | null;
+  /**
+   * SP-3+1: when true, after a task's branch merges into the project's main
+   * the host also runs `git push origin main`, so accepted work syncs to the
+   * remote (e.g. GitHub) without a manual push. Default false — a project on a
+   * repo with no `origin` remote, or one the user wants to keep local, just
+   * skips the push.
+   */
+  pushToRemote: boolean;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -122,6 +130,7 @@ export const projectSchema: z.ZodType<Project> = z.object({
   testCommand: z.string().nullable(),
   concurrencyLimit: z.number().int().min(1).max(16),
   systemPrompt: z.string().nullable(),
+  pushToRemote: z.boolean(),
   archivedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),

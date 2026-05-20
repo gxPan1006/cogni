@@ -43,6 +43,7 @@ const validProject = {
   testCommand: null,
   concurrencyLimit: 2,
   systemPrompt: null,
+  pushToRemote: false,
   archivedAt: null,
   createdAt: "2026-05-19T00:00:00Z",
   updatedAt: "2026-05-19T00:00:00Z",

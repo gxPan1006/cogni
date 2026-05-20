@@ -36,6 +36,8 @@ import type {
   GitWorktreeRemoveResponse,
   GitMergeToMainRequest,
   GitMergeToMainResponse,
+  GitPushToRemoteRequest,
+  GitPushToRemoteResponse,
   GitTestsRunRequest,
   GitTestsRunResponse,
   GitDiffSnapshotRequest,
@@ -291,6 +293,38 @@ export async function gitMergeToMain(
   // fail ("checked out at <worktree>"). Branch cleanup is deferred to
   // gitWorktreeRemove (called right after this in the accept/auto-merge flow),
   // which deletes the branch once the worktree is gone. See spec §七 / tbd #3a.
+  return { ok: true };
+}
+
+// ─── Handler: gitPushToRemote ──────────────────────────────────────────────
+
+/**
+ * Push the project's main branch to its remote (SP-3+1 tbd #3b). Called after
+ * a successful merge when `project.pushToRemote` is on. Recoverable failures
+ * (no remote configured, auth rejected, non-fast-forward) come back as
+ * `ok: false` with the stderr tail rather than throwing — the merge already
+ * succeeded locally, so this is a best-effort sync the UI can surface without
+ * the task itself failing.
+ */
+export async function gitPushToRemote(
+  req: GitPushToRemoteRequest,
+): Promise<GitPushToRemoteResponse> {
+  await assertIsGitRepo(req.repoPath);
+  const remote = req.remote ?? "origin";
+  // Fail fast + clearly when the repo has no such remote (common: a local-only
+  // test repo). `git push` would also error, but this gives a tidy message.
+  const remotes = await execa("git", ["-C", req.repoPath, "remote"], { reject: false });
+  if (remotes.exitCode !== 0 || !remotes.stdout.split("\n").map((s) => s.trim()).includes(remote)) {
+    return { ok: false, message: `no '${remote}' remote configured` };
+  }
+  const push = await execa(
+    "git",
+    ["-C", req.repoPath, "push", remote, req.branch],
+    { reject: false },
+  );
+  if (push.exitCode !== 0) {
+    return { ok: false, message: push.stderr || push.stdout || `git push exited ${push.exitCode}` };
+  }
   return { ok: true };
 }
 

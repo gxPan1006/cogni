@@ -117,6 +117,30 @@ export async function evaluateAndApplyMergeGate(
     return "reviewing";
   }
 
+  // Merge succeeded. If the project opts into remote sync, push main now —
+  // best-effort: a failed push (no remote, auth, non-ff) is logged but does
+  // NOT fail the task. The merge already landed locally; the user can push
+  // manually or fix the remote and the next accepted task will push again.
+  if (project.pushToRemote) {
+    try {
+      const pushResult = await deps.hostRpc.gitPushToRemote(task.hostId, {
+        repoPath: project.repoPath,
+        branch: "main",
+      });
+      if (!pushResult.ok) {
+        deps.logger?.warn?.(
+          { taskId: task.id, message: pushResult.message },
+          "merge-gate: push-to-remote returned ok=false (merge kept; remote not synced)",
+        );
+      }
+    } catch (err) {
+      deps.logger?.warn?.(
+        { taskId: task.id, err: err instanceof HostRpcError ? err.message : String(err) },
+        "merge-gate: push-to-remote RPC threw (merge kept; remote not synced)",
+      );
+    }
+  }
+
   // Merge succeeded — clean up the worktree. Failure here is non-fatal; the
   // task is still functionally done, just leaves a stale worktree on disk
   // (orchestrator's reconcile pass will retry on a later tick if we add that).

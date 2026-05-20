@@ -21,6 +21,8 @@ export interface CreateProjectInput {
   testCommand?: string;
   concurrencyLimit?: number;
   systemPrompt?: string;
+  /** Auto-push main to origin after each accepted task merges. */
+  pushToRemote?: boolean;
   /** Ask the host to `git init` if `repoPath` is not already a repo. */
   initRepo?: boolean;
 }
@@ -33,6 +35,7 @@ export interface UpdateProjectInput {
   concurrencyLimit?: number;
   systemPrompt?: string | null;
   defaultHostId?: string;
+  pushToRemote?: boolean;
 }
 
 export interface CreateTaskInput {

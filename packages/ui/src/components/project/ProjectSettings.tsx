@@ -47,6 +47,7 @@ export function ProjectSettings({
   const [concurrency, setConcurrency] = useState(2);
   const [prompt, setPrompt] = useState("");
   const [mergePolicy, setMergePolicy] = useState<MergePolicy>("require-review");
+  const [pushToRemote, setPushToRemote] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
 
   // Rehydrate form state when the project row updates (e.g. WS push from
@@ -59,6 +60,7 @@ export function ProjectSettings({
     setConcurrency(project.concurrencyLimit);
     setPrompt(project.systemPrompt ?? "");
     setMergePolicy(project.mergePolicy);
+    setPushToRemote(project.pushToRemote);
   }, [project]);
 
   if (!project) {
@@ -94,7 +96,7 @@ export function ProjectSettings({
   const saveBasics = () =>
     void onUpdate?.({ name, description: description || null });
   const saveRunner = () =>
-    void onUpdate?.({ defaultHostId: hostId, concurrencyLimit: concurrency, mergePolicy });
+    void onUpdate?.({ defaultHostId: hostId, concurrencyLimit: concurrency, mergePolicy, pushToRemote });
   const savePrompt = () =>
     void onUpdate?.({ systemPrompt: prompt || null });
 
@@ -163,6 +165,17 @@ export function ProjectSettings({
                   <button className="btn btn-sm btn-ghost" onClick={() => setConcurrency(Math.min(16, concurrency + 1))} disabled={concurrency >= 16}>+</button>
                 </div>
                 <div className="field__hint">超过的任务自动进队列,等空位。</div>
+              </div>
+              <div className="ps__field">
+                <label className="ps__check">
+                  <input
+                    type="checkbox"
+                    checked={pushToRemote}
+                    onChange={(e) => setPushToRemote(e.target.checked)}
+                  />
+                  <span>合并后 push 到 remote</span>
+                </label>
+                <div className="field__hint">任务 Accept 合并到 main 后,自动 `git push origin main`。仓库没配 remote 时静默跳过。</div>
               </div>
               <SaveBar onSave={saveRunner} />
             </div>

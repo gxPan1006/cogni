@@ -42,6 +42,7 @@ CREATE TABLE projects (
   test_command text,
   concurrency_limit integer not null default 2,
   system_prompt text,
+  push_to_remote boolean not null default false,
   archived_at timestamp,
   created_at timestamp not null default now(),
   updated_at timestamp not null default now()

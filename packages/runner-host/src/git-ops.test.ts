@@ -19,6 +19,7 @@ import {
   gitWorktreeCreate,
   gitWorktreeRemove,
   gitMergeToMain,
+  gitPushToRemote,
   gitTestsRun,
   gitDiffSnapshot,
   GitOpError,
@@ -236,6 +237,30 @@ describe("gitMergeToMain", () => {
     const res = await gitMergeToMain({ repoPath: repo, branchName: "task/conflict" });
     expect(res.ok).toBe(false);
     expect(res.message).toBeTruthy();
+  });
+});
+
+describe("gitPushToRemote", () => {
+  it.skipIf(!hasGit)("pushes main to a configured remote", async () => {
+    const repo = await bootstrapRepo();
+    // Bare repo to act as the remote.
+    const remote = join(tmp, "remote.git");
+    await execa("git", ["init", "--bare", remote], { reject: true });
+    await execa("git", ["-C", repo, "remote", "add", "origin", remote], { reject: true });
+
+    const res = await gitPushToRemote({ repoPath: repo, branch: "main" });
+    expect(res.ok).toBe(true);
+    // The bare remote should now have the main branch at the same commit.
+    const remoteHead = await execa("git", ["-C", remote, "rev-parse", "main"], { reject: false });
+    const localHead = await execa("git", ["-C", repo, "rev-parse", "main"], { reject: false });
+    expect(remoteHead.stdout.trim()).toBe(localHead.stdout.trim());
+  });
+
+  it.skipIf(!hasGit)("returns ok=false (not throw) when no remote is configured", async () => {
+    const repo = await bootstrapRepo();
+    const res = await gitPushToRemote({ repoPath: repo, branch: "main" });
+    expect(res.ok).toBe(false);
+    expect(res.message).toMatch(/no 'origin' remote/);
   });
 });
 

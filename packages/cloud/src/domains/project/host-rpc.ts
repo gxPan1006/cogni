@@ -31,6 +31,8 @@ import type {
   GitWorktreeRemoveResponse,
   GitMergeToMainRequest,
   GitMergeToMainResponse,
+  GitPushToRemoteRequest,
+  GitPushToRemoteResponse,
   GitTestsRunRequest,
   GitTestsRunResponse,
   GitDiffSnapshotRequest,
@@ -91,6 +93,9 @@ export class HostRpcClient {
   }
   async gitMergeToMain(hostId: string, params: GitMergeToMainRequest): Promise<GitMergeToMainResponse> {
     return this.call(hostId, "git-merge-to-main", params) as Promise<GitMergeToMainResponse>;
+  }
+  async gitPushToRemote(hostId: string, params: GitPushToRemoteRequest): Promise<GitPushToRemoteResponse> {
+    return this.call(hostId, "git-push-to-remote", params) as Promise<GitPushToRemoteResponse>;
   }
   async gitTestsRun(hostId: string, params: GitTestsRunRequest): Promise<GitTestsRunResponse> {
     return this.call(hostId, "git-tests-run", params) as Promise<GitTestsRunResponse>;

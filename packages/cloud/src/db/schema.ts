@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, jsonb, unique, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, jsonb, unique, index, boolean } from "drizzle-orm/pg-core";
 
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -132,6 +132,8 @@ export const projects = pgTable("projects", {
   testCommand: text("test_command"),
   concurrencyLimit: integer("concurrency_limit").notNull().default(2),
   systemPrompt: text("system_prompt"),
+  // SP-3+1: push main to origin after a task merges (see Project.pushToRemote).
+  pushToRemote: boolean("push_to_remote").notNull().default(false),
   archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

@@ -68,6 +68,7 @@ const createProjectSchema = z.object({
   testCommand: z.string().optional(),
   concurrencyLimit: z.number().int().min(1).max(16).optional(),
   systemPrompt: z.string().optional(),
+  pushToRemote: z.boolean().optional(),
   /** Tell the domain to run `git-init-if-missing` after row insert. */
   initGit: z.boolean().optional(),
 });
@@ -80,6 +81,7 @@ const updateProjectSchema = z.object({
   testCommand: z.string().nullable().optional(),
   concurrencyLimit: z.number().int().min(1).max(16).optional(),
   systemPrompt: z.string().nullable().optional(),
+  pushToRemote: z.boolean().optional(),
 });
 
 const createTaskSchema = z.object({
@@ -235,6 +237,7 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
         testCommand: parsed.data.testCommand,
         concurrencyLimit: parsed.data.concurrencyLimit,
         systemPrompt: parsed.data.systemPrompt,
+        pushToRemote: parsed.data.pushToRemote,
       });
       return c.json(project, 201);
     } catch (err) {

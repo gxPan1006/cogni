@@ -9,6 +9,7 @@ import {
   gitWorktreeCreate,
   gitWorktreeRemove,
   gitMergeToMain,
+  gitPushToRemote,
   gitTestsRun,
   gitDiffSnapshot,
 } from "./git-ops.js";
@@ -36,6 +37,7 @@ connectToCloud(config, manager, (req) =>
     gitWorktreeCreate,
     gitWorktreeRemove,
     gitMergeToMain,
+    gitPushToRemote,
     gitTestsRun,
     gitDiffSnapshot,
     fsBrowse,
