@@ -170,3 +170,36 @@
   margin: 0;
   font-family: var(--font-mono); font-size: 12px;
 }
+
+/* ── Mobile / narrow viewport ──────────────────
+   The 220px side-nav + body grid can't both fit on a phone, so the nav becomes
+   a horizontal scrolling strip across the top and the body takes the full
+   width with tighter gutters. */
+@media (max-width: 768px) {
+  /* minmax(0,1fr) (not 1fr) lets the single column shrink below the nav's
+     min-content, so the nowrap menu strip scrolls internally instead of
+     blowing the grid wider than the viewport. */
+  .settings { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .settings__nav {
+    min-width: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+    padding: 12px;
+    flex-direction: column; gap: 10px;
+  }
+  .settings__title { padding: 0 4px 4px; }
+  .settings__body { min-width: 0; }
+  .settings__menu {
+    flex-direction: row;
+    gap: 6px;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .settings__menu::-webkit-scrollbar { display: none; }
+  .settings__menu-item { flex-shrink: 0; white-space: nowrap; }
+  .settings__body { padding: 22px 16px; }
+  .settings-card__row { flex-wrap: wrap; }
+  .settings-card__kv { grid-template-columns: 84px 1fr; gap: 6px 16px; }
+}

@@ -55,3 +55,13 @@
 }
 .welcome__chip:hover { background: var(--bg-sunk); color: var(--ink); }
 .welcome__chip-icon { display: inline-flex; color: var(--muted); }
+
+/* ── Mobile / narrow viewport ──────────────────
+   The 44px display greeting overflows a phone; scale it (and the gutters)
+   down so the hero + composer fit without horizontal scroll. */
+@media (max-width: 768px) {
+  .welcome { padding: 16px; align-items: flex-start; }
+  .welcome__inner { padding-top: 8px; }
+  .welcome__greeting { font-size: 30px; }
+  .welcome__subtitle { font-size: 15px; margin-bottom: 24px; }
+}

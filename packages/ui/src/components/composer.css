@@ -132,3 +132,11 @@
 .composer__send:disabled {
   background: var(--line); color: var(--muted-2); cursor: not-allowed;
 }
+
+/* ── Mobile / narrow viewport ──────────────────
+   Match the conversation's tighter side gutters; keep a 16px font on the
+   input so iOS Safari doesn't zoom the page when it focuses. */
+@media (max-width: 768px) {
+  .composer-region { padding: 0 16px 16px; }
+  .composer__input { font-size: 16px; }
+}

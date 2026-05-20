@@ -44,6 +44,7 @@ export const Icon = {
     <rect x="3" y="4" width="18" height="16" rx="2" />
     <path d="M9 4v16" />
   </>),
+  menu:    wrap(<path d="M4 6h16M4 12h16M4 18h16" />),
   more:    wrap(<path d="M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm0-6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm0 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" />, 0, "currentColor"),
   tool:    wrap(<path d="M14.7 6.3a4 4 0 0 0 5 5l-1.7 1.7-9 9a2 2 0 1 1-3-3l9-9z" />),
   brain:   wrap(<path d="M9 4a3 3 0 0 0-3 3v.5A2.5 2.5 0 0 0 3.5 10v1A2.5 2.5 0 0 0 6 13.5V14a3 3 0 0 0 3 3v3a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-3a3 3 0 0 0 3-3v-.5a2.5 2.5 0 0 0 2.5-2.5V10A2.5 2.5 0 0 0 18 7.5V7a3 3 0 0 0-3-3" />),

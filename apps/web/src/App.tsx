@@ -32,7 +32,7 @@ import {
   Login, Sidebar, Conversation, Welcome, SettingsPage,
   ProjectsList, ProjectBoard, TaskDetail,
   NewProject, NewTask, ProjectSettings,
-  useProjects, useProjectBoard,
+  useProjects, useProjectBoard, Icon,
   type HostInfo, type ProjectListItem, type NewProjectDraft, type NewTaskDraft,
 } from "@cogni/ui";
 import { api, ApiError } from "./api.js";
@@ -94,6 +94,14 @@ function WebShell({ page }: { page: Page }) {
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [hosts, setHosts] = useState<HostInfo[]>([]);
   const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(null);
+
+  // Mobile drawer: the left rail is off-canvas on narrow viewports and the
+  // ☰ button in the top bar slides it in. Any route change (picking a thread /
+  // project, opening settings) auto-closes it so the destination is visible.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [params.threadId, params.projectId, page]);
 
   const mode: "chat" | "project" =
     page === "projects" || page === "project" || page === "project-settings"
@@ -282,9 +290,17 @@ function WebShell({ page }: { page: Page }) {
     } catch (e) { handleApiError(e); }
   };
 
+  const currentTitle =
+    page === "settings" ? "设置"
+    : mode === "project" ? "项目"
+    : params.threadId ? (threads.find((t) => t.id === params.threadId)?.title ?? "对话")
+    : "对话";
+
   return (
     <div className="layout">
       <Sidebar
+        open={sidebarOpen}
+        onNavigate={() => setSidebarOpen(false)}
         mode={mode}
         onMode={(m) => nav(m === "chat" ? "/chat" : "/projects")}
         threads={threads}
@@ -302,7 +318,24 @@ function WebShell({ page }: { page: Page }) {
         hosts={hostStats}
         user={user}
       />
+      {sidebarOpen && (
+        <button
+          className="layout__scrim"
+          aria-label="关闭菜单"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       <div className="main">
+        <header className="mobile-topbar">
+          <button
+            className="mobile-topbar__menu"
+            aria-label="打开菜单"
+            onClick={() => setSidebarOpen(true)}
+          >
+            {Icon.menu}
+          </button>
+          <span className="mobile-topbar__title">{currentTitle}</span>
+        </header>
         {page === "settings" && (
           <SettingsPage api={api} user={user} onClose={() => nav("/chat")} />
         )}

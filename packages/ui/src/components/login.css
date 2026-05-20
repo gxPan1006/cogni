@@ -173,3 +173,18 @@
   text-underline-offset: 2px;
 }
 .login__link:hover { color: var(--accent); }
+
+/* ── Mobile / narrow viewport ──────────────────
+   The two-column landing (flex brand panel + fixed 480px form column) can't
+   fit a phone, so the decorative panel drops away and the form card takes the
+   full width, centered. 16px input avoids the iOS focus-zoom. */
+@media (max-width: 768px) {
+  .login { flex-direction: column; height: 100vh; }
+  .login__aside { display: none; }
+  .login__form-col {
+    flex: 1;
+    padding: 24px 16px;
+  }
+  .login__card { max-width: 420px; padding: 28px 22px; }
+  .login__input { font-size: 16px; }
+}

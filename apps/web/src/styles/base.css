@@ -158,3 +158,77 @@ html, body, #root { height: 100%; }
   display: flex; flex-direction: column;
   overflow: hidden;
 }
+
+/* Mobile top bar — only rendered/visible on narrow viewports (web shell).
+   Hosts the ☰ drawer toggle + the current view's title. On desktop it is
+   collapsed entirely so the layout matches the original two-pane look. */
+.mobile-topbar { display: none; }
+.mobile-topbar__menu {
+  width: 34px; height: 34px;
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; background: transparent;
+  border-radius: var(--r-2);
+  color: var(--ink); font-size: 20px;
+  cursor: pointer;
+}
+.mobile-topbar__menu:hover { background: var(--bg-sunk); }
+.mobile-topbar__title {
+  flex: 1; min-width: 0;
+  font-size: 15px; font-weight: 600;
+  letter-spacing: -0.006em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Drawer scrim — dims the page behind the slid-in rail. */
+.layout__scrim { display: none; }
+
+/* ── Mobile / narrow viewport ──────────────────
+   The fixed 280px rail would crush the main pane on a phone, so below 768px
+   the rail goes off-canvas and slides in over a scrim. The top bar gives the
+   user the ☰ affordance and reclaims the full width for content. */
+@media (max-width: 768px) {
+  .layout > .sb {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 60;
+    width: min(86vw, 320px);
+    transform: translateX(-100%);
+    transition: transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+    box-shadow: var(--shadow-3);
+    will-change: transform;
+  }
+  .layout > .sb.sb--open { transform: translateX(0); }
+
+  .layout__scrim {
+    display: block;
+    position: fixed; inset: 0;
+    z-index: 55;
+    border: 0; padding: 0;
+    background: oklch(0% 0 0 / 0.4);
+    animation: scrim-fade 0.18s ease-out;
+    cursor: pointer;
+  }
+
+  .mobile-topbar {
+    display: flex; align-items: center; gap: 8px;
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--surface-2);
+  }
+
+  /* The page that fills the rest of .main: drop its hard height:100% (it now
+     shares the column with the top bar) and let flex give it the remainder. */
+  .layout > .main > :not(.mobile-topbar) {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+  }
+
+  /* 16px text fields stop iOS Safari from auto-zooming the page on focus. */
+  .input,
+  .sb__search-input,
+  .projects-list__search-input { font-size: 16px; }
+}
+@keyframes scrim-fade { from { opacity: 0; } }

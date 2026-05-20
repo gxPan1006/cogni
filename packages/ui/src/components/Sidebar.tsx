@@ -59,17 +59,36 @@ export function Sidebar(props: {
   onOpenSettings?: () => void;
   hosts?: { online: number; total: number };
   user?: { name: string; email: string };
+
+  /**
+   * Mobile drawer state. On narrow viewports the rail is positioned off-canvas
+   * and slides in when `open` is true; on desktop the flag is ignored (the rail
+   * is a static column). Defaults to closed.
+   */
+  open?: boolean;
+  /**
+   * Called after the user picks something that takes them somewhere (open a
+   * thread/project, start a new one, open settings). The host uses this to
+   * dismiss the mobile drawer so the destination is visible. Switching mode or
+   * renaming/deleting in place does NOT fire it — the user stays in the rail.
+   */
+  onNavigate?: () => void;
 }) {
   const user = props.user ?? { name: "Cogni", email: "" };
   const initial = user.name.slice(0, 1).toUpperCase();
 
   const isChat = props.mode === "chat";
-  const newAction  = isChat ? props.onNewChat : (props.onNewProject ?? (() => {}));
+  // Wrap navigating actions so the mobile drawer closes on its way to the
+  // destination. No-op on desktop (onNavigate just clears already-false state).
+  const goThenClose = (fn: () => void) => () => { fn(); props.onNavigate?.(); };
+  const newAction  = goThenClose(isChat ? props.onNewChat : (props.onNewProject ?? (() => {})));
   const newLabel   = isChat ? "新对话" : "新项目";
   const searchHint = isChat ? "搜索对话" : "搜索项目";
+  const selectThread = (id: string) => { props.onSelect(id); props.onNavigate?.(); };
+  const selectProject = (id: string) => { props.onSelectProject?.(id); props.onNavigate?.(); };
 
   return (
-    <aside className="sb">
+    <aside className={"sb" + (props.open ? " sb--open" : "")}>
       <div className="sb__head">
         <Wordmark size={22} />
       </div>
@@ -98,7 +117,9 @@ export function Sidebar(props: {
       </button>
 
       <div className="sb__body">
-        {isChat ? <ChatLists {...props} /> : <ProjectLists {...props} />}
+        {isChat
+          ? <ChatLists {...props} onSelect={selectThread} />
+          : <ProjectLists {...props} onSelectProject={selectProject} />}
       </div>
 
       {props.hosts && (
@@ -108,7 +129,7 @@ export function Sidebar(props: {
         </div>
       )}
 
-      <button className="sb__user" onClick={() => props.onOpenSettings?.()}>
+      <button className="sb__user" onClick={() => { props.onOpenSettings?.(); props.onNavigate?.(); }}>
         <span className="sb__avatar">{initial}</span>
         <span className="sb__user-text">
           <span className="sb__user-name">{user.name}</span>

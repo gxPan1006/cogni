@@ -97,3 +97,11 @@
   margin: 8px 0;
   font-size: 14px;
 }
+
+/* ── Mobile / narrow viewport ──────────────────
+   The 32px message gutters waste space on a phone; pull them in so bubbles
+   use the full width. */
+@media (max-width: 768px) {
+  .conversation__scroll { padding: 16px 0 16px; }
+  .conversation__list { padding: 0 16px; }
+}

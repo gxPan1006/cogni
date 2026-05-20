@@ -357,3 +357,24 @@
   color: oklch(28% 0.04 60);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+
+/* ── Mobile / narrow viewport ──────────────────
+   The 5-column Kanban grid (min 240px each) needs ~1200px, so on a phone the
+   columns stack into a single readable scroll. Header/body gutters shrink, and
+   the dense pod meters / timeline (built for wide screens) are allowed to
+   scroll horizontally rather than crush. */
+@media (max-width: 768px) {
+  .project__head { padding: 16px 16px 12px; flex-wrap: wrap; gap: 10px; }
+  .project__body { padding: 16px; }
+
+  .kb-cols { grid-template-columns: 1fr; gap: 20px; }
+
+  .sw__grid { grid-template-columns: 1fr; }
+  .pod__meters { grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  /* Timeline is a wide, fixed-track view — let it scroll inside its card. */
+  .tl { overflow-x: auto; }
+  .tl__axis { padding-left: 120px; }
+  .tl__now { transform: translateX(calc(120px - 50%)); }
+  .tl__row { grid-template-columns: 120px 1fr; }
+}

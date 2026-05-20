@@ -263,3 +263,16 @@
   border-radius: var(--r-2);
 }
 .projects-list__empty-active-text { flex: 1; font-size: 13px; color: var(--muted); }
+
+/* ── Mobile / narrow viewport ──────────────────
+   Stack the head (title + search) and let project cards fill the width with
+   tighter gutters. */
+@media (max-width: 768px) {
+  .projects-list__head {
+    flex-direction: column; align-items: stretch; gap: 12px;
+    padding: 18px 16px 12px;
+  }
+  .projects-list__search { min-width: 0; }
+  .projects-list__body { padding: 8px 16px 32px; }
+  .projects-list__grid { grid-template-columns: 1fr; }
+}
