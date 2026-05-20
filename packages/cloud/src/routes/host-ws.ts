@@ -6,7 +6,7 @@ import { hostToCloudSchema } from "@cogni/contract";
 import type { CloudToHost } from "@cogni/contract";
 // SP-3 additions for the host-RPC envelope plumbing below.
 import type { HostRpcRequest, HostRpcResponse } from "@cogni/contract";
-import { findHostByToken, setHostStatus } from "../db/hosts.js";
+import { findHostByToken, setHostStatus, setHostProjectsRoot } from "../db/hosts.js";
 import { hosts as hostsTable } from "../db/schema.js";
 import { logger } from "@cogni/shared";
 import type { ServerDeps } from "../server.js";
@@ -143,6 +143,17 @@ export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, de
                 hostId = host.id;
                 userId = host.userId;
                 await setHostStatus(deps.db, host.id, "online", msg.capabilities);
+                // SP-4: persist the host's reported projects-root so NewProject
+                // can pre-fill the repo path. Old hosts omit it → column stays
+                // NULL → no pre-fill (back-compat, no error).
+                if (msg.projectsRoot) {
+                  await setHostProjectsRoot(
+                    deps.db,
+                    host.id,
+                    msg.projectsRoot,
+                    msg.projectsRootLocked ?? false,
+                  );
+                }
                 deps.hosts.register({
                   hostId: host.id,
                   userId: host.userId,

@@ -41,6 +41,8 @@ import type {
   FsBrowseResponse,
   ReadFileRequest,
   ReadFileResponse,
+  SetProjectsRootRequest,
+  SetProjectsRootResponse,
   HostRpcMethod,
 } from "@cogni/contract";
 
@@ -110,6 +112,9 @@ export class HostRpcClient {
   }
   async readFile(hostId: string, params: ReadFileRequest): Promise<ReadFileResponse> {
     return this.call(hostId, "read-file", params) as Promise<ReadFileResponse>;
+  }
+  async setProjectsRoot(hostId: string, params: SetProjectsRootRequest): Promise<SetProjectsRootResponse> {
+    return this.call(hostId, "set-projects-root", params) as Promise<SetProjectsRootResponse>;
   }
 
   private async call(

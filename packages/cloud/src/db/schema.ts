@@ -43,6 +43,12 @@ export const hosts = pgTable("hosts", {
   status: text("status").notNull().default("offline"),
   registrationToken: text("registration_token").notNull().unique(),
   capabilitiesJson: jsonb("capabilities_json").notNull().default([]),
+  // SP-4 default-project-folder: the host's configured projects-root, used to
+  // pre-fill NewProject's repo path. NULL ⇢ host never reported one (old host)
+  // → NewProject simply doesn't pre-fill. `projectsRootLocked` mirrors the
+  // host's COGNI_PROJECTS_ROOT env pin (UI shows the field read-only).
+  projectsRoot: text("projects_root"),
+  projectsRootLocked: boolean("projects_root_locked").notNull().default(false),
   lastSeen: timestamp("last_seen"),
   // SP-2: soft delete. Filter `removedAt IS NULL` in user-visible lookups; keep
   // the row so historic runner_sessions / events keep a valid host_id reference.

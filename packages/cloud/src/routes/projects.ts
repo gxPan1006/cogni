@@ -210,6 +210,29 @@ async function ownedHost(
   return !!rows[0];
 }
 
+/**
+ * Like `ownedHost` but returns the full host row (needed by the projects-root
+ * route to re-broadcast host-meta with name/status/lastSeen). null on miss.
+ */
+async function ownedHostRow(
+  deps: ServerDeps,
+  hostId: string,
+  userId: string,
+): Promise<typeof hostsTable.$inferSelect | null> {
+  const rows = await deps.db
+    .select()
+    .from(hostsTable)
+    .where(
+      and(
+        eq(hostsTable.id, hostId),
+        eq(hostsTable.userId, userId),
+        isNull(hostsTable.removedAt),
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 // ─── Route registration ─────────────────────────────────────────────────────
 
 export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
@@ -645,6 +668,46 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
       const { status, body } = domainErrorResponse(err);
       return c.json(body, status);
     }
+  });
+
+  // ─── SP-4 default-project-folder: set a host's projects-root ──────────────
+  // Settings → Runner Hosts → "项目根目录" save button. The cloud forwards a
+  // set-projects-root RPC to the host, persists the host's ~-expanded answer,
+  // and pushes a host-meta update so every connected client refreshes the card.
+  // 502 when the host is offline / the RPC fails; the env-locked host returns
+  // its pinned root + locked:true (the write was a no-op).
+
+  app.put("/api/hosts/:id/projects-root", async (c) => {
+    const { userId } = c.get("claims");
+    const id = c.req.param("id");
+    const owned = await ownedHostRow(deps, id, userId);
+    if (!owned) return c.json({ error: "not found" }, 404);
+
+    const raw = await c.req.json().catch(() => ({}));
+    const parsed = z.object({ projectsRoot: z.string().min(1) }).safeParse(raw);
+    if (!parsed.success) return c.json({ error: "invalid projectsRoot" }, 400);
+
+    if (!deps.projectDomain) {
+      return c.json({ error: "project domain unavailable" }, 503);
+    }
+
+    let result: { projectsRoot: string; locked: boolean };
+    try {
+      result = await deps.projectDomain.setProjectsRoot(id, parsed.data.projectsRoot);
+    } catch (err) {
+      logger.warn({ hostId: id, err: String(err) }, "set projects-root RPC failed");
+      return c.json({ error: "host unavailable" }, 502);
+    }
+
+    const { setHostProjectsRoot } = await import("../db/hosts.js");
+    await setHostProjectsRoot(deps.db, id, result.projectsRoot, result.locked);
+    deps.clients.publishHostMeta(userId, {
+      hostId: id,
+      name: owned.name,
+      status: owned.status as "online" | "offline",
+      lastSeen: owned.lastSeen ? owned.lastSeen.toISOString() : null,
+    });
+    return c.json(result);
   });
 
   // ─── SP-4 Artifacts: project file browser (tree + file bytes) ─────────────
