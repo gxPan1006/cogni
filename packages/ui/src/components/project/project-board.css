@@ -364,7 +364,14 @@
    the dense pod meters / timeline (built for wide screens) are allowed to
    scroll horizontally rather than crush. */
 @media (max-width: 768px) {
-  .project__head { padding: 16px 16px 12px; flex-wrap: wrap; gap: 10px; }
+  /* Stack the header: side-by-side text + tools collapses the breadcrumb to a
+     near-zero column on a phone, so the CJK title wraps one char per line.
+     Full-width rows fix that and let the toolbar wrap below. */
+  .project__head {
+    padding: 16px 16px 12px;
+    flex-direction: column; align-items: stretch; gap: 12px;
+  }
+  .project__head-tools { flex-wrap: wrap; }
   .project__body { padding: 16px; }
 
   .kb-cols { grid-template-columns: 1fr; gap: 20px; }

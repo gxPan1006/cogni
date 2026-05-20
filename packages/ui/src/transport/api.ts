@@ -335,8 +335,15 @@ export class ApiClient {
       method: "POST", headers: this.authHeaders(), body: JSON.stringify(input),
     });
 
-  getProject = (id: string): Promise<Project> =>
-    this.request(`${this.cloudUrl}/api/projects/${id}`, { headers: this.authHeaders() });
+  // GET /api/projects/:id returns `{ project, taskCount }`; unwrap to the bare
+  // Project so callers (board breadcrumb, prefetch cache) get `.name`/`.id`
+  // directly. Without this `board.project.name` is undefined → "项目未找到".
+  getProject = async (id: string): Promise<Project> => {
+    const res = await this.request<{ project: Project; taskCount: number }>(
+      `${this.cloudUrl}/api/projects/${id}`, { headers: this.authHeaders() },
+    );
+    return res.project;
+  };
 
   updateProject = (id: string, patch: UpdateProjectInput): Promise<Project> =>
     this.request(`${this.cloudUrl}/api/projects/${id}`, {
