@@ -16,6 +16,7 @@
 import { useState } from "react";
 import type { ThreadSummary } from "@cogni/contract";
 import { Icon } from "./icons.js";
+import { LogoMark } from "./LogoMark.js";
 import "./sidebar.css";
 
 /**
@@ -380,12 +381,12 @@ function ProjectButton({ project, active, onClick, onPrefetch, dim }: { project:
   );
 }
 
-/* ─── Wordmark (unchanged from SP-2) ────────────────────── */
+/* ─── Wordmark ──────────────────────────────────────────── */
 
 function Wordmark({ size = 22 }: { size?: number }) {
   return (
     <div className="sb__wordmark" style={{ fontSize: size }}>
-      <span className="sb__wordmark-c" style={{ width: size, height: size, fontSize: size * 0.56 }}>c</span>
+      <LogoMark className="sb__wordmark-mark" size={size} />
       <span className="sb__wordmark-text" style={{ fontSize: size * 0.78 }}>cogni</span>
     </div>
   );

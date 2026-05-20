@@ -10,6 +10,13 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "trayIcon": {
+      "id": "main",
+      "iconPath": "icons/menubarTemplate.png",
+      "iconAsTemplate": true,
+      "showMenuOnLeftClick": false,
+      "tooltip": "Cogni"
+    },
     "windows": [
       {
         "title": "Cogni",
