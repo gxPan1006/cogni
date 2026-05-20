@@ -3,6 +3,7 @@
  *
  *   - <UserMessage>      a user's turn (a soft sand chip with markdown body)
  *   - <AssistantText>    the assistant's prose; supports markdown + streaming caret
+ *   - <AssistantBlocks>  one assistant turn: prose + interleaved tool-call pills
  *   - <ToolCallBlock>    one tool invocation; collapsible to show input + result
  *   - <PermissionPrompt> SP-3 permission-request UI
  *   - <ThinkingBlock>    reserved — runner adapters don't emit thinking events yet
@@ -10,20 +11,25 @@
  *   - <FallbackCard>     "preferred host is offline" inline prompt
  *   - <NoHostBanner>     "no host is online at all" hard banner
  *
- * Plus one helper:
- *
- *   - aggregateEvents(events): turns a flat RunnerEvent[] (from useThreadStream)
- *     into a list of renderable Block objects — pairing tool-call/tool-result by
- *     toolId, concatenating consecutive text deltas, and dropping no-ops.
+ * The pure timeline logic (aggregateEvents / splitTurns / buildTimeline) lives
+ * in `./chat-timeline.ts` — kept React/CSS-free so it is unit-testable — and is
+ * re-exported here for existing consumers.
  *
  * All blocks share the same left-edge column. There is no left rail or avatar
  * column — alignment is preserved by giving every block the same outer padding.
  */
 import { useState, type ReactNode } from "react";
-import type { RunnerEvent } from "@cogni/contract";
 import { Markdown } from "./Markdown.js";
 import { Icon } from "./icons.js";
+import { toolInputPreview, safeStringify, truncate, type Block } from "./chat-timeline.js";
 import "./chat-blocks.css";
+
+// Re-exported so existing consumers keep importing the timeline logic from
+// ChatBlocks; the implementation lives in the React-free chat-timeline module.
+export {
+  aggregateEvents, splitTurns, buildTimeline,
+  type Block, type TimelineRow, type Timeline,
+} from "./chat-timeline.js";
 
 // ─── Block components ────────────────────────────────────────────
 
@@ -45,6 +51,48 @@ export function AssistantText({ text, streaming }: { text: string; streaming?: b
         {streaming && <span className="msg__caret" aria-hidden="true" />}
       </div>
     </div>
+  );
+}
+
+/**
+ * One assistant turn rendered from its aggregated blocks: prose + interleaved
+ * tool-call pills (+ inline errors). Used for both the live, in-flight reply
+ * and every settled turn in history — the only difference is `streaming`,
+ * which draws the caret on the turn's last text block.
+ */
+export function AssistantBlocks({
+  blocks,
+  streaming = false,
+  errorClassName = "conversation__error",
+}: {
+  blocks: Block[];
+  streaming?: boolean;
+  errorClassName?: string;
+}) {
+  let lastTextIdx = -1;
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    if (blocks[i]?.kind === "text") { lastTextIdx = i; break; }
+  }
+  return (
+    <>
+      {blocks.map((b, i) => {
+        if (b.kind === "text") {
+          return <AssistantText key={i} text={b.text} streaming={streaming && i === lastTextIdx} />;
+        }
+        if (b.kind === "tool") {
+          return <ToolCallBlock key={i} name={b.name} input={b.input} result={b.result} status={b.status} />;
+        }
+        if (b.kind === "error") {
+          return (
+            <div key={i} className="msg msg--aux">
+              <div className={errorClassName}>⚠ {b.code}: {b.message}</div>
+            </div>
+          );
+        }
+        // permission — SP-3 dropped the mid-run permission UI (see Conversation).
+        return null;
+      })}
+    </>
   );
 }
 
@@ -80,7 +128,7 @@ export function ToolCallBlock({
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const inputPreview = typeof input === "string" ? input : safeStringify(input);
+  const inputPreview = toolInputPreview(input);
   const resultText = typeof result === "string" ? result : safeStringify(result);
 
   return (
@@ -221,86 +269,3 @@ export function NoHostBanner({ onOpenSettings }: { onOpenSettings?: () => void }
   );
 }
 
-// ─── Stream aggregator ───────────────────────────────────────────
-
-export type Block =
-  | { kind: "text"; text: string; streaming: boolean }
-  | { kind: "tool"; toolId: string; name: string; input: unknown; result?: unknown; status: "running" | "done" | "error" }
-  | { kind: "permission"; toolId: string; name: string; input: unknown }
-  | { kind: "error"; code: string; message: string };
-
-/**
- * Turn a flat RunnerEvent[] stream into a list of renderable blocks.
- *
- *   - Consecutive `text` events are concatenated into one running paragraph.
- *   - `tool-call` opens a tool block (status: running).
- *   - The matching `tool-result` (by toolId) settles it (status: done).
- *   - `permission-request` becomes its own block; the parent caller decides
- *     how to respond (e.g. show a PermissionPrompt and POST /permissions).
- *   - `error` becomes an inline error block.
- *   - `session-id` / `done` are dropped (purely lifecycle).
- *
- * The last text block has `streaming: true` until `done` arrives; the parent
- * caller is expected to know whether the stream is still live and pass that
- * state through to the rendered `<AssistantText streaming>` prop. To make
- * this clean we mark *every* text block as streaming and let the caller
- * decide; if you want the final settled view, the cloud broadcasts the
- * persisted assistant message *before* `done`, so consumers can just stop
- * rendering the streaming aggregate and switch to the message row.
- */
-export function aggregateEvents(events: RunnerEvent[]): Block[] {
-  const blocks: Block[] = [];
-  const hiddenToolIds = new Set<string>();
-  for (const e of events) {
-    if (e.type === "text") {
-      const last = blocks[blocks.length - 1];
-      if (last && last.kind === "text") {
-        last.text += e.text;
-      } else {
-        blocks.push({ kind: "text", text: e.text, streaming: true });
-      }
-    } else if (e.type === "tool-call") {
-      if (e.name === "AskUserQuestion") {
-        hiddenToolIds.add(e.toolId);
-        continue;
-      }
-      blocks.push({ kind: "tool", toolId: e.toolId, name: e.name, input: e.input, status: "running" });
-    } else if (e.type === "tool-result") {
-      if (hiddenToolIds.has(e.toolId)) continue;
-      const idx = findToolIdx(blocks, e.toolId);
-      const target = idx >= 0 ? blocks[idx] : undefined;
-      if (target && target.kind === "tool") {
-        target.result = e.output;
-        target.status = "done";
-      } else {
-        // Orphan result — render as its own block so we never silently drop data.
-        blocks.push({ kind: "tool", toolId: e.toolId, name: "unknown", input: undefined, result: e.output, status: "done" });
-      }
-    } else if (e.type === "permission-request") {
-      blocks.push({ kind: "permission", toolId: e.toolId, name: e.name, input: e.input });
-    } else if (e.type === "error") {
-      blocks.push({ kind: "error", code: e.code, message: e.message });
-    }
-  }
-  return blocks;
-}
-
-function findToolIdx(blocks: Block[], toolId: string): number {
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    const b = blocks[i];
-    if (b && b.kind === "tool" && b.toolId === toolId) return i;
-  }
-  return -1;
-}
-
-// ─── Internal helpers ────────────────────────────────────────────
-
-function safeStringify(v: unknown): string {
-  if (v === undefined) return "";
-  if (v === null) return "null";
-  try { return JSON.stringify(v); } catch { return String(v); }
-}
-
-function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n) + "\n…" : s;
-}

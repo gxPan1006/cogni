@@ -52,21 +52,22 @@
 }
 .thinking__body .md { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
 
-/* Tool call — condensed row + expandable body sharing the same border */
+/* Tool call — condensed outlined pill (same visual family as .thinking) +
+   expandable body sharing the same border. */
 .toolcall {
   display: flex; align-items: center; gap: 8px;
   width: 100%;
-  padding: 7px 12px;
-  background: var(--bg-sunk);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--r-2);
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
   cursor: pointer;
-  font: inherit; text-align: left; color: var(--ink);
-  transition: background .12s, border-color .12s;
+  font: inherit; text-align: left; color: var(--ink-2);
+  transition: background .12s, border-color .12s, color .12s;
 }
-.toolcall:hover { background: var(--surface-3); border-color: var(--line); }
+.toolcall:hover, .toolcall--open { background: var(--bg-sunk); color: var(--ink); }
 .toolcall--open {
-  border-radius: var(--r-2) var(--r-2) 0 0;
+  border-radius: var(--r-3) var(--r-3) 0 0;
   border-bottom-color: transparent;
 }
 .toolcall__status { display: inline-flex; flex-shrink: 0; }
@@ -88,9 +89,9 @@
 .toolcall__body {
   padding: 12px 14px;
   background: var(--surface);
-  border: 1px solid var(--line-soft);
+  border: 1px solid var(--line);
   border-top: 0;
-  border-radius: 0 0 var(--r-2) var(--r-2);
+  border-radius: 0 0 var(--r-3) var(--r-3);
 }
 .toolcall__result {
   margin: 0; padding: 0; background: transparent;

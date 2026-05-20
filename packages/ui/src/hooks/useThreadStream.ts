@@ -36,7 +36,12 @@ type PendingNoHost = { pendingMessageId: string };
  */
 export function useThreadStream(api: ApiClient, threadId: string) {
   const [messages, setMessages] = useState<MessageView[]>([]);
-  const [streaming, setStreaming] = useState<RunnerEvent[]>([]);
+  // The thread's full event stream, in seq order. Seeded by the cloud's
+  // subscribe catchup (it replays every persisted event) and appended to as
+  // live frames arrive. Crucially this is NOT cleared on `done` — completed
+  // turns keep their events so tool-call pills survive past the final answer
+  // and across reloads. `buildTimeline` slices it back into per-turn blocks.
+  const [events, setEvents] = useState<RunnerEvent[]>([]);
   const [hostOnline, setHostOnline] = useState(true);
   const [connected, setConnected] = useState(() => api.wsClient.isConnected());
   const [pendingFallback, setPendingFallback] = useState<PendingFallback | null>(null);
@@ -55,7 +60,7 @@ export function useThreadStream(api: ApiClient, threadId: string) {
 
   // Subscription lifecycle — owns thread-scoped state.
   useEffect(() => {
-    setStreaming([]);
+    setEvents([]);
     setPendingFallback(null);
     setPendingNoHost(null);
     lastSeqRef.current = 0;
@@ -108,12 +113,13 @@ export function useThreadStream(api: ApiClient, threadId: string) {
               return next;
             });
           } else if (msg.t === "event") {
-            if (msg.seq > lastSeqRef.current) lastSeqRef.current = msg.seq;
-            // The cloud broadcasts the persisted assistant `message` BEFORE the
-            // terminal `done` event, so clearing `streaming` here doesn't drop
-            // the final reply.
-            if (msg.event.type === "done" || msg.event.type === "error") setStreaming([]);
-            else setStreaming((s) => [...s, msg.event]);
+            // Dedup by seq so a reconnect's catchup replay can't double-append.
+            // Every event — including the terminal `done` / `error` — is kept;
+            // `buildTimeline` uses the terminators to delimit turns and tell the
+            // in-flight tail (no terminator yet) from completed turns.
+            if (msg.seq <= lastSeqRef.current) return;
+            lastSeqRef.current = msg.seq;
+            setEvents((s) => [...s, msg.event]);
           } else if (msg.t === "host-status") {
             setHostOnline(msg.online);
           } else if (msg.t === "host-meta") {
@@ -168,7 +174,7 @@ export function useThreadStream(api: ApiClient, threadId: string) {
 
   return {
     messages,
-    streaming,
+    events,
     hostOnline,
     connected,
     send,

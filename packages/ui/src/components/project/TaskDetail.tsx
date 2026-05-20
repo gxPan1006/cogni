@@ -21,14 +21,14 @@
  *   - ←/→ cycle to adjacent tasks (if `allTaskIds` is provided by the board)
  */
 import { useEffect } from "react";
-import type { ProjectTask, TaskState, Project, MessageView } from "@cogni/contract";
+import type { ProjectTask, TaskState, Project } from "@cogni/contract";
 import type { ApiClient, HostInfo } from "../../transport/api.js";
 import { useTaskDetail } from "../../hooks/useTaskDetail.js";
 import { useThreadStream } from "../../hooks/useThreadStream.js";
 import { Icon } from "../icons.js";
 import { ArtifactBrowser } from "./ArtifactBrowser.js";
 import {
-  UserMessage, AssistantText, ToolCallBlock, aggregateEvents,
+  UserMessage, AssistantText, AssistantBlocks, buildTimeline,
 } from "../ChatBlocks.js";
 import { Markdown } from "../Markdown.js";
 import { StatePill, STATE_COLOR } from "./ProjectBoard.js";
@@ -328,10 +328,9 @@ function Actions({ task, onAccept, onReject, onRetry, onCancel }: {
 }
 
 function ThreadSection({ api, threadId }: { api: ApiClient; threadId: string }) {
-  const { messages, streaming } = useThreadStream(api, threadId);
-  const blocks = aggregateEvents(streaming);
-  const total = messages.length + blocks.length;
-  if (total === 0) {
+  const { messages, events } = useThreadStream(api, threadId);
+  const { rows } = buildTimeline(messages, events);
+  if (rows.length === 0) {
     return (
       <section className="td-thread">
         <div className="td-thread__head"><span>对话</span></div>
@@ -344,36 +343,30 @@ function ThreadSection({ api, threadId }: { api: ApiClient; threadId: string }) 
   return (
     <section className="td-thread">
       <div className="td-thread__head">
-        <span>对话 · {total} 条</span>
+        <span>对话 · {rows.length} 条</span>
       </div>
       <div className="td-thread__body">
-        {messages.map((m) => <MessageRow key={m.id} message={m} />)}
-        {blocks.map((b, i) => {
-          if (b.kind === "text") return <AssistantText key={`s${i}`} text={b.text} streaming />;
-          if (b.kind === "tool") return <ToolCallBlock key={`s${i}`} name={b.name} input={b.input} result={b.result} status={b.status} />;
-          if (b.kind === "error") {
+        {rows.map((row) => {
+          if (row.kind === "user") return <UserMessage key={row.key} text={row.text} />;
+          if (row.kind === "system") {
             return (
-              <div key={`s${i}`} className="msg msg--aux">
-                <div className="td-thread__error">⚠ {b.code}: {b.message}</div>
+              <div key={row.key} className="msg msg--aux">
+                <div className="td-thread__system"><Markdown text={row.text} /></div>
               </div>
             );
           }
-          return null;
+          if (row.kind === "assistant-text") return <AssistantText key={row.key} text={row.text} />;
+          return (
+            <AssistantBlocks
+              key={row.key}
+              blocks={row.blocks}
+              streaming={row.streaming}
+              errorClassName="td-thread__error"
+            />
+          );
         })}
       </div>
     </section>
-  );
-}
-
-function MessageRow({ message }: { message: MessageView }) {
-  if (message.role === "user")      return <UserMessage text={message.content} />;
-  if (message.role === "assistant") return <AssistantText text={message.content} />;
-  return (
-    <div className="msg msg--aux">
-      <div className="td-thread__system">
-        <Markdown text={message.content} />
-      </div>
-    </div>
   );
 }
 

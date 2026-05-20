@@ -21,15 +21,14 @@
  * `hostName` and hand it to <Composer status={…} />.
  */
 import { useEffect, useRef, useState } from "react";
-import type { MessageView } from "@cogni/contract";
 import type { ApiClient } from "../transport/api.js";
 import { useThreadStream } from "../hooks/useThreadStream.js";
 import { Composer, type ComposerStatus } from "./Composer.js";
 import { HostFallbackCard } from "./HostFallbackCard.js";
 import { NoHostBanner } from "./NoHostBanner.js";
 import {
-  UserMessage, AssistantText, ToolCallBlock,
-  aggregateEvents,
+  UserMessage, AssistantText, AssistantBlocks,
+  buildTimeline,
 } from "./ChatBlocks.js";
 import "./conversation.css";
 
@@ -50,7 +49,7 @@ export function Conversation({
   hostName?: string;
 }) {
   const {
-    messages, streaming, hostOnline, connected, send,
+    messages, events, hostOnline, connected, send,
     pendingFallback, pendingNoHost, resolveFallback,
   } = useThreadStream(api, threadId);
   const [draft, setDraft] = useState("");
@@ -72,20 +71,17 @@ export function Conversation({
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, streaming]);
+  }, [messages, events]);
 
   const submit = () => {
     if (!draft.trim()) return;
     if (send(draft)) setDraft("");
   };
 
-  const streamingBlocks = aggregateEvents(streaming);
-  const isEmpty = messages.length === 0 && streamingBlocks.length === 0;
-  // Typing indicator only when we know a turn is in flight but no frames yet.
-  const showTyping =
-    streamingBlocks.length === 0 &&
-    messages.length > 0 &&
-    messages[messages.length - 1]?.role === "user";
+  const { rows, awaitingReply } = buildTimeline(messages, events);
+  const isEmpty = rows.length === 0;
+  // Typing indicator while the last user turn has produced no frames yet.
+  const showTyping = awaitingReply;
 
   const status: ComposerStatus | undefined =
     !connected
@@ -106,32 +102,24 @@ export function Conversation({
             <div className="conversation__empty">开始你的对话吧</div>
           )}
 
-          {messages.map((m) => <MessageRow key={m.id} message={m} />)}
-
-          {/* Streaming aggregate */}
-          {streamingBlocks.map((b, i) => {
-            if (b.kind === "text") {
-              return <AssistantText key={i} text={b.text} streaming />;
-            }
-            if (b.kind === "tool") {
-              return <ToolCallBlock key={i} name={b.name} input={b.input} result={b.result} status={b.status} />;
-            }
-            if (b.kind === "permission") {
-              // SP-3: permission middleware was explicitly dropped (spec §一 YAGNI).
-              // The block exists in the event stream for backwards compatibility
-              // but the UI no longer surfaces it — runner-host runs with
-              // `--dangerously-skip-permissions`, and reviewing-state human
-              // review is the safety net.
-              return null;
-            }
-            if (b.kind === "error") {
+          {/* Whole conversation, event-sourced: user turns interleaved with
+              assistant turns reconstructed from their events (prose + tool-call
+              pills). Tool pills persist past `done` and across reloads.
+              Permission blocks are not surfaced — SP-3 dropped the mid-run
+              permission UI (spec §一 YAGNI); the runner-host runs with
+              `--dangerously-skip-permissions` and reviewing-state human review
+              is the safety net. */}
+          {rows.map((row) => {
+            if (row.kind === "user") return <UserMessage key={row.key} text={row.text} />;
+            if (row.kind === "system") {
               return (
-                <div key={i} className="msg msg--aux">
-                  <div className="conversation__error">⚠ {b.code}: {b.message}</div>
+                <div key={row.key} className="msg msg--aux">
+                  <div className="conversation__system">{row.text}</div>
                 </div>
               );
             }
-            return null;
+            if (row.kind === "assistant-text") return <AssistantText key={row.key} text={row.text} />;
+            return <AssistantBlocks key={row.key} blocks={row.blocks} streaming={row.streaming} />;
           })}
 
           {showTyping && (
@@ -164,17 +152,6 @@ export function Conversation({
         disabled={!connected || pendingFallback !== null || pendingNoHost !== null}
         status={status}
       />
-    </div>
-  );
-}
-
-function MessageRow({ message }: { message: MessageView }) {
-  if (message.role === "user")      return <UserMessage text={message.content} />;
-  if (message.role === "assistant") return <AssistantText text={message.content} />;
-  // system / future roles — render as muted prose
-  return (
-    <div className="msg msg--aux">
-      <div className="conversation__system">{message.content}</div>
     </div>
   );
 }
