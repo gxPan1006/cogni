@@ -55,3 +55,7 @@ export type {
   BrowseEntry, BrowseResponse,
   ArtifactSource,
 } from "./components/project/index.js";
+
+// SP-4 workspace chat orchestrator dock (bottom-anchored, expands upward).
+export { WorkspaceChatBar, scopePlaceholder } from "./components/project/WorkspaceChatBar.js";
+export type { WorkspaceChatScope } from "./components/project/WorkspaceChatBar.js";
