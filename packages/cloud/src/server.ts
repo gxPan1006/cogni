@@ -76,7 +76,10 @@ export function createServer(deps: ServerDeps) {
   ]);
   const corsMiddleware = cors({
     origin: (origin) => (allowedOrigins.has(origin) ? origin : null),
-    allowHeaders: ["Authorization", "Content-Type"],
+    // X-Filename carries the (URL-encoded) upload filename on POST /uploads;
+    // it's a custom header, so it MUST be allowlisted or the browser/webview
+    // CORS preflight rejects the upload (curl bypasses CORS, masking this).
+    allowHeaders: ["Authorization", "Content-Type", "X-Filename"],
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
   app.use("/api/*", corsMiddleware);
