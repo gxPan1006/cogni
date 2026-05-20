@@ -28,6 +28,10 @@ export type RunnerEvent = z.infer<typeof runnerEventSchema>;
 export interface StartSessionOpts {
   /** Working directory for the runner process. The Runner Host derives this per thread. */
   cwd: string;
+  /** SP-4: path to an MCP config JSON (e.g. cogni orchestrator tools). Passed as `--mcp-config`. */
+  mcpConfigPath?: string;
+  /** SP-4: restrict the runner to these tool names. Passed as `--allowed-tools`. */
+  allowedTools?: string[];
 }
 
 export interface RunnerSessionHandle {

@@ -53,6 +53,12 @@ export const cloudToHostSchema = z.discriminatedUnion("t", [
      * backward-compatible with SP-1/SP-2 chat-only clients.
      */
     workspacePath: z.string().optional(),
+    /**
+     * SP-4: marks an orchestrator (Workspace Chat) dispatch. The host mounts
+     * the cogni MCP server (`--mcp-config`) and restricts tools to cogni__*.
+     * Optional; absent for ordinary chat/task dispatches.
+     */
+    orchestrator: z.boolean().optional(),
   }),
   // SP-3 host RPC request envelope. The cloud assigns `rpcId`; the host
   // echoes it on the `host-rpc-response` frame. `request` is the typed

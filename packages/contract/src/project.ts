@@ -242,7 +242,7 @@ export const taskRunSchema: z.ZodType<TaskRun> = z.object({
 
 // ─── Event-kind unions used by WS push payloads ─────────────────────────────
 
-export const PROJECT_EVENT_KINDS = ["created", "updated", "archived"] as const;
+export const PROJECT_EVENT_KINDS = ["created", "updated", "archived", "deleted"] as const;
 export type ProjectEventKind = (typeof PROJECT_EVENT_KINDS)[number];
 export const projectEventKindSchema = z.enum(PROJECT_EVENT_KINDS);
 
