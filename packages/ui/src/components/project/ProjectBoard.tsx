@@ -76,7 +76,7 @@ export function ProjectBoard({
   /** Hover-prefetch a task's detail into the SWR cache (flash-free drawer). */
   onPrefetchTask?: (id: string) => void;
 }) {
-  const [view, setView] = useState<View>("swarm");
+  const [view, setView] = useState<View>("columns");
 
   const live   = tasks.filter((t) => t.state === "running" || t.state === "needs-input").length;
   const queued = tasks.filter((t) => t.state === "queued").length;

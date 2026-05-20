@@ -65,6 +65,7 @@ export function TaskDetail({
 }) {
   const detail = useTaskDetail(api, taskId);
   const task = detail.task;
+  const [tab, setTab] = useState<"thread" | "files">("thread");
 
   // Keyboard: Esc / ← / →
   useEffect(() => {
@@ -84,10 +85,18 @@ export function TaskDetail({
   const idx     = allTaskIds?.indexOf(taskId) ?? -1;
   const total   = allTaskIds?.length ?? 0;
 
+  const hasThread = !!task?.executionThreadId;
+  // SP-4 Artifacts: files exist at the worktree while reviewing (new files live
+  // there pre-merge), falling back to the project repo root once done.
+  const hasFiles  = !!task && (task.state === "reviewing" || task.state === "done" || task.state === "running");
+  const activeTab: "thread" | "files" =
+    tab === "files" && hasFiles ? "files"
+    : tab === "thread" && hasThread ? "thread"
+    : hasThread ? "thread" : "files";
+
   return (
-    <>
-      <div className="td-scrim" onClick={onClose} />
-      <aside className="td" role="dialog" aria-label={`Task ${task?.ref ?? ""}`}>
+    <div className="td-scrim" onClick={onClose}>
+      <aside className="td" role="dialog" aria-label={`Task ${task?.ref ?? ""}`} onClick={(e) => e.stopPropagation()}>
         <header className="td__head">
           <div className="td__head-nav">
             <button className="td__icon-btn" onClick={onClose} title="关闭 (Esc)">{Icon.x}</button>
@@ -165,29 +174,46 @@ export function TaskDetail({
 
           {task && <Actions task={task} onAccept={detail.accept} onReject={detail.reject} onRetry={detail.retry} onCancel={detail.cancel} />}
 
-          {task?.executionThreadId && (
-            <ThreadSection api={api} threadId={task.executionThreadId} />
-          )}
+          {/* 对话 / 文件 as tabs inside the modal (was two stacked sections). */}
+          {task && (hasThread || hasFiles) && (
+            <div className="td-tabs-wrap">
+              <div className="td-tabs" role="tablist">
+                {hasThread && (
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === "thread"}
+                    className={"td-tab" + (activeTab === "thread" ? " is-on" : "")}
+                    onClick={() => setTab("thread")}
+                  >对话</button>
+                )}
+                {hasFiles && (
+                  <button
+                    role="tab"
+                    aria-selected={activeTab === "files"}
+                    className={"td-tab" + (activeTab === "files" ? " is-on" : "")}
+                    onClick={() => setTab("files")}
+                  >文件</button>
+                )}
+              </div>
 
-          {/* SP-4 Artifacts: browse this task's output files. Opens at the
-              worktree while reviewing (new files live there pre-merge); falls
-              back to the project repo root once done (files merged to main). */}
-          {task && (task.state === "reviewing" || task.state === "done" || task.state === "running") && (
-            <section className="td-files">
-              <div className="td-thread__head"><span>文件</span></div>
-              <ArtifactBrowser
-                api={api}
-                source={{
-                  kind: "project",
-                  projectId: task.projectId,
-                  ...(task.worktreePath ? { startPath: task.worktreePath } : {}),
-                }}
-              />
-            </section>
+              {activeTab === "thread" && hasThread && (
+                <ThreadSection api={api} threadId={task.executionThreadId!} />
+              )}
+              {activeTab === "files" && hasFiles && (
+                <ArtifactBrowser
+                  api={api}
+                  source={{
+                    kind: "project",
+                    projectId: task.projectId,
+                    ...(task.worktreePath ? { startPath: task.worktreePath } : {}),
+                  }}
+                />
+              )}
+            </div>
           )}
         </div>
       </aside>
-    </>
+    </div>
   );
 }
 
@@ -383,7 +409,6 @@ function ThreadSection({ api, threadId }: { api: ApiClient; threadId: string }) 
   if (rows.length === 0) {
     return (
       <section className="td-thread">
-        <div className="td-thread__head"><span>对话</span></div>
         <div className="td-thread__body">
           {loading
             ? <LoadingRows rows={3} compact />
@@ -395,7 +420,7 @@ function ThreadSection({ api, threadId }: { api: ApiClient; threadId: string }) 
   return (
     <section className="td-thread">
       <div className="td-thread__head">
-        <span>对话 · {rows.length} 条</span>
+        <span>{rows.length} 条消息</span>
       </div>
       <div className="td-thread__body">
         {rows.map((row) => {

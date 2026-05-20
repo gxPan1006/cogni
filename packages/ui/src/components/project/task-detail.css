@@ -1,26 +1,29 @@
-/* TaskDetail — right-side drawer for one task. */
+/* TaskDetail — centered modal dialog for one task. */
 
 .td-scrim {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  background: oklch(0% 0 0 / 0.18);
-  z-index: 10;
-  animation: td-scrim-in 0.18s ease-out;
+  background: oklch(0% 0 0 / 0.32);
+  z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px;
+  animation: td-scrim-in 0.16s ease-out;
 }
 @keyframes td-scrim-in { from { opacity: 0; } }
 
 .td {
-  position: absolute;
-  top: 0; right: 0; bottom: 0;
-  width: 540px; max-width: 92%;
-  z-index: 11;
+  position: relative;
+  width: 760px; max-width: 100%;
+  max-height: calc(100vh - 64px);
+  z-index: 101;
   background: var(--surface);
-  border-left: 1px solid var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r-4);
   box-shadow: var(--shadow-3);
   display: flex; flex-direction: column;
-  animation: td-in 0.22s cubic-bezier(0.2, 0.7, 0.3, 1);
+  animation: td-in 0.2s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
-@keyframes td-in { from { transform: translateX(20px); opacity: 0; } }
+@keyframes td-in { from { transform: translateY(8px); opacity: 0; } }
 
 /* ── Header ─────────────────────────────────── */
 .td__head {
@@ -230,10 +233,29 @@
 }
 .td-actions__danger:hover { background: var(--bad-soft); }
 
-/* ── Embedded thread ────────────────────────── */
-.td-thread {
+/* ── 对话 / 文件 tabs ───────────────────────── */
+.td-tabs-wrap {
   border-top: 1px solid var(--line-soft);
   padding-top: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.td-tabs {
+  display: flex; align-items: center; gap: 4px;
+}
+.td-tab {
+  appearance: none; border: 0; background: transparent;
+  font: inherit; cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--r-2);
+  font-size: 13px; color: var(--muted);
+  transition: background .12s, color .12s;
+}
+.td-tab:hover { color: var(--ink); background: var(--bg-sunk); }
+.td-tab.is-on { color: var(--ink); font-weight: 600; background: var(--bg-sunk); }
+
+/* ── Embedded thread (inside the 对话 tab) ──── */
+.td-thread {
+  /* separator now comes from .td-tabs-wrap above */
 }
 .td-thread--loading {
   display: flex;
@@ -265,10 +287,10 @@
 .td-thread .md { font-size: 13.5px; }
 
 /* ── Mobile / narrow viewport ──────────────────
-   The 540px side drawer would barely leave a scrim edge on a phone, so it goes
-   full-width with tighter padding. */
+   On a phone the modal fills the viewport edge-to-edge with tighter padding. */
 @media (max-width: 768px) {
-  .td { width: 100%; max-width: 100%; }
+  .td-scrim { padding: 12px; }
+  .td { width: 100%; max-width: 100%; max-height: calc(100vh - 24px); }
   .td__head { padding: 14px 16px 16px; }
   .td__scroll { padding: 16px 16px 24px; }
 }
