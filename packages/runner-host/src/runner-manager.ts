@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
-import type { RunnerAdapter, RunnerEvent, RunnerSessionHandle } from "@cogni/contract";
+import type { RunnerAdapter, RunnerEvent, RunnerSessionHandle, StartSessionOpts } from "@cogni/contract";
 import { threadScratchDir } from "./config.js";
+import { ensureCogniMcpConfig, COGNI_ALLOWED_TOOLS } from "./mcp/mcp-config.js";
 
 export interface DispatchInput {
   sessionId: string;
@@ -15,6 +16,13 @@ export interface DispatchInput {
    * scratch dir as before.
    */
   workspacePath?: string;
+  /**
+   * SP-4: Workspace Chat orchestrator dispatch. When set, the runner is
+   * launched with the cogni stdio MCP server (`--mcp-config`) and restricted
+   * to the cogni tool allowlist, so it drives project/task mutations via cloud
+   * REST instead of touching files.
+   */
+  orchestrator?: boolean;
 }
 
 /** Holds registered adapters + live session handles, runs one turn per dispatch. */
@@ -59,11 +67,17 @@ export class RunnerManager {
       await mkdir(cwd, { recursive: true });
     }
 
+    // SP-4: orchestrator dispatches mount the cogni MCP server + tool allowlist;
+    // ordinary chat/task dispatches leave these unset.
+    const opts: StartSessionOpts = input.orchestrator
+      ? { cwd, mcpConfigPath: ensureCogniMcpConfig(), allowedTools: [...COGNI_ALLOWED_TOOLS] }
+      : { cwd };
+
     let handle = this.sessions.get(input.sessionId);
     if (!handle) {
       handle = input.runnerSessionId
-        ? await adapter.resumeSession(input.runnerSessionId, { cwd })
-        : await adapter.startSession({ cwd });
+        ? await adapter.resumeSession(input.runnerSessionId, opts)
+        : await adapter.startSession(opts);
       this.sessions.set(input.sessionId, handle);
     }
     try {

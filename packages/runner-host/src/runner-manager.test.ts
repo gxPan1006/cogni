@@ -51,6 +51,54 @@ describe("RunnerManager", () => {
     expect(seen).toEqual([{ type: "error", code: "unknown_adapter", message: "no adapter registered for 'nope'" }]);
   });
 
+  it("orchestrator dispatch injects mcpConfigPath + cogni allowedTools", async () => {
+    const seen: any[] = [];
+    const adapter: RunnerAdapter = {
+      id: "claude-code",
+      capabilities: ["streaming"],
+      startSession: async (opts: any) => {
+        seen.push(opts);
+        return { runnerSessionId: null, async *send() {}, async close() {} };
+      },
+      resumeSession: async (_id: string, opts: any) => {
+        seen.push(opts);
+        return { runnerSessionId: null, async *send() {}, async close() {} };
+      },
+    };
+    const mgr = new RunnerManager();
+    mgr.register(adapter);
+    await mgr.dispatch(
+      { sessionId: "s", threadId: "th", adapter: "claude-code", runnerSessionId: null, message: "hi", orchestrator: true },
+      () => {},
+    );
+    expect(seen[0].mcpConfigPath).toMatch(/cogni-mcp\.json$/);
+    expect(seen[0].allowedTools).toContain("mcp__cogni__create_task");
+  });
+
+  it("non-orchestrator dispatch leaves mcp opts unset", async () => {
+    const seen: any[] = [];
+    const adapter: RunnerAdapter = {
+      id: "claude-code",
+      capabilities: ["streaming"],
+      startSession: async (opts: any) => {
+        seen.push(opts);
+        return { runnerSessionId: null, async *send() {}, async close() {} };
+      },
+      resumeSession: async (_id: string, opts: any) => {
+        seen.push(opts);
+        return { runnerSessionId: null, async *send() {}, async close() {} };
+      },
+    };
+    const mgr = new RunnerManager();
+    mgr.register(adapter);
+    await mgr.dispatch(
+      { sessionId: "s2", threadId: "th2", adapter: "claude-code", runnerSessionId: null, message: "hi" },
+      () => {},
+    );
+    expect(seen[0].mcpConfigPath).toBeUndefined();
+    expect(seen[0].allowedTools).toBeUndefined();
+  });
+
   it("capabilities() returns adapter ids and the deduped union of capabilities", () => {
     const mgr = new RunnerManager();
     mgr.register(fakeAdapter([])); // id "claude-code", capabilities ["streaming"]

@@ -49,6 +49,38 @@ describe("handleDispatch", () => {
     ]);
   });
 
+  it("forwards the orchestrator flag from the dispatch frame into the manager", async () => {
+    const seen: any[] = [];
+    const adapter: RunnerAdapter = {
+      id: "claude-code",
+      capabilities: ["streaming"],
+      async startSession(opts: any) {
+        seen.push(opts);
+        return { runnerSessionId: null, async *send() {}, async close() {} };
+      },
+      async resumeSession() {
+        throw new Error("unused");
+      },
+    };
+    const mgr = new RunnerManager();
+    mgr.register(adapter);
+    await handleDispatch(
+      mgr,
+      {
+        t: "dispatch",
+        sessionId: "s1",
+        threadId: "t1",
+        adapter: "claude-code",
+        runnerSessionId: null,
+        message: "go",
+        orchestrator: true,
+      },
+      () => {},
+    );
+    expect(seen[0].mcpConfigPath).toMatch(/cogni-mcp\.json$/);
+    expect(seen[0].allowedTools).toContain("mcp__cogni__create_task");
+  });
+
   it("reports session-update failed when an error event occurs", async () => {
     const mgr = new RunnerManager(); // no adapters → unknown_adapter error
     const sent: any[] = [];
