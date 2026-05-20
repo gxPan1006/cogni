@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Icon } from "./icons.js";
 import type { UploadItem } from "../hooks/useUploads.js";
 import { AttachmentCard } from "./AttachmentCard.js";
+import { ModelSelector } from "./ModelSelector.js";
 import "./composer.css";
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|heic|bmp|avif)$/i;
@@ -70,6 +71,9 @@ export function Composer({
   status,
   placeholder,
   uploads,
+  models,
+  model,
+  onModelChange,
 }: {
   draft: string;
   setDraft: (v: string) => void;
@@ -87,6 +91,10 @@ export function Composer({
     remove: (localId: string) => void;
     retry: (localId: string) => void;
   };
+  /** Model picker. When provided, replaces the static "claude-code" label. */
+  models?: readonly { id: string; label: string }[];
+  model?: string;
+  onModelChange?: (id: string) => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -168,7 +176,11 @@ export function Composer({
 
           <div className="composer__spacer" />
 
-          <span className="composer__model">claude-code</span>
+          {models && model && onModelChange ? (
+            <ModelSelector models={models} value={model} onChange={onModelChange} disabled={disabled} />
+          ) : (
+            <span className="composer__model">claude-code</span>
+          )}
 
           <button
             type="submit"

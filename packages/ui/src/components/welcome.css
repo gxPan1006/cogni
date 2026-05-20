@@ -2,13 +2,15 @@
 
 .welcome {
   flex: 1; min-height: 0;
-  display: flex; align-items: center; justify-content: center;
-  padding: 24px;
+  /* Left-aligned: content sits against a left gutter instead of being centered
+     in the viewport (which left an awkward empty column on the left). */
+  display: flex; align-items: center; justify-content: flex-start;
+  padding: 24px 56px;
   overflow-y: auto;
 }
 .welcome__inner {
   width: 100%;
-  max-width: 720px;
+  max-width: 860px;
 }
 
 .welcome__eyebrow {

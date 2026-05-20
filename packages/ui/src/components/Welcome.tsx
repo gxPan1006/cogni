@@ -12,6 +12,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Composer } from "./Composer.js";
 import { Icon } from "./icons.js";
 import { useUploads } from "../hooks/useUploads.js";
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL } from "@cogni/contract";
 import type { ApiClient } from "../transport/api.js";
 import "./welcome.css";
 
@@ -56,12 +57,13 @@ export function Welcome({
    */
   onStartChat: (
     firstMessage: string,
-    opts?: { threadId?: string; attachments?: { name: string; size: number }[] },
+    opts?: { threadId?: string; attachments?: { name: string; size: number }[]; model?: string },
   ) => void;
   /** Needed so attachments can target a thread before the first message is sent. */
   api: ApiClient;
 }) {
   const [draft, setDraft] = useState("");
+  const [model, setModel] = useState<string>(DEFAULT_CHAT_MODEL);
   const greeting = useMemo(() => buildGreeting(userName), [userName]);
 
   // First-message attachments need a thread to upload into, but Welcome has no
@@ -84,7 +86,7 @@ export function Welcome({
   const submit = () => {
     if (!draft.trim()) return;
     const attachments = uploads.takeAttachments();
-    onStartChat(draft, { threadId: threadIdRef.current ?? undefined, attachments });
+    onStartChat(draft, { threadId: threadIdRef.current ?? undefined, attachments, model });
     setDraft("");
   };
 
@@ -108,6 +110,9 @@ export function Welcome({
             setDraft={setDraft}
             onSubmit={submit}
             uploads={uploads}
+            models={CHAT_MODELS}
+            model={model}
+            onModelChange={setModel}
             status={hostName ? { kind: "ok", hostName } : undefined}
           />
 

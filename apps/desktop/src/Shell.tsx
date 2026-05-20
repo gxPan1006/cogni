@@ -62,6 +62,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<{ name: string; size: number }[] | null>(null);
+  const [pendingModel, setPendingModel] = useState<string | null>(null);
   const [hosts, setHosts] = useState<HostInfo[]>([]);
 
   // SP-3 project state (real, driven by hooks)
@@ -173,10 +174,11 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
 
   const startFromWelcome = async (
     firstMessage: string,
-    opts?: { threadId?: string; attachments?: { name: string; size: number }[] },
+    opts?: { threadId?: string; attachments?: { name: string; size: number }[]; model?: string },
   ) => {
     setPendingFirstMessage(firstMessage);
     setPendingAttachments(opts?.attachments && opts.attachments.length > 0 ? opts.attachments : null);
+    setPendingModel(opts?.model ?? null);
     if (opts?.threadId) {
       // Welcome already created this thread (to land attachments) — switch to it
       // instead of creating a new one.
@@ -376,7 +378,8 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
               threadId={activeThreadId}
               initialDraft={pendingFirstMessage ?? undefined}
               initialAttachments={pendingAttachments ?? undefined}
-              onConsumeInitialDraft={() => { setPendingFirstMessage(null); setPendingAttachments(null); }}
+              initialModel={pendingModel ?? undefined}
+              onConsumeInitialDraft={() => { setPendingFirstMessage(null); setPendingAttachments(null); setPendingModel(null); }}
               onTitleMaybeChanged={refreshThreads}
               hostName={hostName}
             />

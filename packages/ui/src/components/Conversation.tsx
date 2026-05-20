@@ -22,6 +22,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../transport/api.js";
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL } from "@cogni/contract";
 import { useThreadStream } from "../hooks/useThreadStream.js";
 import { useUploads } from "../hooks/useUploads.js";
 import { Composer, type ComposerStatus } from "./Composer.js";
@@ -39,6 +40,7 @@ export function Conversation({
   threadId,
   initialDraft,
   initialAttachments,
+  initialModel,
   onConsumeInitialDraft,
   hostName,
 }: {
@@ -48,6 +50,8 @@ export function Conversation({
   initialDraft?: string;
   /** Files attached to the first message in Welcome (already uploaded to this thread). */
   initialAttachments?: { name: string; size: number }[];
+  /** Model chosen in Welcome for the first message. */
+  initialModel?: string;
   onConsumeInitialDraft?: () => void;
   onTitleMaybeChanged?: () => void;
   /** Name of the host this thread is routed to. Shown above the composer. */
@@ -58,6 +62,7 @@ export function Conversation({
     pendingFallback, pendingNoHost, resolveFallback,
   } = useThreadStream(api, threadId);
   const [draft, setDraft] = useState("");
+  const [model, setModel] = useState<string>(initialModel ?? DEFAULT_CHAT_MODEL);
   const uploads = useUploads((file, onProgress) => api.uploadFile(threadId, file, onProgress));
   const consumedInitial = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -65,12 +70,12 @@ export function Conversation({
   // Welcome → first message: send as soon as the WS is connected.
   useEffect(() => {
     if (!consumedInitial.current && initialDraft && connected) {
-      if (send(initialDraft, initialAttachments)) {
+      if (send(initialDraft, initialAttachments, undefined, initialModel ?? model)) {
         consumedInitial.current = true;
         onConsumeInitialDraft?.();
       }
     }
-  }, [connected, initialDraft, initialAttachments, send, onConsumeInitialDraft]);
+  }, [connected, initialDraft, initialAttachments, initialModel, model, send, onConsumeInitialDraft]);
 
   // Auto-scroll to bottom on every change. SP-1 pins unconditionally; the
   // "stay pinned only if user was at bottom" UX lands later.
@@ -82,7 +87,7 @@ export function Conversation({
   const submit = () => {
     if (!draft.trim()) return;
     const attachments = uploads.takeAttachments();
-    if (send(draft, attachments)) setDraft("");
+    if (send(draft, attachments, undefined, model)) setDraft("");
   };
 
   const { rows, awaitingReply } = buildTimeline(messages, events);
@@ -182,6 +187,9 @@ export function Conversation({
         disabled={!connected || pendingFallback !== null || pendingNoHost !== null}
         status={status}
         uploads={uploads}
+        models={CHAT_MODELS}
+        model={model}
+        onModelChange={setModel}
       />
     </div>
   );
