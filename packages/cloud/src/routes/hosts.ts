@@ -53,6 +53,10 @@ export function registerHostsRoutes(app: Hono, deps: ServerDeps): void {
         // ISO string for the UI to render "X 之前"; null when the host has
         // never connected (freshly created, no Runner handshake yet).
         lastSeen: h.lastSeen ? h.lastSeen.toISOString() : null,
+        // SP-4: the host's configured projects-root (NewProject pre-fill) and
+        // whether it's env-locked. null ⇢ old host that never reported one.
+        projectsRoot: h.projectsRoot ?? null,
+        projectsRootLocked: h.projectsRootLocked ?? false,
       })),
     );
   });

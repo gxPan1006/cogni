@@ -35,6 +35,7 @@ function makeProjectDomainMock(): {
     deleteProject: ReturnType<typeof vi.fn>;
     getTaskDiff: ReturnType<typeof vi.fn>;
     fsBrowse: ReturnType<typeof vi.fn>;
+    setProjectsRoot: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
   };
 } {
@@ -52,6 +53,7 @@ function makeProjectDomainMock(): {
     deleteProject: vi.fn(),
     getTaskDiff: vi.fn(),
     fsBrowse: vi.fn(),
+    setProjectsRoot: vi.fn(),
     dispose: vi.fn(),
   };
   return { domain: fns as unknown as ProjectDomain, fns };
@@ -771,6 +773,88 @@ describe("POST /api/hosts/:hostId/fs-browse", () => {
     });
     expect(res.status).toBe(404);
     expect(fns.fsBrowse).not.toHaveBeenCalled();
+    await close();
+  });
+});
+
+// ─── set projects-root ───────────────────────────────────────────────────────
+
+describe("PUT /api/hosts/:id/projects-root", () => {
+  it("updates the host's projects-root and persists the host's answer", async () => {
+    const { db, user, host, fns, req, close } = await setup();
+    fns.setProjectsRoot.mockResolvedValue({ projectsRoot: "/Users/x/work", locked: false });
+
+    const res = await req(`/api/hosts/${host.hostId}/projects-root`, {
+      method: "PUT",
+      body: JSON.stringify({ projectsRoot: "~/work" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ projectsRoot: "/Users/x/work", locked: false });
+    // Domain got the raw (un-expanded) value the client sent.
+    expect(fns.setProjectsRoot).toHaveBeenCalledWith(host.hostId, "~/work");
+
+    // The host row reflects the host's ~-expanded answer, not the raw input.
+    const { getActiveHostsForUser } = await import("../db/hosts.js");
+    const row = (await getActiveHostsForUser(db, user.id)).find((h) => h.id === host.hostId)!;
+    expect(row.projectsRoot).toBe("/Users/x/work");
+    expect(row.projectsRootLocked).toBe(false);
+    await close();
+  });
+
+  it("persists locked=true when the host reports env-lock", async () => {
+    const { db, user, host, fns, req, close } = await setup();
+    fns.setProjectsRoot.mockResolvedValue({ projectsRoot: "/Users/x/envroot", locked: true });
+
+    const res = await req(`/api/hosts/${host.hostId}/projects-root`, {
+      method: "PUT",
+      body: JSON.stringify({ projectsRoot: "~/work" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ projectsRoot: "/Users/x/envroot", locked: true });
+
+    const { getActiveHostsForUser } = await import("../db/hosts.js");
+    const row = (await getActiveHostsForUser(db, user.id)).find((h) => h.id === host.hostId)!;
+    expect(row.projectsRoot).toBe("/Users/x/envroot");
+    expect(row.projectsRootLocked).toBe(true);
+    await close();
+  });
+
+  it("400 on empty projectsRoot", async () => {
+    const { host, fns, req, close } = await setup();
+    const res = await req(`/api/hosts/${host.hostId}/projects-root`, {
+      method: "PUT",
+      body: JSON.stringify({ projectsRoot: "" }),
+    });
+    expect(res.status).toBe(400);
+    expect(fns.setProjectsRoot).not.toHaveBeenCalled();
+    await close();
+  });
+
+  it("404 on cross-user host", async () => {
+    const { db, fns, req, close } = await setup();
+    const bob = await findOrCreateUserByEmail(db, "bob@x.com");
+    const bobHost = await createHost(db, {
+      userId: bob.id,
+      tenantId: bob.tenantId,
+      name: "Bob",
+    });
+    const res = await req(`/api/hosts/${bobHost.hostId}/projects-root`, {
+      method: "PUT",
+      body: JSON.stringify({ projectsRoot: "~/work" }),
+    });
+    expect(res.status).toBe(404);
+    expect(fns.setProjectsRoot).not.toHaveBeenCalled();
+    await close();
+  });
+
+  it("502 when the host RPC fails (offline)", async () => {
+    const { host, fns, req, close } = await setup();
+    fns.setProjectsRoot.mockRejectedValue(new Error("host-offline"));
+    const res = await req(`/api/hosts/${host.hostId}/projects-root`, {
+      method: "PUT",
+      body: JSON.stringify({ projectsRoot: "~/work" }),
+    });
+    expect(res.status).toBe(502);
     await close();
   });
 });

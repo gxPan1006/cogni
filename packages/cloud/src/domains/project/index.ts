@@ -461,6 +461,15 @@ export class ProjectDomain {
   }
 
   /**
+   * Settings → Runner Hosts: change a host's projects-root. Passthrough to the
+   * host RPC; the caller (route) persists the returned (~-expanded) value +
+   * broadcasts a host-meta update. Authorization is the route's responsibility.
+   */
+  async setProjectsRoot(hostId: string, projectsRoot: string): Promise<{ projectsRoot: string; locked: boolean }> {
+    return this.deps.hostRpc.setProjectsRoot(hostId, { projectsRoot });
+  }
+
+  /**
    * SP-4 Artifacts: read a host file's bytes (base64). Authorization +
    * path-confinement are the route's responsibility (project repo root /
    * thread scratch dir); this is a thin passthrough to the host RPC.

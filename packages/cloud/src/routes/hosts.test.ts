@@ -96,6 +96,40 @@ describe("GET /api/hosts", () => {
     expect(body[0]!.lastSeen).toBeNull();
     await close();
   });
+
+  it("serializes projectsRoot + projectsRootLocked (null/false by default)", async () => {
+    const { db, user, req, close } = await setup();
+    const h = await createHost(db, {
+      userId: user.id,
+      tenantId: user.tenantId,
+      name: "Mac",
+    });
+
+    // Fresh host: never reported a root → null + false.
+    let res = await req("/api/hosts");
+    let body = (await res.json()) as Array<{
+      id: string;
+      projectsRoot: string | null;
+      projectsRootLocked: boolean;
+    }>;
+    let row = body.find((x) => x.id === h.hostId)!;
+    expect(row.projectsRoot).toBeNull();
+    expect(row.projectsRootLocked).toBe(false);
+
+    // After the host reports one, GET reflects it.
+    const { setHostProjectsRoot } = await import("../db/hosts.js");
+    await setHostProjectsRoot(db, h.hostId, "/Users/x/cogni", false);
+    res = await req("/api/hosts");
+    body = (await res.json()) as Array<{
+      id: string;
+      projectsRoot: string | null;
+      projectsRootLocked: boolean;
+    }>;
+    row = body.find((x) => x.id === h.hostId)!;
+    expect(row.projectsRoot).toBe("/Users/x/cogni");
+    expect(row.projectsRootLocked).toBe(false);
+    await close();
+  });
 });
 
 describe("PATCH /api/hosts/:id", () => {

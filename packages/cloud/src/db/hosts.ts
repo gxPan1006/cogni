@@ -60,6 +60,22 @@ export async function isHostRemoved(db: AnyDb, hostId: string): Promise<boolean>
   return rows[0] ? rows[0].removedAt !== null : false;
 }
 
+/**
+ * SP-4: persist a host's resolved projects-root (and whether it's env-locked).
+ * Written on the `register` frame and by PUT /api/hosts/:id/projects-root.
+ */
+export async function setHostProjectsRoot(
+  db: AnyDb,
+  hostId: string,
+  projectsRoot: string,
+  locked: boolean,
+): Promise<void> {
+  await db
+    .update(hosts)
+    .set({ projectsRoot, projectsRootLocked: locked })
+    .where(eq(hosts.id, hostId));
+}
+
 export async function getActiveHostsForUser(db: AnyDb, userId: string) {
   return db
     .select()
