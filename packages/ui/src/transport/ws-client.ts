@@ -149,6 +149,8 @@ export function createWsClient(buildUrl: () => string): WsClient {
   let closed = false;
   let attempt = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+  let lastPongAt = 0;
 
   const subs = new Map<string, ThreadSubscription>();
   // SP-3 fan-out sets (parallel to thread `subs`; not keyed because list /
@@ -184,6 +186,26 @@ export function createWsClient(buildUrl: () => string): WsClient {
       return true;
     }
     return false;
+  }
+
+  function startHeartbeat() {
+    stopHeartbeat();
+    lastPongAt = Date.now();
+    heartbeatTimer = setInterval(() => {
+      // No pong since the last few pings ⇒ the socket is silently dead (a proxy
+      // / NAT dropped it without sending a close). Force-close so `onclose`
+      // schedules a reconnect now, rather than the next user click stalling on
+      // a corpse socket.
+      if (Date.now() - lastPongAt > HEARTBEAT_TIMEOUT_MS) {
+        try { ws?.close(); } catch { /* noop */ }
+        return;
+      }
+      sendFrame({ t: "ping" });
+    }, HEARTBEAT_MS);
+  }
+
+  function stopHeartbeat() {
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = undefined; }
   }
 
   function dispatch(frame: CloudToClient) {
@@ -262,6 +284,7 @@ export function createWsClient(buildUrl: () => string): WsClient {
       if (next !== ws) return; // a stale socket whose open landed after teardown
       attempt = 0;
       setConnected(true);
+      startHeartbeat();
       for (const s of subs.values()) {
         sendFrame({ t: "subscribe-thread", threadId: s.threadId, lastSeq: s.getLastSeq() });
       }
@@ -287,6 +310,11 @@ export function createWsClient(buildUrl: () => string): WsClient {
       } catch {
         return; // malformed — ignore
       }
+      // Heartbeat reply — consume it here (liveness signal), don't fan out.
+      if (msg.t === "pong") {
+        lastPongAt = Date.now();
+        return;
+      }
       try {
         dispatch(msg);
       } catch (err) {
@@ -297,6 +325,7 @@ export function createWsClient(buildUrl: () => string): WsClient {
     next.onclose = () => {
       if (next !== ws) return;
       ws = null;
+      stopHeartbeat();
       setConnected(false);
       if (closed) return;
       const delay = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
@@ -420,6 +449,7 @@ export function createWsClient(buildUrl: () => string): WsClient {
     close() {
       closed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      stopHeartbeat();
       subs.clear();
       projectsSubs.clear();
       projectSubs.clear();

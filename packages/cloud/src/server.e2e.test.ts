@@ -211,4 +211,47 @@ describe("cloud server e2e (headless spine)", () => {
     stop = undefined;
     await close();
   });
+
+  // Heartbeat: the client pings to keep the (proxied) socket warm; the cloud
+  // must answer with a pong so the client can tell the connection is alive.
+  it("answers a client ping with a pong", async () => {
+    const { db, close } = await makeTestDb();
+    const user = await findOrCreateUserByEmail(db, "ping@x.com");
+    const auth = makeAuth({
+      jwtSecret: "test-secret-test-secret-test-sec",
+      google: { clientId: "x", clientSecret: "y", redirectUri: "http://x/cb" },
+    });
+    const { createAuthSession } = await import("./db/auth-sessions.js");
+    const session = await createAuthSession(db, { userId: user.id, deviceName: "ping" });
+    const jwt = await auth.issueToken({
+      userId: user.id, tenantId: user.tenantId, sessionId: session.id,
+    });
+    const hosts = new HostRouter();
+    const clients = new ClientHub();
+    const chat = new ChatDomain(db, hosts, clients);
+    const { app, injectWebSocket } = createServer({
+      db, auth, hosts, clients, chat,
+      emailTransport: new FakeTransport(),
+      magicLinkTtlMinutes: 15,
+      publicUrl: "http://localhost",
+      webUrl: "https://chat.ai-cognit.com",
+    });
+    const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
+      const s = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" }, () => resolve(s));
+    });
+    injectWebSocket(server);
+    stop = () => new Promise<void>((resolve) => server.close(() => resolve()));
+    const port = (server.address() as { port: number }).port;
+
+    const clientWs = new WebSocket(`ws://127.0.0.1:${port}/api/ws?token=${jwt}`);
+    const client = reader(clientWs);
+    await new Promise((r) => clientWs.once("open", r));
+    clientWs.send(JSON.stringify({ t: "ping" }));
+    expect(await client.next()).toMatchObject({ t: "pong" });
+
+    clientWs.close();
+    await stop?.();
+    stop = undefined;
+    await close();
+  });
 });

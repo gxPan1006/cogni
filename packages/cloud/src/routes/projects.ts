@@ -438,9 +438,16 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
 
   app.get("/api/tasks/:taskId", async (c) => {
     const { userId, tenantId } = c.get("claims");
-    const owned = await ownedTask(deps, c.req.param("taskId"), userId, tenantId);
+    const taskId = c.req.param("taskId");
+    // The runs query keys off taskId (the path param) and is independent of the
+    // ownership check, so fire both in parallel instead of sequentially — one
+    // fewer server→DB round trip on every task-card open. If ownership fails we
+    // just discard the runs.
+    const [owned, runs] = await Promise.all([
+      ownedTask(deps, taskId, userId, tenantId),
+      listTaskRuns(deps.db, taskId) as Promise<TaskRun[]>,
+    ]);
     if (!owned) return c.json({ error: "not found" }, 404);
-    const runs: TaskRun[] = await listTaskRuns(deps.db, owned.task.id);
     return c.json({ task: owned.task, runs });
   });
 
