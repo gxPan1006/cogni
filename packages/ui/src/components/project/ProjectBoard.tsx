@@ -25,6 +25,7 @@ import { useMemo, useState } from "react";
 import type { Project, ProjectTask, TaskState } from "@cogni/contract";
 import type { HostInfo } from "../../transport/api.js";
 import { Icon } from "../icons.js";
+import { LoadingState } from "../LoadingState.js";
 import "./project-board.css";
 
 type View = "columns" | "swarm" | "timeline";
@@ -56,6 +57,7 @@ export const STATE_LABEL: Record<TaskState, string> = {
 export function ProjectBoard({
   project,
   tasks,
+  loading = false,
   hosts = [],
   onBack,
   onNewTask,
@@ -64,6 +66,7 @@ export function ProjectBoard({
 }: {
   project: Project | null;
   tasks: ProjectTask[];
+  loading?: boolean;
   hosts?: HostInfo[];
   onBack?: () => void;
   onNewTask?: () => void;
@@ -71,6 +74,10 @@ export function ProjectBoard({
   onOpenTask?: (id: string) => void;
 }) {
   const [view, setView] = useState<View>("swarm");
+
+  if (!project && loading) {
+    return <ProjectBoardLoading onBack={onBack} />;
+  }
 
   const live   = tasks.filter((t) => t.state === "running" || t.state === "needs-input").length;
   const queued = tasks.filter((t) => t.state === "queued").length;
@@ -89,7 +96,7 @@ export function ProjectBoard({
           <nav className="project__crumbs">
             <button className="project__crumb" onClick={onBack}>项目</button>
             <span className="project__crumb-sep">/</span>
-            <span className="project__crumb project__crumb--current">{project?.name ?? "…"}</span>
+            <span className="project__crumb project__crumb--current">{project?.name ?? "项目未找到"}</span>
           </nav>
           {project?.description && <div className="project__desc">{project.description}</div>}
           <div className="project__sub">
@@ -124,6 +131,66 @@ export function ProjectBoard({
 }
 
 /* ─── Columns ──────────────────────────────────────────── */
+
+function ProjectBoardLoading({ onBack }: { onBack?: () => void }) {
+  return (
+    <div className="project project--loading" aria-busy="true">
+      <header className="project__head">
+        <div className="project__head-text">
+          <nav className="project__crumbs">
+            <button className="project__crumb" onClick={onBack}>项目</button>
+            <span className="project__crumb-sep">/</span>
+            <span className="project__crumb project__crumb--current">同步中</span>
+          </nav>
+          <span className="project__title-skeleton loading-skeleton" />
+          <div className="project__sub">
+            <span className="dot dot-accent" />
+            <span>正在装载任务面板</span>
+          </div>
+        </div>
+        <div className="project__head-tools">
+          <span className="project__tool-skeleton loading-skeleton" />
+          <span className="project__tool-skeleton project__tool-skeleton--short loading-skeleton" />
+        </div>
+      </header>
+      <div className="project__body project__body--loading">
+        <LoadingState variant="section" title="正在同步项目面板" subtitle="加载任务队列、Runner 状态和时间线" />
+        <div className="kb-cols kb-cols--loading">
+          {COLUMN_STATES.map((state) => (
+            <div key={state} className="kb-col">
+              <div className="kb-col__head">
+                <span className="dot" style={{ background: STATE_COLOR[state] }} />
+                <span className="kb-col__label">{STATE_LABEL[state]}</span>
+              </div>
+              <div className="kb-col__body">
+                <TaskCardSkeleton />
+                <TaskCardSkeleton compact />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TaskCardSkeleton({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={"kb-card kb-card--skeleton" + (compact ? " kb-card--skeleton-compact" : "")}>
+      <div className="kb-card__head">
+        <span className="kb-card__ref-skeleton loading-skeleton" />
+        <span className="kb-card__pill-skeleton loading-skeleton" />
+      </div>
+      <span className="kb-card__title-skeleton loading-skeleton" />
+      {!compact && <span className="kb-card__activity-skeleton loading-skeleton" />}
+      <div className="kb-progress kb-progress--skeleton loading-skeleton" />
+      <div className="kb-card__foot">
+        <span className="kb-card__host-skeleton loading-skeleton" />
+        <span className="kb-card__time-skeleton loading-skeleton" />
+      </div>
+    </div>
+  );
+}
 
 function ColumnsView({ tasks, hostMap, onOpenTask }: { tasks: ProjectTask[]; hostMap: Map<string, HostInfo>; onOpenTask?: (id: string) => void }) {
   return (

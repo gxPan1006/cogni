@@ -22,6 +22,7 @@
 import { useMemo, useState } from "react";
 import type { Project } from "@cogni/contract";
 import { Icon } from "../icons.js";
+import { LoadingState } from "../LoadingState.js";
 import "./projects-list.css";
 
 export type ProjectHealth = "ok" | "warn" | "error";
@@ -43,10 +44,12 @@ export interface ProjectListItem {
 
 export function ProjectsList({
   items,
+  loading = false,
   onOpen,
   onNew,
 }: {
   items: ProjectListItem[];
+  loading?: boolean;
   onOpen?: (id: string) => void;
   onNew?: () => void;
 }) {
@@ -68,12 +71,16 @@ export function ProjectsList({
     .sort((a, b) => healthRank(b.health) - healthRank(a.health));
   const archived = filtered.filter(isArchived);
 
-  if (items.length === 0) {
+  if (loading && items.length === 0) {
+    return <ProjectsListLoading onNew={onNew} />;
+  }
+
+  if (!loading && items.length === 0) {
     return <EmptyAll onNew={onNew} />;
   }
 
   return (
-    <div className="projects-list">
+    <div className={"projects-list" + (loading ? " projects-list--busy" : "")} aria-busy={loading}>
       <header className="projects-list__head">
         <div className="projects-list__head-text">
           <div className="projects-list__eyebrow">PROJECTS</div>
@@ -99,6 +106,11 @@ export function ProjectsList({
       </header>
 
       <div className="projects-list__body">
+        {loading && (
+          <div className="projects-list__refreshing">
+            <LoadingState variant="inline" title="正在刷新项目" subtitle="同步最新项目和 Runner 统计" />
+          </div>
+        )}
         {pinned.length > 0 && (
           <Section title="PINNED" icon={Icon.spark}>
             <Grid items={pinned} onOpen={onOpen} />
@@ -239,6 +251,55 @@ function EmptyActive({ onNew }: { onNew?: () => void }) {
     <div className="projects-list__empty-active">
       <div className="projects-list__empty-active-text">没有进行中的项目。</div>
       {onNew && <button className="btn btn-sm" onClick={onNew}>{Icon.plus} 新项目</button>}
+    </div>
+  );
+}
+
+function ProjectsListLoading({ onNew }: { onNew?: () => void }) {
+  return (
+    <div className="projects-list projects-list--loading" aria-busy="true">
+      <header className="projects-list__head">
+        <div className="projects-list__head-text">
+          <div className="projects-list__eyebrow">PROJECTS</div>
+          <h1 className="projects-list__title">我的项目</h1>
+          <p className="projects-list__intro">
+            每个项目下挂一组任务,各自跑在 runner 上。Cogni 监督每条 runner、必要时叫你。
+          </p>
+        </div>
+        <div className="projects-list__head-tools">
+          <button className="btn btn-primary" onClick={onNew}>
+            {Icon.plus} 新项目
+          </button>
+        </div>
+      </header>
+      <div className="projects-list__body">
+        <LoadingState variant="section" title="正在同步项目" subtitle="加载项目列表、归档状态和最近更新时间" />
+        <div className="projects-list__grid projects-list__grid--loading">
+          {Array.from({ length: 6 }, (_, i) => <ProjectCardSkeleton key={i} />)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProjectCardSkeleton() {
+  return (
+    <div className="project-card project-card--skeleton">
+      <div className="project-card__head">
+        <span className="project-card__health loading-skeleton" />
+        <span className="project-card__chip-skeleton loading-skeleton" />
+      </div>
+      <span className="project-card__name-skeleton loading-skeleton" />
+      <span className="project-card__desc-skeleton loading-skeleton" />
+      <span className="project-card__desc-skeleton project-card__desc-skeleton--short loading-skeleton" />
+      <div className="project-card__meta">
+        <span className="project-card__metric-skeleton loading-skeleton" />
+        <span className="project-card__metric-skeleton project-card__metric-skeleton--short loading-skeleton" />
+      </div>
+      <div className="project-card__foot">
+        <span className="project-card__foot-skeleton loading-skeleton" />
+        <span className="project-card__foot-skeleton project-card__foot-skeleton--short loading-skeleton" />
+      </div>
     </div>
   );
 }

@@ -25,6 +25,7 @@ import { useEffect, useState } from "react";
 import type { MergePolicy } from "@cogni/contract";
 import type { HostInfo } from "../../transport/api.js";
 import { Icon } from "../icons.js";
+import { LoadingRows, LoadingState } from "../LoadingState.js";
 import "./new-project.css";
 
 export interface NewProjectDraft {
@@ -237,25 +238,30 @@ function FsBrowseModal({
         <header className="modal__head">
           <div>
             <div className="modal__eyebrow">浏览 host</div>
-            <h2 className="modal__title">{cwd || "(loading)"}</h2>
+            <h2 className="modal__title">{cwd || "正在读取目录"}</h2>
           </div>
           <button className="modal__close" onClick={onClose}>{Icon.x}</button>
         </header>
         <div className="modal__body np-browse__body">
           {error && <div className="np-browse__error">{error}</div>}
-          {loading && <div className="np-browse__loading">加载中…</div>}
+          {loading && (
+            <div className="np-browse__loading" aria-busy="true">
+              <LoadingState variant="inline" title="正在读取目录" subtitle={cwd || "连接 host 文件系统"} />
+              <LoadingRows rows={4} compact />
+            </div>
+          )}
           {!loading && cwd && cwd !== "/" && (
             <button className="np-browse__row" onClick={() => load(parent)}>
               <span>{Icon.arrow}</span><span>..</span>
             </button>
           )}
-          {entries.map((e) => (
+          {!loading && entries.map((e) => (
             <button
               key={e.name}
               className="np-browse__row"
               onClick={() => load(joinPath(cwd, e.name))}
             >
-              <span>{Icon.kanban}</span>
+              <span>{Icon.folder}</span>
               <span>{e.name}</span>
             </button>
           ))}

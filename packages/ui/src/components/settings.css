@@ -97,6 +97,15 @@
   font-size: 13px; color: var(--muted);
 }
 
+.settings-card__loading {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: linear-gradient(180deg, var(--surface), color-mix(in oklch, var(--accent-soft), transparent 70%));
+  border-bottom: 1px solid var(--line-soft);
+}
+
 .settings-bigchar {
   width: 32px; height: 32px;
   border-radius: 50%;

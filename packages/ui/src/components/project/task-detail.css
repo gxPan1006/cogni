@@ -61,6 +61,12 @@
   line-height: 1.3;
   margin: 0 0 10px;
 }
+.td__title-skeleton {
+  display: block;
+  width: min(320px, 86%);
+  height: 24px;
+  border-radius: var(--r-full);
+}
 
 .td__head-row {
   display: flex; align-items: center; gap: 10px;
@@ -143,6 +149,14 @@
   border-radius: var(--r-2);
   padding: 14px 16px;
 }
+.td-card--loading {
+  background: var(--surface);
+}
+.td-card--empty {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
 .td-card__head {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 8px;
@@ -217,6 +231,11 @@
 .td-thread {
   border-top: 1px solid var(--line-soft);
   padding-top: 14px;
+}
+.td-thread--loading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .td-thread__head {
   display: flex; align-items: center; justify-content: space-between;

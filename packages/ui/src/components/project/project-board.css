@@ -71,6 +71,25 @@
 .project__head-tools { display: flex; align-items: center; gap: 10px; }
 
 .project__body { flex: 1; overflow: auto; padding: 24px 32px; }
+.project__body--loading {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.project__title-skeleton {
+  display: block;
+  width: min(360px, 70%);
+  height: 22px;
+  border-radius: var(--r-full);
+  margin-top: 8px;
+}
+.project__tool-skeleton {
+  width: 150px;
+  height: 32px;
+  border-radius: var(--r-2);
+}
+.project__tool-skeleton--short { width: 82px; }
 
 /* ─── State pill ───────────────────────────────────────── */
 .state-pill {
@@ -90,6 +109,7 @@
   gap: 14px;
   min-height: 100%;
 }
+.kb-cols--loading { min-height: auto; }
 .kb-col { display: flex; flex-direction: column; gap: 10px; }
 .kb-col--alert .kb-col__head { background: var(--warn-soft); border-radius: var(--r-2); padding: 4px 8px; margin: -4px -8px 6px; }
 
@@ -118,6 +138,16 @@
 .kb-card:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-2);
+}
+.kb-card--skeleton {
+  min-height: 136px;
+  cursor: default;
+  pointer-events: none;
+}
+.kb-card--skeleton-compact { min-height: 108px; opacity: 0.78; }
+.kb-card--skeleton:hover {
+  transform: none;
+  box-shadow: var(--shadow-1);
 }
 .kb-card--running {
   box-shadow: var(--shadow-1), 0 0 0 1px color-mix(in oklch, var(--accent), transparent 70%);
@@ -149,6 +179,34 @@
   border-radius: var(--r-full);
 }
 
+.kb-card__ref-skeleton {
+  width: 52px;
+  height: 10px;
+  border-radius: var(--r-full);
+}
+.kb-card__pill-skeleton {
+  width: 68px;
+  height: 18px;
+  border-radius: var(--r-full);
+}
+.kb-card__title-skeleton {
+  width: 82%;
+  height: 14px;
+  border-radius: var(--r-full);
+}
+.kb-card__activity-skeleton {
+  width: 68%;
+  height: 10px;
+  border-radius: var(--r-full);
+}
+.kb-card__host-skeleton,
+.kb-card__time-skeleton {
+  width: 58px;
+  height: 10px;
+  border-radius: var(--r-full);
+}
+.kb-card__time-skeleton { width: 42px; }
+
 .kb-progress {
   width: 100%; height: 3px;
   background: var(--line-soft);
@@ -159,6 +217,7 @@
   height: 100%;
   transition: width .4s;
 }
+.kb-progress--skeleton { height: 4px; }
 
 /* ─── Swarm ──────────────────────────────────────────── */
 .sw { display: flex; flex-direction: column; gap: 28px; }

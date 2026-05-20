@@ -309,6 +309,7 @@ function WebShell({ page }: { page: Page }) {
         {page === "projects" && (
           <ProjectsList
             items={items}
+            loading={projectsHook.loading}
             onOpen={(id) => nav(`/projects/${id}`)}
             onNew={() => setNewProjectOpen(true)}
           />
@@ -317,6 +318,7 @@ function WebShell({ page }: { page: Page }) {
           <ProjectBoard
             project={board.project}
             tasks={board.tasks}
+            loading={board.loading}
             hosts={hosts}
             onBack={() => nav("/projects")}
             onNewTask={() => setNewTaskOpen(true)}
@@ -328,6 +330,7 @@ function WebShell({ page }: { page: Page }) {
           <ProjectSettings
             project={board.project}
             hosts={hosts}
+            loading={board.loading}
             onClose={() => nav(`/projects/${params.projectId}`)}
             onUpdate={handleUpdateProject}
             onArchive={handleArchiveProject}

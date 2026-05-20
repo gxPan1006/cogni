@@ -31,6 +31,7 @@ import {
 } from "../ChatBlocks.js";
 import { Markdown } from "../Markdown.js";
 import { StatePill, STATE_COLOR } from "./ProjectBoard.js";
+import { LoadingRows, LoadingState } from "../LoadingState.js";
 import "./task-detail.css";
 
 const STEPPER: { state: TaskState; label: string }[] = [
@@ -115,7 +116,13 @@ export function TaskDetail({
               <span className="td__sep">·</span>
               <span className="td__project">{project?.name ?? task?.projectId ?? ""}</span>
             </div>
-            <h2 className="td__title">{task?.title ?? (detail.loading ? "加载中…" : "任务未找到")}</h2>
+            <h2 className="td__title">
+              {task?.title ?? (
+                detail.loading
+                  ? <span className="td__title-skeleton loading-skeleton" aria-hidden="true" />
+                  : "任务未找到"
+              )}
+            </h2>
             {task && (
               <div className="td__head-row">
                 <StatePill state={task.state} />
@@ -132,6 +139,10 @@ export function TaskDetail({
         </header>
 
         <div className="td__scroll">
+          {detail.loading && !task && <TaskDetailLoading />}
+          {!detail.loading && !task && (
+            <div className="td-card td-card--empty">这个任务不存在或已经被删除。</div>
+          )}
           {task && <Stepper currentState={task.state} />}
           {task && <ActivityCard task={task} />}
 
@@ -160,6 +171,23 @@ export function TaskDetail({
 }
 
 /* ─── Subcomponents ──────────────────────────────────── */
+
+function TaskDetailLoading() {
+  return (
+    <>
+      <LoadingState variant="section" title="正在加载任务详情" subtitle="同步任务状态、运行记录和执行对话" />
+      <div className="td-card td-card--loading">
+        <LoadingRows rows={3} compact />
+      </div>
+      <div className="td-thread td-thread--loading">
+        <div className="td-thread__head">
+          <span>RUNNER THREAD</span>
+        </div>
+        <LoadingRows rows={2} compact />
+      </div>
+    </>
+  );
+}
 
 function Stepper({ currentState }: { currentState: TaskState }) {
   const isFailed = currentState === "failed";

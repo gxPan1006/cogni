@@ -14,6 +14,7 @@ import type { ApiClient } from "../transport/api.js";
 import { useIdentities } from "../hooks/useIdentities.js";
 import { useDevices } from "../hooks/useDevices.js";
 import { useHosts } from "../hooks/useHosts.js";
+import { LoadingRows, LoadingState } from "./LoadingState.js";
 import "./settings.css";
 
 type Page = "account" | "devices" | "hosts" | "customize" | "about";
@@ -102,7 +103,7 @@ function AccountPage({
 
       <SectionHead title="登录方式" subtitle="至少保留一种,否则下次进不来。" />
       <div className="settings-card">
-        {loading && <div className="settings-card__foot"><span>加载中…</span></div>}
+        {loading && <SettingsLoading label="登录方式" rows={2} />}
         {!loading && identities.length === 0 && (
           <div className="settings-card__foot"><span>没有任何登录方式 — 这不该发生</span></div>
         )}
@@ -167,7 +168,7 @@ function DevicesPage({ api }: { api: ApiClient }) {
         }
       />
       <div className="settings-card">
-        {loading && <div className="settings-card__foot"><span>加载中…</span></div>}
+        {loading && <SettingsLoading label="已登录设备" rows={3} />}
         {!loading && devices.length === 0 && (
           <div className="settings-card__foot"><span>没有任何已登录设备</span></div>
         )}
@@ -219,7 +220,7 @@ function HostsPage({ api }: { api: ApiClient }) {
         subtitle="能跑 agent 的机器。每台机器汇报自己装了什么 adapter。"
       />
       <div className="settings-card">
-        {loading && <div className="settings-card__foot"><span>加载中…</span></div>}
+        {loading && <SettingsLoading label="Runner Hosts" rows={3} />}
         {!loading && hosts.length === 0 && (
           <div className="settings-card__foot"><span>还没有 Runner Host — 在 Mac 上打开 cogni 桌面端就会自动注册</span></div>
         )}
@@ -408,6 +409,15 @@ function Row({ icon, title, sub, right, current }: { icon: React.ReactNode; titl
         {sub && <div className="settings-card__row-sub">{sub}</div>}
       </div>
       {right && <div className="settings-card__row-right">{right}</div>}
+    </div>
+  );
+}
+
+function SettingsLoading({ label, rows }: { label: string; rows: number }) {
+  return (
+    <div className="settings-card__loading" aria-busy="true">
+      <LoadingState variant="inline" title={`正在同步${label}`} />
+      <LoadingRows rows={rows} compact />
     </div>
   );
 }

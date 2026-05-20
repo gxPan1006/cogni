@@ -308,6 +308,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
         {page === "projects" && (
           <ProjectsList
             items={items}
+            loading={projectsHook.loading}
             onOpen={openProject}
             onNew={() => setNewProjectOpen(true)}
           />
@@ -316,6 +317,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
           <ProjectBoard
             project={board.project}
             tasks={board.tasks}
+            loading={board.loading}
             hosts={hosts}
             onBack={() => setPage("projects")}
             onNewTask={() => setNewTaskOpen(true)}
@@ -327,6 +329,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
           <ProjectSettings
             project={board.project}
             hosts={hosts}
+            loading={board.loading}
             onClose={() => setPage("project")}
             onUpdate={handleUpdateProject}
             onArchive={handleArchiveProject}

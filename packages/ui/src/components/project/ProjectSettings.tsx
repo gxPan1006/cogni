@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import type { Project, MergePolicy } from "@cogni/contract";
 import type { HostInfo, UpdateProjectInput } from "../../transport/api.js";
 import { Icon } from "../icons.js";
+import { LoadingRows, LoadingState } from "../LoadingState.js";
 import "./project-settings.css";
 
 type Section = "basics" | "runner" | "prompt" | "danger";
@@ -27,12 +28,14 @@ type Section = "basics" | "runner" | "prompt" | "danger";
 export function ProjectSettings({
   project,
   hosts,
+  loading = false,
   onClose,
   onUpdate,
   onArchive,
 }: {
   project: Project | null;
   hosts: HostInfo[];
+  loading?: boolean;
   onClose: () => void;
   onUpdate?: (patch: UpdateProjectInput) => Promise<void> | void;
   onArchive?: () => Promise<void> | void;
@@ -60,9 +63,29 @@ export function ProjectSettings({
 
   if (!project) {
     return (
-      <div className="ps">
+      <div className="ps ps--loading" aria-busy={loading}>
+        <aside className="ps__nav">
+          <div className="ps__nav-head">
+            <button className="ps__icon-btn" onClick={onClose} title="返回">{Icon.x}</button>
+            <div className="ps__nav-text">
+              <div className="ps__nav-eyebrow">PROJECT SETTINGS</div>
+              <div className="ps__nav-name">{loading ? "正在同步" : "项目未找到"}</div>
+            </div>
+          </div>
+        </aside>
         <main className="ps__body">
-          <Section title="加载中…" subtitle=""><div /></Section>
+          {loading ? (
+            <>
+              <LoadingState variant="section" title="正在加载项目设置" subtitle="同步默认 host、合并策略和系统提示词" />
+              <div className="settings-card ps__loading-card">
+                <LoadingRows rows={4} />
+              </div>
+            </>
+          ) : (
+            <div className="settings-card ps__loading-card">
+              <div className="ps__empty">这个项目不存在或你没有访问权限。</div>
+            </div>
+          )}
         </main>
       </div>
     );
