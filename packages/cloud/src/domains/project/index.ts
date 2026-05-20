@@ -43,6 +43,15 @@ import {
 } from "../../db/projects.js";
 import { createThread, appendMessage, touchThread } from "../../db/threads.js";
 import { closeRunnerSession, getLatestSessionForThread } from "../../db/sessions.js";
+import {
+  insertComment,
+  listComments as dbListComments,
+  getComment as dbGetComment,
+  deleteComment as dbDeleteComment,
+  gatherUnconsumedUserComments,
+  markCommentsConsumed,
+} from "../../db/task-comments.js";
+import { updateTaskState as dbUpdateTaskState } from "../../db/projects.js";
 import type { AnyDb } from "../../db/users.js";
 import type { ClientHub } from "../../client-hub.js";
 import type { HostRouter } from "../../host-router.js";
@@ -51,6 +60,7 @@ import type {
   ProjectTask,
   TaskRun,
   TaskState,
+  TaskComment,
   FsBrowseResponse,
   ReadFileResponse,
   GitDiffSnapshotResponse,
@@ -61,6 +71,7 @@ import { HostRpcClient, HostRpcError, type HostRpcLogger } from "./host-rpc.js";
 import { transitionTask, StateMismatch } from "./lifecycle.js";
 import { evaluateAndApplyMergeGate } from "./merge-gate.js";
 import { ProjectOrchestrator } from "./orchestrator.js";
+import { captureWorkerNote, renderCommentsForRunner } from "./comments.js";
 
 export interface ProjectDomainDeps {
   db: AnyDb;
@@ -228,16 +239,35 @@ export class ProjectDomain {
     });
     this.broadcastTask(updated, "state-changed");
 
+    // Fold any inert human comments dropped since the last run into the
+    // forwarded turn — the user sees their notes ("顺便加深色") arrive at the
+    // runner alongside their direct reply. They ride a `# 人类补充说明` block
+    // appended after the reply text.
+    const unconsumed = await gatherUnconsumedUserComments(this.deps.db, input.taskId);
+    const commentBlock = renderCommentsForRunner(unconsumed);
+    const content = commentBlock ? `${input.content}\n\n${commentBlock}` : input.content;
+
     // Reuse SP-1's send pipeline: writes message to thread, opens/reuses
     // runner_session, sends dispatch frame to the host. This is the same
     // code path the chat UI uses; the runner's --resume keeps context.
     await this.deps.chat.handleClientSend({
       userId: input.userId,
       threadId: task.executionThreadId,
-      content: input.content,
+      content,
       sourceClientId: input.sourceClientId,
       ...(input.attachments && input.attachments.length > 0 ? { attachments: input.attachments } : {}),
     });
+
+    // `replyToTask` reuses the existing run (no fresh task_runs row), so stamp
+    // the carried comments with the task's latest run id — they're consumed and
+    // won't be re-injected on the next dispatch.
+    if (unconsumed.length > 0) {
+      const runs = await dbListTaskRuns(this.deps.db, input.taskId);
+      const latestRun = runs.at(-1);
+      if (latestRun) {
+        await markCommentsConsumed(this.deps.db, unconsumed.map((c) => c.id), latestRun.id);
+      }
+    }
 
     return updated;
   }
@@ -357,12 +387,7 @@ export class ProjectDomain {
     // "kill running session" command in MVP — the runner will see its WS
     // session marked closed and (in the next pass) the host removes the
     // worktree under it. Documented gap: SP-3+1 adds a "stop runner" host RPC.
-    if (task.executionThreadId) {
-      const latest = await getLatestSessionForThread(this.deps.db, task.executionThreadId);
-      if (latest && latest.status !== "closed") {
-        await closeRunnerSession(this.deps.db, latest.id);
-      }
-    }
+    await this.closeTaskRunnerSession(task);
     if (task.hostId && task.worktreePath) {
       const project = await dbGetProject(this.deps.db, task.projectId);
       try {
@@ -512,6 +537,14 @@ export class ProjectDomain {
         needsInputWhat: trimmed,
       });
       this.broadcastTask(updated, "state-changed");
+      // Snapshot the question into the feed as a "worker" card (→ 等待输入).
+      // Best-effort: a capture failure must never block the lifecycle pause.
+      const note = await captureWorkerNote(
+        this.deps.db,
+        { taskId: task.id, state: "needs-input", body: trimmed },
+        this.deps.logger,
+      );
+      if (note) this.broadcastComment(note, "created");
     } catch (err) {
       if (err instanceof StateMismatch) return; // raced — orchestrator/another path moved it
       this.deps.logger?.warn?.(
@@ -542,9 +575,143 @@ export class ProjectDomain {
         worktreePath: next === "done" ? null : task.worktreePath,
       });
       this.broadcastTask(updated, "state-changed");
+      // Snapshot the runner's final assistant message into the feed as a
+      // "worker" handoff card (→ 完成 / → 待 Review). Best-effort: a capture
+      // failure must never block the lifecycle transition.
+      const note = await captureWorkerNote(
+        this.deps.db,
+        { taskId, state: next, threadId: task.executionThreadId },
+        this.deps.logger,
+      );
+      if (note) this.broadcastComment(note, "created");
     } catch (err) {
       if (err instanceof StateMismatch) return; // raced; ignore
       throw err;
+    }
+  }
+
+  // ─── Comments (主页面 feed) ─────────────────────────────────────────────────
+
+  /**
+   * Inert human comment. Spec §五: recorded only — no state transition, no
+   * runner contact. The user types a note in the trailing "+" card on the
+   * task overview and it appears as a human card; it becomes runner input only
+   * when the task is next (re)dispatched (orchestrator dispatch / replyToTask).
+   */
+  async addUserComment(input: { taskId: string; userId: string; body: string }): Promise<TaskComment> {
+    const task = await dbGetTask(this.deps.db, input.taskId);
+    if (!task) throw new Error(`addUserComment: task ${input.taskId} not found`);
+    const comment = await insertComment(this.deps.db, {
+      taskId: input.taskId,
+      author: "user",
+      body: input.body,
+      // Tag with the task's current state so the card chip reflects when the
+      // note was written; it has no lifecycle effect.
+      state: task.state,
+      authorUserId: input.userId,
+    });
+    this.broadcastComment(comment, "created");
+    return comment;
+  }
+
+  /** The task's full comment feed, oldest-first. */
+  async listComments(taskId: string): Promise<TaskComment[]> {
+    return dbListComments(this.deps.db, taskId);
+  }
+
+  /**
+   * Delete a user's own un-consumed comment. Worker notes are immutable, and a
+   * comment already carried into a run can't be un-sent — both throw so the
+   * route surfaces a 4xx and the card stays put.
+   */
+  async deleteUserComment(commentId: string): Promise<void> {
+    const comment = await dbGetComment(this.deps.db, commentId);
+    if (!comment) return; // idempotent
+    if (comment.author !== "user") throw new Error("cannot delete a worker comment");
+    if (comment.consumedByRunId) throw new Error("cannot delete a consumed comment");
+    await dbDeleteComment(this.deps.db, commentId);
+    this.broadcastComment(comment, "deleted");
+  }
+
+  // ─── Kanban drag-to-column ──────────────────────────────────────────────────
+
+  /**
+   * Kanban drag-to-column (spec §七). Maps a target column to the lifecycle
+   * action that lands the task in that column:
+   *   - 排队中 (queued): re-queue. Terminal states use the retry path; active
+   *     states stop the runner then re-queue.
+   *   - 进行中 (running): activate. needs-input resumes directly; others route
+   *     to queued so the orchestrator dispatches on the next tick.
+   *   - Review (reviewing): running → reviewing direct hop; else a manual
+   *     state override.
+   *   - 完成 (done): reviewing = accept+merge; running = stop runner + mark
+   *     done; else a manual override.
+   *   - 等待输入 (needs-input): running pauses awaiting input; else a manual
+   *     override.
+   * Moving a card *out of* running always stops/detaches its runner first.
+   * A genuinely-incoherent target is applied as a manual state override rather
+   * than snapping back — the board is the user's to arrange.
+   */
+  async moveTaskToState(taskId: string, to: TaskState): Promise<ProjectTask> {
+    const task = await dbGetTask(this.deps.db, taskId);
+    if (!task) throw new Error(`moveTaskToState: task ${taskId} not found`);
+    const from = task.state;
+    if (from === to) return task; // no-op (same column)
+
+    switch (to) {
+      case "queued": {
+        // Terminal → retry (increments retries, clears markers).
+        if (from === "done" || from === "failed" || from === "cancelled") {
+          return this.retryTask(taskId);
+        }
+        // Active states (running / needs-input / reviewing) compose through
+        // cancel→queue: cancelTask stops the runner + removes the worktree and
+        // lands the task in `cancelled` (a legal hop from each active state),
+        // then retryTask re-queues it for the orchestrator's next tick.
+        await this.cancelTask(taskId);
+        return this.retryTask(taskId);
+      }
+      case "running": {
+        if (from === "needs-input") {
+          const updated = await transitionTask(this.deps.db, taskId, "needs-input", "running", {
+            needsInputWhat: null,
+          });
+          this.broadcastTask(updated, "state-changed");
+          return updated;
+        }
+        // queued or terminal → route to queued; the orchestrator dispatches it
+        // on the next tick (force-run isn't a synchronous host call here).
+        return this.moveTaskToState(taskId, "queued");
+      }
+      case "reviewing": {
+        if (from === "running") {
+          await this.stopRunnerIfAny(task);
+          const updated = await transitionTask(this.deps.db, taskId, "running", "reviewing", {});
+          this.broadcastTask(updated, "state-changed");
+          return updated;
+        }
+        return this.forceState(task, "reviewing");
+      }
+      case "done": {
+        if (from === "reviewing") return this.acceptTask(taskId);
+        if (from === "running") {
+          await this.stopRunnerIfAny(task);
+          const updated = await transitionTask(this.deps.db, taskId, "running", "done", {});
+          this.broadcastTask(updated, "state-changed");
+          return updated;
+        }
+        return this.forceState(task, "done");
+      }
+      case "needs-input": {
+        if (from === "running") {
+          const updated = await transitionTask(this.deps.db, taskId, "running", "needs-input", {});
+          this.broadcastTask(updated, "state-changed");
+          return updated;
+        }
+        return this.forceState(task, "needs-input");
+      }
+      default:
+        return task;
     }
   }
 
@@ -553,6 +720,49 @@ export class ProjectDomain {
   private broadcastTask(task: ProjectTask, kind: "created" | "updated" | "deleted" | "state-changed"): void {
     this.deps.clients.broadcastTask(task.id, { t: "task-event", kind, task });
     this.deps.clients.broadcastProject(task.projectId, { t: "task-event", kind, task });
+  }
+
+  /** Comments only fan out to per-task subscribers — the board never renders them. */
+  private broadcastComment(comment: TaskComment, kind: "created" | "deleted"): void {
+    this.deps.clients.broadcastTask(comment.taskId, { t: "task-comment", kind, comment });
+  }
+
+  /**
+   * Close the active runner_session for a task, if any. Extracted from
+   * `cancelTask` so the drag-out-of-running path reuses the exact same
+   * "detach the runner" step (DRY).
+   */
+  private async closeTaskRunnerSession(task: ProjectTask): Promise<void> {
+    if (!task.executionThreadId) return;
+    const latest = await getLatestSessionForThread(this.deps.db, task.executionThreadId);
+    if (latest && latest.status !== "closed") {
+      await closeRunnerSession(this.deps.db, latest.id);
+    }
+  }
+
+  /** Best-effort runner stop when moving a task out of an active runner state. */
+  private async stopRunnerIfAny(task: ProjectTask): Promise<void> {
+    if (task.state !== "running" && task.state !== "needs-input") return;
+    try {
+      await this.closeTaskRunnerSession(task);
+    } catch (err) {
+      this.deps.logger?.warn?.({ taskId: task.id, err: String(err) }, "stopRunnerIfAny: detach failed");
+    }
+  }
+
+  /**
+   * Manual state override for drag targets with no coherent lifecycle action.
+   * Bypasses `LEGAL_TRANSITIONS` via a direct row update (the user deliberately
+   * arranged the board); stops any runner first so we don't leave one detached.
+   */
+  private async forceState(task: ProjectTask, to: TaskState): Promise<ProjectTask> {
+    await this.stopRunnerIfAny(task);
+    const isTerminal = to === "done" || to === "failed" || to === "cancelled";
+    const updated = await dbUpdateTaskState(this.deps.db, task.id, to, {
+      ...(isTerminal ? { completedAt: new Date() } : {}),
+    });
+    this.broadcastTask(updated, "state-changed");
+    return updated;
   }
 }
 
