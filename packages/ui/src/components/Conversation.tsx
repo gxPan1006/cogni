@@ -50,7 +50,7 @@ export function Conversation({
   hostName?: string;
 }) {
   const {
-    messages, events, loading, hostOnline, connected, send,
+    messages, events, loading, hostOnline, connected, send, stalled, retry,
     pendingFallback, pendingNoHost, resolveFallback,
   } = useThreadStream(api, threadId);
   const [draft, setDraft] = useState("");
@@ -81,8 +81,9 @@ export function Conversation({
 
   const { rows, awaitingReply } = buildTimeline(messages, events);
   const isEmpty = rows.length === 0;
-  // Typing indicator while the last user turn has produced no frames yet.
-  const showTyping = awaitingReply;
+  // Typing indicator while the last user turn has produced no frames yet — but
+  // once a turn is declared stalled we swap the spinner for the failure card.
+  const showTyping = awaitingReply && !stalled;
 
   const status: ComposerStatus | undefined =
     !connected
@@ -135,6 +136,23 @@ export function Conversation({
                 <span className="typing-dots__dot" />
                 <span className="typing-dots__dot" />
               </span>
+            </div>
+          )}
+
+          {/* Turn went quiet past the stall timeout — stop pretending to work,
+              tell the user, and offer a re-sync. Replaces the dots when the
+              turn never produced anything; sits below partial content when a
+              stream froze mid-reply. */}
+          {stalled && (
+            <div className="msg msg--assistant">
+              <div className="turn-stall" role="alert">
+                <span className="turn-stall__text">
+                  回复好像没收到 —— 可能是网络波动或桌面端临时掉线。
+                </span>
+                <button type="button" className="turn-stall__retry" onClick={retry}>
+                  重试
+                </button>
+              </div>
             </div>
           )}
         </div>

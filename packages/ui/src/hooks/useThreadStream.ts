@@ -256,7 +256,10 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     if (!awaitingProgress || !connected || !hostOnline) return;
     const id = setTimeout(() => setStalled(true), STALL_TIMEOUT_MS);
     return () => clearTimeout(id);
-  }, [awaitingProgress, connected, hostOnline, reloadNonce]);
+    // events.length / messages.length are the "a frame arrived" signal: each new
+    // frame re-runs this effect, resetting the clock so a long healthy stream
+    // never false-stalls. Bare-dots (no frames) leaves them static → timer fires.
+  }, [awaitingProgress, connected, hostOnline, reloadNonce, events.length, messages.length]);
 
   const send = (text: string) => api.wsClient.send(threadId, text);
 

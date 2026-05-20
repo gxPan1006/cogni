@@ -61,6 +61,33 @@
   40%           { opacity: 1;   transform: scale(1); }
 }
 
+/* Turn stalled — the reply never came back within the timeout. Replaces the
+   typing dots (or sits below a frozen partial stream) with a quiet failure note
+   and a retry button, so a lost dispatch can't spin "• • •" forever. */
+.turn-stall {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bad-soft);
+  border: 1px solid oklch(85% 0.045 28);
+  border-radius: var(--r-2);
+  color: var(--ink);
+  font-size: 13px;
+}
+.turn-stall__text { color: var(--muted); }
+.turn-stall__retry {
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid oklch(75% 0.05 28);
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+.turn-stall__retry:hover { background: oklch(95% 0.02 28); }
+
 /* Host-fallback prompt — inline card shown above the composer when the
    preferred host is offline but other devices are available. */
 .fallback-card {

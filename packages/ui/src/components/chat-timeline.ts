@@ -181,11 +181,16 @@ function lastIsUser(rows: TimelineRow[]): boolean {
 /**
  * Whether the thread is waiting on the runner with **no visible progress** —
  * the states where a stall timer should be armed so an undelivered turn can't
- * spin the indicator (or the streaming caret) forever.
+ * spin the "• • •" indicator (or the streaming caret) forever.
  *
- * True when the last user turn has produced nothing yet (`awaitingReply`), or
- * the in-flight turn is streaming but has no tool *currently running* (a long
- * Bash/build is legitimately silent, so a running tool counts as progress).
+ * True when:
+ *   - the last user turn has produced nothing yet (`awaitingReply`), or
+ *   - the in-flight turn is streaming but has no tool *currently running*.
+ *
+ * A running tool pill is itself visible progress (a long `Bash`/build is
+ * legitimately silent for a while), so we deliberately do NOT arm the timer
+ * then — that would false-flag a slow-but-healthy command. The timer only
+ * guards the cases where the user is staring at an indicator with zero signal.
  */
 export function isAwaitingProgress(timeline: Timeline): boolean {
   if (timeline.awaitingReply) return true;

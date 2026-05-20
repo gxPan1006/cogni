@@ -10,7 +10,7 @@
 import { describe, it, expect } from "vitest";
 import type { MessageView, RunnerEvent } from "@cogni/contract";
 import {
-  aggregateEvents, splitTurns, buildTimeline, toolInputPreview,
+  aggregateEvents, splitTurns, buildTimeline, toolInputPreview, isAwaitingProgress,
 } from "./chat-timeline.js";
 
 function msg(id: string, role: MessageView["role"], content: string): MessageView {
@@ -108,6 +108,38 @@ describe("buildTimeline", () => {
     const fallback = rows[1]!;
     if (fallback.kind !== "assistant-text") throw new Error("expected assistant-text row");
     expect(fallback.text).toBe("reply text");
+  });
+});
+
+describe("isAwaitingProgress", () => {
+  it("is true while the last user turn has produced no events (the bare-dots state)", () => {
+    const tl = buildTimeline([msg("u1", "user", "把文件给我")], []);
+    expect(tl.awaitingReply).toBe(true);
+    expect(isAwaitingProgress(tl)).toBe(true);
+  });
+
+  it("is true while streaming text with no tool currently running", () => {
+    const tl = buildTimeline([msg("u1", "user", "hi")], [{ type: "text", text: "thinking" }]);
+    expect(isAwaitingProgress(tl)).toBe(true);
+  });
+
+  it("is false while a tool is actively running (visible progress — don't arm the timer)", () => {
+    const events: RunnerEvent[] = [
+      { type: "text", text: "let me check" },
+      { type: "tool-call", toolId: "1", name: "Bash", input: { command: "pnpm build" } },
+    ];
+    const tl = buildTimeline([msg("u1", "user", "build it")], events);
+    expect(isAwaitingProgress(tl)).toBe(false);
+  });
+
+  it("is false once the turn has terminated (done)", () => {
+    const events: RunnerEvent[] = [{ type: "text", text: "done!" }, { type: "done" }];
+    const tl = buildTimeline([msg("u1", "user", "hi"), msg("a1", "assistant", "done!")], events);
+    expect(isAwaitingProgress(tl)).toBe(false);
+  });
+
+  it("is false for an empty thread", () => {
+    expect(isAwaitingProgress(buildTimeline([], []))).toBe(false);
   });
 });
 
