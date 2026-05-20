@@ -40,17 +40,23 @@ export async function listThreads(db: AnyDb, userId: string): Promise<ThreadSumm
 }
 
 export async function getThreadDetail(db: AnyDb, threadId: string): Promise<ThreadDetail | null> {
-  const t = await db
-    .select()
-    .from(threads)
-    .where(and(eq(threads.id, threadId), isNull(threads.deletedAt)))
-    .limit(1);
+  // The messages query only needs threadId (already known), not the thread row,
+  // so both queries can fly in parallel — saves one server→Neon round-trip per
+  // thread open. (On a remote DB that round-trip is the bulk of the handler's
+  // own latency; the client-side cost is dominated by transport, see below.)
+  const [t, msgs] = await Promise.all([
+    db
+      .select()
+      .from(threads)
+      .where(and(eq(threads.id, threadId), isNull(threads.deletedAt)))
+      .limit(1),
+    db
+      .select()
+      .from(messages)
+      .where(eq(messages.threadId, threadId))
+      .orderBy(asc(messages.createdAt)),
+  ]);
   if (!t[0]) return null;
-  const msgs = await db
-    .select()
-    .from(messages)
-    .where(eq(messages.threadId, threadId))
-    .orderBy(asc(messages.createdAt));
   return {
     id: t[0].id,
     title: t[0].title,

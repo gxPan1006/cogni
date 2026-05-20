@@ -18,6 +18,17 @@ export const attachmentSchema = z.object({
 });
 export type Attachment = z.infer<typeof attachmentSchema>;
 
+/** One persisted chat message — same shape as the HTTP `getThread` row, so the
+ *  client treats a WS `thread-snapshot` and an HTTP reload interchangeably. */
+export const messageViewSchema = z.object({
+  id: z.string(),
+  threadId: z.string(),
+  role: z.enum(["user", "assistant", "system"]),
+  content: z.string(),
+  createdAt: z.string(),
+  attachments: z.array(attachmentSchema).optional(),
+});
+
 // ---- Runner Host → Cloud ----
 export const hostToCloudSchema = z.discriminatedUnion("t", [
   z.object({
@@ -147,6 +158,11 @@ export const cloudToClientSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("host-status"), online: z.boolean() }),
   z.object({ t: z.literal("error"), message: z.string() }),
   // SP-2 sync
+  // Cold-open message history pushed over the same WS as the event catchup, so
+  // the client skips a separate (and often cold, ~1s) HTTP getThread on click.
+  // Sent only when the client subscribes from lastSeq 0 (a fresh open); on
+  // reconnects (lastSeq > 0) the client already holds the messages.
+  z.object({ t: z.literal("thread-snapshot"), threadId: z.string(), messages: z.array(messageViewSchema) }),
   z.object({ t: z.literal("catchup-complete"), threadId: z.string(), latestSeq: z.number() }),
   z.object({ t: z.literal("catchup-too-long"), threadId: z.string(), latestSeq: z.number() }),
   z.object({ t: z.literal("thread-meta"), threadId: z.string(), title: z.string(), lastMsgAt: z.string() }),

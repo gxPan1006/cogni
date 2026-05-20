@@ -386,6 +386,20 @@ export function registerClientRoutes(
 async function streamCatchup(
   deps: ServerDeps, clientId: string, threadId: string, lastSeq: number,
 ): Promise<void> {
+  // Cold open (no client-side position): seed the message history over this WS
+  // so the client doesn't fire a separate HTTP getThread — that request rides a
+  // cold connection and pays a full ~1s TLS handshake, whereas this WS is
+  // already warm. On reconnects (lastSeq > 0) the client still holds its
+  // messages, so we skip the snapshot and only replay the missed event tail.
+  if (lastSeq === 0) {
+    const detail = await getThreadDetail(deps.db, threadId);
+    if (detail) {
+      deps.clients.sendToConn(clientId, {
+        t: "thread-snapshot", threadId, messages: detail.messages,
+      });
+    }
+  }
+
   // Cheap pre-check to avoid loading 50k rows just to bail.
   const top = await deps.db
     .select({ s: eventsTable.seq })

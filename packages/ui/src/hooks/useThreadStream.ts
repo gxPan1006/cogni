@@ -160,16 +160,25 @@ export function useThreadStream(api: ApiClient, threadId: string) {
       });
     };
 
-    api
-      .getThread(threadId)
-      .then((d) => commitMessages(d.messages ?? []))
-      .catch((e) => {
-        console.error("failed to load thread history", e);
-        // Keep whatever was seeded from cache during render rather than blanking.
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    // C: when the WS is live, the cloud seeds the message history over that
+    // already-warm socket via a `thread-snapshot` frame (handled in onFrame
+    // below), so we skip the separate HTTP getThread. That HTTP request rides a
+    // connection that idle-closes between clicks, so it routinely pays a full
+    // ~1s TLS handshake — the dominant cause of "clicking a thread is slow".
+    // Fall back to HTTP only when the socket is down, so a fresh open still
+    // loads while the WS is (re)connecting.
+    if (!api.wsClient.isConnected()) {
+      api
+        .getThread(threadId)
+        .then((d) => commitMessages(d.messages ?? []))
+        .catch((e) => {
+          console.error("failed to load thread history", e);
+          // Keep whatever was seeded from cache during render rather than blanking.
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }
 
     const unsubscribe = api.wsClient.subscribeThread({
       threadId,
@@ -233,10 +242,27 @@ export function useThreadStream(api: ApiClient, threadId: string) {
             // is *this* thread's effective host (we don't track that yet), so
             // we treat any update as signal — same approximation as before.
             setHostOnline(msg.status === "online");
+          } else if (msg.t === "thread-snapshot") {
+            // C: cold-open message history delivered over the warm WS (replaces
+            // the HTTP getThread). Preserve any optimistic `pending:` user
+            // bubble the user fired before the snapshot landed, then drop the
+            // loading skeleton.
+            if (active) {
+              setMessages((cur) => {
+                const pending = cur.filter((x) => x.id.startsWith("pending:"));
+                const next = pending.length > 0 ? [...msg.messages, ...pending] : msg.messages;
+                api.cache.set(cacheKey, next);
+                return next;
+              });
+              setLoading(false);
+            }
           } else if (msg.t === "catchup-complete") {
             if (msg.latestSeq > lastSeqRef.current) lastSeqRef.current = msg.latestSeq;
             // Initial replay done — paint the buffered history in one batch.
             flushReplay();
+            // Safety net: clears the skeleton even for a thread with messages
+            // but zero events (snapshot path) or if a snapshot never arrived.
+            if (active) setLoading(false);
           } else if (msg.t === "catchup-too-long") {
             const targetSeq = msg.latestSeq;
             void api

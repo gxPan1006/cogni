@@ -3,7 +3,7 @@ import { serve } from "@hono/node-server";
 import { WebSocket } from "ws";
 import { makeTestDb } from "./db/test-db.js";
 import { findOrCreateUserByEmail } from "./db/users.js";
-import { createThread, getThreadDetail } from "./db/threads.js";
+import { createThread, getThreadDetail, appendMessage } from "./db/threads.js";
 import { createHost } from "./db/hosts.js";
 import { HostRouter } from "./host-router.js";
 import { ClientHub } from "./client-hub.js";
@@ -150,6 +150,63 @@ describe("cloud server e2e (headless spine)", () => {
     // Drain the HTTP server, then close the db. The WS onClose handlers fire
     // asynchronously and may still touch the db after this — that's caught and
     // warn-logged by host-ws's onClose, harmless test-teardown noise.
+    await stop?.();
+    stop = undefined;
+    await close();
+  });
+
+  // C: a cold subscribe-thread (lastSeq 0) seeds the message history over the
+  // WS itself, so the client doesn't need a separate (cold, ~1s) HTTP getThread.
+  it("subscribe-thread (cold) replays message history as a thread-snapshot", async () => {
+    const { db, close } = await makeTestDb();
+    const user = await findOrCreateUserByEmail(db, "snap@x.com");
+    const thread = await createThread(db, { userId: user.id, tenantId: user.tenantId });
+    await appendMessage(db, { threadId: thread.id, role: "user", content: "first" });
+    await appendMessage(db, { threadId: thread.id, role: "assistant", content: "reply" });
+
+    const auth = makeAuth({
+      jwtSecret: "test-secret-test-secret-test-sec",
+      google: { clientId: "x", clientSecret: "y", redirectUri: "http://x/cb" },
+    });
+    const { createAuthSession } = await import("./db/auth-sessions.js");
+    const session = await createAuthSession(db, { userId: user.id, deviceName: "test snap" });
+    const jwt = await auth.issueToken({
+      userId: user.id, tenantId: user.tenantId, sessionId: session.id,
+    });
+
+    const hosts = new HostRouter();
+    const clients = new ClientHub();
+    const chat = new ChatDomain(db, hosts, clients);
+    const { app, injectWebSocket } = createServer({
+      db, auth, hosts, clients, chat,
+      emailTransport: new FakeTransport(),
+      magicLinkTtlMinutes: 15,
+      publicUrl: "http://localhost",
+      webUrl: "https://chat.ai-cognit.com",
+    });
+    const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
+      const s = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" }, () => resolve(s));
+    });
+    injectWebSocket(server);
+    stop = () => new Promise<void>((resolve) => server.close(() => resolve()));
+    const port = (server.address() as { port: number }).port;
+
+    const clientWs = new WebSocket(`ws://127.0.0.1:${port}/api/ws?token=${jwt}`);
+    const client = reader(clientWs);
+    await new Promise((r) => clientWs.once("open", r));
+    clientWs.send(JSON.stringify({ t: "subscribe-thread", threadId: thread.id }));
+
+    // The snapshot must arrive (before catchup-complete) carrying both messages
+    // in the same MessageView shape the HTTP getThread returns.
+    const snap = await client.next();
+    expect(snap).toMatchObject({ t: "thread-snapshot", threadId: thread.id });
+    expect(snap.messages.map((m: any) => `${m.role}:${m.content}`)).toEqual([
+      "user:first",
+      "assistant:reply",
+    ]);
+    expect(await client.next()).toMatchObject({ t: "catchup-complete", threadId: thread.id });
+
+    clientWs.close();
     await stop?.();
     stop = undefined;
     await close();
