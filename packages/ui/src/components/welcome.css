@@ -2,9 +2,9 @@
 
 .welcome {
   flex: 1; min-height: 0;
-  /* Left-aligned: content sits against a left gutter instead of being centered
-     in the viewport (which left an awkward empty column on the left). */
-  display: flex; align-items: center; justify-content: flex-start;
+  /* Centered: the content column sits in the horizontal middle of the main
+     slot (text stays left-aligned within the column). */
+  display: flex; align-items: center; justify-content: center;
   padding: 24px 56px;
   overflow-y: auto;
 }
