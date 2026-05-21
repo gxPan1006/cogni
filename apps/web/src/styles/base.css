@@ -129,10 +129,19 @@ body {
 .input:focus { border-color: var(--ink-2); box-shadow: 0 0 0 3px var(--surface-3); }
 .input::placeholder { color: var(--muted-2); }
 
-/* Scrollbar fade */
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
-*::-webkit-scrollbar-thumb:hover { background: var(--muted-2); }
+/* Auto-hide scrollbars: the thumb is transparent at rest and only fades in
+   while the element is actively scrolling (the `is-scrolling` class is toggled
+   by useAutoHideScrollbars) or while the thumb itself is hovered. */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  transition: background-color 0.3s ease;
+}
+.is-scrolling::-webkit-scrollbar-thumb { background-color: var(--line); }
+*::-webkit-scrollbar-thumb:hover { background-color: var(--muted-2); }
 
 /* Paper texture (subtle noise) */
 .paper {

@@ -522,7 +522,7 @@ function ProjectButton({ project, active, onClick, onPrefetch, dim }: { project:
 function Wordmark({ size = 22 }: { size?: number }) {
   return (
     <div className="sb__wordmark" style={{ fontSize: size }}>
-      <LogoMark className="sb__wordmark-mark" size={size} />
+      <LogoMark className="sb__wordmark-mark" size={Math.round(size * 1.27)} />
       <span className="sb__wordmark-text" style={{ fontSize: size * 0.78 }}>cogni</span>
     </div>
   );

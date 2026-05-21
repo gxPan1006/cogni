@@ -25,14 +25,14 @@
  *     subscription via the embedded thread section.
  */
 import { Routes, Route, Navigate, useParams, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { ThreadSummary, ProjectTask } from "@cogni/contract";
 import {
   Login, Sidebar, Conversation, Welcome, SettingsPage,
   ProjectsList, ProjectBoard, TaskDetail,
   NewProject, NewTask, ProjectSettings,
-  useProjects, useProjectBoard, useGlobalShortcuts, Icon,
+  useProjects, useProjectBoard, useGlobalShortcuts, useAutoHideScrollbars, Icon,
   ChatBubble,
   type HostInfo, type ProjectListItem, type NewProjectDraft, type NewTaskDraft,
 } from "@cogni/ui";
@@ -108,6 +108,15 @@ function WebShell({ page }: { page: Page }) {
   const [pendingFirstMessage, setPendingFirstMessage] = useState<string | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<{ name: string; size: number }[] | null>(null);
   const [pendingModel, setPendingModel] = useState<string | null>(null);
+
+  // Empty-draft garbage collection. A thread opened via "新对话" / ⌘N that
+  // never received a message is an "empty draft" — we delete it the moment the
+  // user navigates off it (picks another thread, opens a new chat, switches to
+  // projects/settings) so the sidebar doesn't fill up with stray "New chat"
+  // rows. `onActivity` from <Conversation> clears the ref once a message is
+  // actually sent, which makes the thread permanent.
+  const emptyThreadId = useRef<string | null>(null);
+  const prevThreadId = useRef<string | undefined>(params.threadId);
 
   // Mobile drawer: the left rail is off-canvas on narrow viewports and the
   // ☰ button in the top bar slides it in. Any route change (picking a thread /
@@ -227,10 +236,32 @@ function WebShell({ page }: { page: Page }) {
     return { name, email: claims.email };
   }, [token]);
 
-  const newChat = async (): Promise<string | null> => {
+  // Delete a still-empty draft thread (local list + cloud). No-op once the ref
+  // has been cleared by `onActivity`.
+  const discardEmptyThread = (id: string) => {
+    emptyThreadId.current = null;
+    setThreads((prev) => prev.filter((t) => t.id !== id));
+    api.deleteThread(id).catch(() => refreshThreads());
+  };
+
+  // Navigated away from the tracked empty draft → drop it. Covers selecting
+  // another thread and switching to projects/settings (threadId → undefined).
+  useEffect(() => {
+    const prev = prevThreadId.current;
+    prevThreadId.current = params.threadId;
+    if (prev && prev !== params.threadId && emptyThreadId.current === prev) {
+      discardEmptyThread(prev);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fire on route change only
+  }, [params.threadId]);
+
+  const newChat = async (opts?: { track?: boolean }): Promise<string | null> => {
     try {
+      // Opening a new chat retires any previous untouched draft.
+      if (emptyThreadId.current) discardEmptyThread(emptyThreadId.current);
       const t = await api.createThread();
       setThreads((prev) => [t, ...prev]);
+      if (opts?.track !== false) emptyThreadId.current = t.id;
       nav(`/chat/${t.id}`);
       return t.id;
     } catch (e) {
@@ -252,7 +283,9 @@ function WebShell({ page }: { page: Page }) {
       refreshThreads();
       nav(`/chat/${opts.threadId}`);
     } else {
-      await newChat();
+      // Welcome always sends a first message right away, so the new thread is
+      // never an empty draft — don't track it for GC.
+      await newChat({ track: false });
     }
   };
 
@@ -264,6 +297,7 @@ function WebShell({ page }: { page: Page }) {
   };
 
   const deleteThread = (id: string) => {
+    if (emptyThreadId.current === id) emptyThreadId.current = null;
     setThreads((prev) => prev.filter((t) => t.id !== id));
     // Leaving the deleted thread's route avoids a 404 fetch in <Conversation>.
     if (params.threadId === id) nav("/chat");
@@ -350,6 +384,8 @@ function WebShell({ page }: { page: Page }) {
     : mode === "project" ? "项目"
     : params.threadId ? (threads.find((t) => t.id === params.threadId)?.title ?? "对话")
     : "对话";
+
+  useAutoHideScrollbars();
 
   useGlobalShortcuts({
     onNewChat: () => { void newChat(); },
@@ -465,6 +501,7 @@ function WebShell({ page }: { page: Page }) {
               initialAttachments={pendingAttachments ?? undefined}
               initialModel={pendingModel ?? undefined}
               onConsumeInitialDraft={() => { setPendingFirstMessage(null); setPendingAttachments(null); setPendingModel(null); }}
+              onActivity={() => { if (emptyThreadId.current === params.threadId) emptyThreadId.current = null; }}
               onTitleMaybeChanged={refreshThreads}
               hostName={hostName}
             />

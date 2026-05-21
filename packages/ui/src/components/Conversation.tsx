@@ -26,6 +26,7 @@ import { CHAT_MODELS, DEFAULT_CHAT_MODEL } from "@cogni/contract";
 import { useThreadStream } from "../hooks/useThreadStream.js";
 import { useUploads } from "../hooks/useUploads.js";
 import { Composer, type ComposerStatus } from "./Composer.js";
+import { LogoMark } from "./LogoMark.js";
 import { HostFallbackCard } from "./HostFallbackCard.js";
 import { NoHostBanner } from "./NoHostBanner.js";
 import { LoadingRows } from "./LoadingState.js";
@@ -42,6 +43,7 @@ export function Conversation({
   initialAttachments,
   initialModel,
   onConsumeInitialDraft,
+  onActivity,
   hostName,
 }: {
   api: ApiClient;
@@ -53,6 +55,10 @@ export function Conversation({
   /** Model chosen in Welcome for the first message. */
   initialModel?: string;
   onConsumeInitialDraft?: () => void;
+  /** Fired the moment a message is actually sent in this thread — lets the
+   *  shell mark the thread as "used" so it won't be garbage-collected as an
+   *  empty draft. */
+  onActivity?: () => void;
   onTitleMaybeChanged?: () => void;
   /** Name of the host this thread is routed to. Shown above the composer. */
   hostName?: string;
@@ -72,6 +78,7 @@ export function Conversation({
     if (!consumedInitial.current && initialDraft && connected) {
       if (send(initialDraft, initialAttachments, undefined, initialModel ?? model)) {
         consumedInitial.current = true;
+        onActivity?.();
         onConsumeInitialDraft?.();
       }
     }
@@ -87,7 +94,10 @@ export function Conversation({
   const submit = () => {
     if (!draft.trim()) return;
     const attachments = uploads.takeAttachments();
-    if (send(draft, attachments, undefined, model)) setDraft("");
+    if (send(draft, attachments, undefined, model)) {
+      onActivity?.();
+      setDraft("");
+    }
   };
 
   const { rows, awaitingReply } = buildTimeline(messages, events);
@@ -117,7 +127,13 @@ export function Conversation({
               // "empty conversation" placeholder (which used to flash before
               // the history arrived).
               ? <LoadingRows rows={4} />
-              : <div className="conversation__empty">开始你的对话吧</div>
+              : (
+                <div className="conversation__empty">
+                  <LogoMark className="conversation__empty-mark" size={48} />
+                  <p className="conversation__empty-title">开始你的对话吧</p>
+                  <p className="conversation__empty-sub">在下方输入框里问点什么,Cogni 随时在听</p>
+                </div>
+              )
           )}
 
           {/* Whole conversation, event-sourced: user turns interleaved with

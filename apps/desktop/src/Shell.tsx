@@ -26,7 +26,7 @@
  *     `archiveProject`. Cloud's WS push refreshes the form via
  *     `useProjectBoard.project` re-rendering.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ThreadSummary, ProjectTask } from "@cogni/contract";
 import { api, ApiError, type HostInfo } from "./api.js";
@@ -34,7 +34,7 @@ import {
   Sidebar, Conversation, Welcome, SettingsPage,
   ProjectsList, ProjectBoard, TaskDetail,
   NewProject, NewTask, ProjectSettings,
-  useProjects, useProjectBoard, useGlobalShortcuts,
+  useProjects, useProjectBoard, useGlobalShortcuts, useAutoHideScrollbars,
   ChatBubble,
   Icon,
   type ProjectListItem, type NewProjectDraft, type NewTaskDraft,
@@ -65,6 +65,14 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   const [pendingAttachments, setPendingAttachments] = useState<{ name: string; size: number }[] | null>(null);
   const [pendingModel, setPendingModel] = useState<string | null>(null);
   const [hosts, setHosts] = useState<HostInfo[]>([]);
+
+  // Empty-draft garbage collection — see the web Shell for the full rationale.
+  // A thread opened via "新对话" / ⌘N that never received a message is deleted
+  // the moment the user moves off it, so the sidebar doesn't accumulate stray
+  // "New chat" rows. `onActivity` from <Conversation> clears the ref once a
+  // message is sent, making the thread permanent.
+  const emptyThreadId = useRef<string | null>(null);
+  const prevActiveThreadId = useRef<string | null>(activeThreadId);
 
   // SP-3 project state (real, driven by hooks)
   const projectsHook = useProjects(api);
@@ -161,10 +169,40 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
     return { name: claims.email.split("@")[0]!, email: claims.email };
   }, [token]);
 
-  const newChat = async (): Promise<string | null> => {
+  // Delete a still-empty draft thread (local list + cloud). No-op once the ref
+  // has been cleared by `onActivity`.
+  const discardEmptyThread = (id: string) => {
+    emptyThreadId.current = null;
+    setThreads((prev) => prev.filter((t) => t.id !== id));
+    if (activeThreadId === id) setActiveThreadId(null);
+    api.deleteThread(id).catch(() => refreshThreads());
+  };
+
+  // Switched to another thread → drop the previous untouched draft.
+  useEffect(() => {
+    const prev = prevActiveThreadId.current;
+    prevActiveThreadId.current = activeThreadId;
+    if (prev && prev !== activeThreadId && emptyThreadId.current === prev) {
+      discardEmptyThread(prev);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fire on thread switch only
+  }, [activeThreadId]);
+
+  // Left chat entirely (settings / projects) with an untouched draft open → drop it.
+  useEffect(() => {
+    if (page !== "chat" && emptyThreadId.current) {
+      discardEmptyThread(emptyThreadId.current);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fire on page change only
+  }, [page]);
+
+  const newChat = async (opts?: { track?: boolean }): Promise<string | null> => {
     try {
+      // Opening a new chat retires any previous untouched draft.
+      if (emptyThreadId.current) discardEmptyThread(emptyThreadId.current);
       const t = await api.createThread();
-      await refreshThreads();
+      setThreads((prev) => [t, ...prev.filter((x) => x.id !== t.id)]);
+      if (opts?.track !== false) emptyThreadId.current = t.id;
       setActiveThreadId(t.id);
       setPage("chat");
       return t.id;
@@ -188,7 +226,9 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
       setActiveThreadId(opts.threadId);
       setPage("chat");
     } else {
-      await newChat();
+      // Welcome always sends a first message right away, so the new thread is
+      // never an empty draft — don't track it for GC.
+      await newChat({ track: false });
     }
   };
 
@@ -200,6 +240,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   };
 
   const deleteThread = (id: string) => {
+    if (emptyThreadId.current === id) emptyThreadId.current = null;
     setThreads((prev) => prev.filter((t) => t.id !== id));
     // If the open conversation was deleted, fall back to the Welcome screen.
     if (activeThreadId === id) { setActiveThreadId(null); setPage("chat"); }
@@ -305,6 +346,8 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
     else setPage(activeProjectId ? "project" : "projects");
   };
 
+  useAutoHideScrollbars();
+
   useGlobalShortcuts({
     onNewChat: () => { void newChat(); },
     onToggleSidebar: () => setSidebarCollapsed((c) => !c),
@@ -400,6 +443,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
               initialAttachments={pendingAttachments ?? undefined}
               initialModel={pendingModel ?? undefined}
               onConsumeInitialDraft={() => { setPendingFirstMessage(null); setPendingAttachments(null); setPendingModel(null); }}
+              onActivity={() => { if (emptyThreadId.current === activeThreadId) emptyThreadId.current = null; }}
               onTitleMaybeChanged={refreshThreads}
               hostName={hostName}
             />
