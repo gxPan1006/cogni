@@ -88,26 +88,77 @@ export function AssistantBlocks({
   for (let i = blocks.length - 1; i >= 0; i--) {
     if (blocks[i]?.kind === "text") { lastTextIdx = i; break; }
   }
+
+  // Group *consecutive* tool-call blocks into one collapsible card so a long
+  // run of Bash/Grep/Read pills reads as a single tidy unit instead of a stack
+  // of scattered rows. A lone tool call (run of 1) stays a bare pill.
+  const out: ReactNode[] = [];
+  let run: ToolBlock[] = [];
+  const flushRun = (atIdx: number) => {
+    if (run.length === 0) return;
+    if (run.length === 1) {
+      const b = run[0]!;
+      out.push(<ToolCallBlock key={`t-${atIdx}`} name={b.name} input={b.input} result={b.result} status={b.status} />);
+    } else {
+      out.push(<ToolGroup key={`g-${atIdx}`} tools={run} />);
+    }
+    run = [];
+  };
+  blocks.forEach((b, i) => {
+    if (b.kind === "tool") { run.push(b); return; }
+    flushRun(i);
+    if (b.kind === "text") {
+      out.push(<AssistantText key={i} text={b.text} streaming={streaming && i === lastTextIdx} />);
+    } else if (b.kind === "error") {
+      out.push(
+        <div key={i} className="msg msg--aux">
+          <div className={errorClassName}>⚠ {b.code}: {b.message}</div>
+        </div>,
+      );
+    }
+    // permission — SP-3 dropped the mid-run permission UI (see Conversation).
+  });
+  flushRun(blocks.length);
+
+  return <>{out}</>;
+}
+
+type ToolBlock = Extract<Block, { kind: "tool" }>;
+
+/**
+ * A collapsible card wrapping a run of consecutive tool calls. The header reads
+ * "工具调用 (N)" with a one-line preview of the distinct tool names; the chevron
+ * collapses/expands the whole run. Default state: expanded while the run is
+ * still live (any tool running) so you watch progress, collapsed once it has
+ * settled so reopened history stays compact. Each row inside is still
+ * individually expandable to show its own result.
+ */
+function ToolGroup({ tools }: { tools: ToolBlock[] }) {
+  const { t } = useTranslation();
+  const running = tools.some((x) => x.status === "running");
+  const [open, setOpen] = useState(running);
+  const status = running ? "running" : tools.some((x) => x.status === "error") ? "error" : "done";
+  const names = Array.from(new Set(tools.map((x) => x.name))).join(" · ");
   return (
-    <>
-      {blocks.map((b, i) => {
-        if (b.kind === "text") {
-          return <AssistantText key={i} text={b.text} streaming={streaming && i === lastTextIdx} />;
-        }
-        if (b.kind === "tool") {
-          return <ToolCallBlock key={i} name={b.name} input={b.input} result={b.result} status={b.status} />;
-        }
-        if (b.kind === "error") {
-          return (
-            <div key={i} className="msg msg--aux">
-              <div className={errorClassName}>⚠ {b.code}: {b.message}</div>
-            </div>
-          );
-        }
-        // permission — SP-3 dropped the mid-run permission UI (see Conversation).
-        return null;
-      })}
-    </>
+    <div className="msg msg--aux">
+      <div className={"toolgroup toolgroup--" + status + (open ? " toolgroup--open" : "")}>
+        <button className="toolgroup__head" onClick={() => setOpen(!open)} type="button">
+          <span className="toolgroup__status">
+            {running ? <span className="toolcall__spin">{Icon.refresh}</span> : Icon.tool}
+          </span>
+          <span className="toolgroup__title">{t("chat.blocks.toolGroup", { count: tools.length })}</span>
+          {!open && <span className="toolgroup__names">{names}</span>}
+          <span className="toolgroup__toggle">{open ? "−" : "+"}</span>
+        </button>
+        {open && (
+          <div className="toolgroup__body">
+            {tools.map((b, i) => (
+              <ToolCallBlock key={b.toolId || i} name={b.name} input={b.input} result={b.result} status={b.status} grouped />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -136,21 +187,26 @@ export function ToolCallBlock({
   result,
   status = "done",
   defaultOpen = false,
+  grouped = false,
 }: {
   name: string;
   input: unknown;
   result?: unknown;
   status?: "running" | "done" | "error";
   defaultOpen?: boolean;
+  /** Rendered inside a <ToolGroup> card → drop the outer wrapper + own border. */
+  grouped?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const inputPreview = toolInputPreview(input);
   const resultText = typeof result === "string" ? result : safeStringify(result);
 
-  return (
-    <div className="msg msg--aux">
+  const inner = (
+    <>
       <button
-        className={"toolcall toolcall--" + status + (open ? " toolcall--open" : "")}
+        className={
+          "toolcall toolcall--" + status + (open ? " toolcall--open" : "") + (grouped ? " toolcall--grouped" : "")
+        }
         onClick={() => setOpen(!open)}
         type="button"
       >
@@ -172,8 +228,10 @@ export function ToolCallBlock({
           )}
         </div>
       )}
-    </div>
+    </>
   );
+
+  return grouped ? inner : <div className="msg msg--aux">{inner}</div>;
 }
 
 export function PermissionPrompt({

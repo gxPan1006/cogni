@@ -154,6 +154,20 @@ export function Composer({
           disabled={disabled}
           onFocus={onPrewarm ? () => onPrewarm() : undefined}
           onChange={(e) => setDraft(e.target.value)}
+          onPaste={
+            uploads
+              ? (e) => {
+                  // Cmd+V a screenshot / copied file → attach it, mirroring the
+                  // drag-drop path. Only swallow the paste when the clipboard
+                  // actually carries files; plain text paste falls through.
+                  const files = e.clipboardData?.files;
+                  if (files && files.length > 0) {
+                    e.preventDefault();
+                    uploads.add(files);
+                  }
+                }
+              : undefined
+          }
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();

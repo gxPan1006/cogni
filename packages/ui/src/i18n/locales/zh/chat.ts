@@ -90,6 +90,7 @@ export const chat = {
   },
   blocks: {
     thinking: "思考中",
+    toolGroup: "工具调用 ({{count}})",
     permissionNeeded: "需要授权",
     permissionWant: "想要",
     deny: "拒绝",

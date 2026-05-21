@@ -90,6 +90,7 @@ export const chat = {
   },
   blocks: {
     thinking: "Thinking",
+    toolGroup: "{{count}} tool calls",
     permissionNeeded: "Permission needed",
     permissionWant: "wants to",
     deny: "Deny",
