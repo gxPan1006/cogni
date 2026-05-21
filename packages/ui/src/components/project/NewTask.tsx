@@ -7,6 +7,7 @@
  * tracker imports are intentionally kept outside this surface.
  */
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Icon } from "../icons.js";
 import type { HostInfo } from "../../transport/api.js";
 import "./new-task.css";
@@ -26,6 +27,7 @@ export function NewTask({
   /** The project's default host id, shown as the picker's default option. */
   defaultHostId?: string;
 }) {
+  const { t } = useTranslation();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   // "" = use project default; otherwise an explicit host override.
@@ -43,44 +45,46 @@ export function NewTask({
       <div className="modal nt" onClick={(e) => e.stopPropagation()}>
         <header className="modal__head">
           <div>
-            <div className="modal__eyebrow">新建</div>
-            <h2 className="modal__title">新任务</h2>
+            <div className="modal__eyebrow">{t("project.newTask.eyebrow")}</div>
+            <h2 className="modal__title">{t("project.newTask.title")}</h2>
           </div>
-          <button className="modal__close" onClick={onClose} title="关闭 (Esc)">{Icon.x}</button>
+          <button className="modal__close" onClick={onClose} title={t("project.newTask.close")}>{Icon.x}</button>
         </header>
 
         <div className="modal__body">
           <div className="field">
-            <div className="field__label">标题<span className="field__required">*</span></div>
-            <input className="input" placeholder="一句话说明这次要做什么" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+            <div className="field__label">{t("project.newTask.fieldTitle")}<span className="field__required">*</span></div>
+            <input className="input" placeholder={t("project.newTask.fieldTitlePlaceholder")} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
           </div>
           <div className="field">
-            <div className="field__label">描述</div>
-            <textarea className="input nt__textarea" placeholder="补充上下文、约束、验收标准" value={description} onChange={(e) => setDescription(e.target.value)} rows={6} />
-            <div className="field__hint">描述会作为任务的初始 user message 注入对话。</div>
+            <div className="field__label">{t("project.newTask.fieldDescription")}</div>
+            <textarea className="input nt__textarea" placeholder={t("project.newTask.fieldDescriptionPlaceholder")} value={description} onChange={(e) => setDescription(e.target.value)} rows={6} />
+            <div className="field__hint">{t("project.newTask.fieldDescriptionHint")}</div>
           </div>
           {hosts.length > 1 && (
             <div className="field">
-              <div className="field__label">运行 host</div>
+              <div className="field__label">{t("project.newTask.runHost")}</div>
               <select className="input" value={hostId} onChange={(e) => setHostId(e.target.value)}>
                 <option value="">
-                  项目默认{defaultHostId ? `（${hosts.find((h) => h.id === defaultHostId)?.name ?? "默认 host"}）` : ""}
+                  {defaultHostId
+                    ? t("project.newTask.projectDefaultNamed", { name: hosts.find((h) => h.id === defaultHostId)?.name ?? t("project.newTask.defaultHostFallback") })
+                    : t("project.newTask.projectDefault")}
                 </option>
                 {hosts.map((h) => (
                   <option key={h.id} value={h.id}>
-                    {h.name}{h.status === "online" ? "" : "（离线）"}
+                    {h.name}{h.status === "online" ? "" : t("project.newTask.hostOffline")}
                   </option>
                 ))}
               </select>
-              <div className="field__hint">默认跑在项目的默认 host；可为这个任务单独指定。</div>
+              <div className="field__hint">{t("project.newTask.runHostHint")}</div>
             </div>
           )}
         </div>
 
         <footer className="modal__foot">
-          <button className="btn btn-sm" onClick={onClose}>取消</button>
+          <button className="btn btn-sm" onClick={onClose}>{t("project.newTask.cancel")}</button>
           <button className="btn btn-sm btn-primary" disabled={!canSubmit} onClick={submit}>
-            {Icon.plus} 创建任务
+            {Icon.plus} {t("project.newTask.create")}
           </button>
         </footer>
       </div>

@@ -500,6 +500,15 @@ export class ProjectDomain {
   }
 
   /**
+   * Settings → Runner Hosts: toggle a host's keep-awake (block-sleep) flag.
+   * Passthrough to the host RPC; the route persists the returned state +
+   * broadcasts a host-meta update. Authorization is the route's responsibility.
+   */
+  async setKeepAwake(hostId: string, enabled: boolean): Promise<{ enabled: boolean; locked: boolean }> {
+    return this.deps.hostRpc.setKeepAwake(hostId, { enabled });
+  }
+
+  /**
    * SP-4 Artifacts: read a host file's bytes (base64). Authorization +
    * path-confinement are the route's responsibility (project repo root /
    * thread scratch dir); this is a thin passthrough to the host RPC.

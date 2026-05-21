@@ -78,6 +78,10 @@ export interface HostInfo {
   lastSeen?: string | null;
   projectsRoot?: string | null;
   projectsRootLocked?: boolean;
+  /** Whether the host blocks OS sleep while alive (default ON). */
+  keepAwake?: boolean;
+  /** true ⇢ pinned by COGNI_KEEP_AWAKE env (toggle shown read-only). */
+  keepAwakeLocked?: boolean;
 }
 
 export interface DeviceRow {
@@ -226,6 +230,12 @@ export class ApiClient {
   setProjectsRoot = (id: string, projectsRoot: string): Promise<{ projectsRoot: string; locked: boolean }> =>
     this.request(`${this.cloudUrl}/api/hosts/${id}/projects-root`, {
       method: "PUT", headers: this.authHeaders(), body: JSON.stringify({ projectsRoot }),
+    });
+
+  /** Settings → Runner Hosts: toggle whether a host blocks OS sleep while running. */
+  setKeepAwake = (id: string, enabled: boolean): Promise<{ enabled: boolean; locked: boolean }> =>
+    this.request(`${this.cloudUrl}/api/hosts/${id}/keep-awake`, {
+      method: "PUT", headers: this.authHeaders(), body: JSON.stringify({ enabled }),
     });
 
   // ─── Devices (auth_sessions) ──────────────────────────────────────────

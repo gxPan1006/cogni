@@ -1,10 +1,11 @@
 import type { CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
 import "./loading.css";
 
 type LoadingVariant = "page" | "section" | "inline";
 
 export function LoadingState({
-  title = "加载中",
+  title,
   subtitle,
   variant = "section",
   className = "",
@@ -14,6 +15,8 @@ export function LoadingState({
   variant?: LoadingVariant;
   className?: string;
 }) {
+  const { t } = useTranslation();
+  const label = title ?? t("chat.common.loading");
   const cls = ["loading-state", `loading-state--${variant}`, className].filter(Boolean).join(" ");
   return (
     <div className={cls} role="status" aria-live="polite">
@@ -21,7 +24,7 @@ export function LoadingState({
         <span className="loading-state__glint" />
       </span>
       <span className="loading-state__copy">
-        <span className="loading-state__title">{title}</span>
+        <span className="loading-state__title">{label}</span>
         {subtitle && <span className="loading-state__subtitle">{subtitle}</span>}
       </span>
     </div>

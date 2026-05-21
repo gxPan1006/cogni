@@ -57,6 +57,9 @@ export function registerHostsRoutes(app: Hono, deps: ServerDeps): void {
         // whether it's env-locked. null ⇢ old host that never reported one.
         projectsRoot: h.projectsRoot ?? null,
         projectsRootLocked: h.projectsRootLocked ?? false,
+        // Keep-awake toggle state. Defaults ON for hosts that predate the column.
+        keepAwake: h.keepAwake ?? true,
+        keepAwakeLocked: h.keepAwakeLocked ?? false,
       })),
     );
   });

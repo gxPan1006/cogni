@@ -43,6 +43,8 @@ import type {
   ReadFileResponse,
   SetProjectsRootRequest,
   SetProjectsRootResponse,
+  SetKeepAwakeRequest,
+  SetKeepAwakeResponse,
   HostRpcMethod,
 } from "@cogni/contract";
 
@@ -115,6 +117,9 @@ export class HostRpcClient {
   }
   async setProjectsRoot(hostId: string, params: SetProjectsRootRequest): Promise<SetProjectsRootResponse> {
     return this.call(hostId, "set-projects-root", params) as Promise<SetProjectsRootResponse>;
+  }
+  async setKeepAwake(hostId: string, params: SetKeepAwakeRequest): Promise<SetKeepAwakeResponse> {
+    return this.call(hostId, "set-keep-awake", params) as Promise<SetKeepAwakeResponse>;
   }
 
   private async call(

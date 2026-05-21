@@ -16,6 +16,7 @@
  * always present.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ApiClient } from "../../transport/api.js";
 import "./artifacts.css";
 
@@ -49,6 +50,7 @@ function kindFor(name: string): SelectedFile["kind"] {
 }
 
 export function ArtifactBrowser({ api, source }: { api: ApiClient; source: ArtifactSource }) {
+  const { t } = useTranslation();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [chatFiles, setChatFiles] = useState<ChatFile[]>([]);
   const [cwd, setCwd] = useState<string>("");
@@ -130,17 +132,17 @@ export function ArtifactBrowser({ api, source }: { api: ApiClient; source: Artif
       <div className="artifacts__list">
         {source.kind === "project" && (
           <div className="artifacts__crumb">
-            <button className="btn btn-sm btn-ghost" disabled={atRoot} onClick={() => loadList(parentDir)}>↑ 上级</button>
+            <button className="btn btn-sm btn-ghost" disabled={atRoot} onClick={() => loadList(parentDir)}>{t("project.artifacts.parentDir")}</button>
             <span className="artifacts__cwd" title={cwd}>{cwd}</span>
           </div>
         )}
-        {loading && <div className="artifacts__hint">加载中…</div>}
+        {loading && <div className="artifacts__hint">{t("project.artifacts.loading")}</div>}
         {error && <div className="artifacts__error">{error}</div>}
         {!loading && source.kind === "project" && entries.length === 0 && (
-          <div className="artifacts__hint">空目录</div>
+          <div className="artifacts__hint">{t("project.artifacts.emptyDir")}</div>
         )}
         {!loading && source.kind === "chat" && chatFiles.length === 0 && (
-          <div className="artifacts__hint">这个对话还没产生文件</div>
+          <div className="artifacts__hint">{t("project.artifacts.chatNoFiles")}</div>
         )}
         {source.kind === "project" && entries.map((e) => (
           <div key={e.name} className="artifacts__row">
@@ -153,7 +155,7 @@ export function ArtifactBrowser({ api, source }: { api: ApiClient; source: Artif
                 <button className="artifacts__entry" onClick={() => openFile(`${cwd}/${e.name}`, e.name)}>
                   📄 {e.name}{e.size != null ? <span className="artifacts__size">{fmtSize(e.size)}</span> : null}
                 </button>
-                <button className="artifacts__dl" title="下载" onClick={() => download(`${cwd}/${e.name}`, e.name)}>⬇</button>
+                <button className="artifacts__dl" title={t("project.artifacts.download")} onClick={() => download(`${cwd}/${e.name}`, e.name)}>⬇</button>
               </>
             )}
           </div>
@@ -161,18 +163,18 @@ export function ArtifactBrowser({ api, source }: { api: ApiClient; source: Artif
         {source.kind === "chat" && chatFiles.map((f) => (
           <div key={f.path} className="artifacts__row">
             <button className="artifacts__entry" onClick={() => openFile(f.path, f.name)}>📄 {f.name}</button>
-            <button className="artifacts__dl" title="下载" onClick={() => download(f.path, f.name)}>⬇</button>
+            <button className="artifacts__dl" title={t("project.artifacts.download")} onClick={() => download(f.path, f.name)}>⬇</button>
           </div>
         ))}
       </div>
 
       <div className="artifacts__viewer">
-        {!selected && <div className="artifacts__hint artifacts__hint--center">选一个文件预览</div>}
+        {!selected && <div className="artifacts__hint artifacts__hint--center">{t("project.artifacts.pickFile")}</div>}
         {selected && (
           <>
             <div className="artifacts__viewer-head">
               <span className="artifacts__viewer-name">{selected.name}</span>
-              <button className="btn btn-sm btn-ghost" onClick={() => download(selected.path, selected.name)}>下载</button>
+              <button className="btn btn-sm btn-ghost" onClick={() => download(selected.path, selected.name)}>{t("project.artifacts.download")}</button>
             </div>
             <div className="artifacts__viewer-body">
               {selected.kind === "html" && (
@@ -185,7 +187,7 @@ export function ArtifactBrowser({ api, source }: { api: ApiClient; source: Artif
                 <pre className="artifacts__pre">{selected.text}</pre>
               )}
               {selected.kind === "binary" && (
-                <div className="artifacts__hint artifacts__hint--center">二进制文件,点上方"下载"获取</div>
+                <div className="artifacts__hint artifacts__hint--center">{t("project.artifacts.binaryHint")}</div>
               )}
             </div>
           </>

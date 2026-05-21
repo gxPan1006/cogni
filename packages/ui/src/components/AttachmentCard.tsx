@@ -5,6 +5,7 @@
  * otherwise an uppercase extension badge tinted by file kind) sits beside the
  * name + size. Cohesive with Cogni's warm-sand tokens; no flat gray pills.
  */
+import { useTranslation } from "react-i18next";
 import "./attachment.css";
 
 const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "heic", "bmp", "avif"]);
@@ -57,6 +58,7 @@ export function AttachmentCard({
   onRemove?: () => void;
   onRetry?: () => void;
 }) {
+  const { t } = useTranslation();
   const ext = extOf(name);
   const kind = kindOf(ext);
   const uploading = status === "uploading";
@@ -79,15 +81,15 @@ export function AttachmentCard({
       <div className="att-card__meta">
         <span className="att-card__name">{name}</span>
         <span className="att-card__sub">
-          {isError ? (error ? "上传失败" : "上传失败") : uploading ? `${Math.round((progress ?? 0) * 100)}%` : humanSize(size)}
+          {isError ? t("chat.attachment.uploadFailed") : uploading ? `${Math.round((progress ?? 0) * 100)}%` : humanSize(size)}
         </span>
       </div>
 
       {isError && onRetry && (
-        <button type="button" className="att-card__btn att-card__retry" onClick={onRetry} title="重试" aria-label="重试上传">↻</button>
+        <button type="button" className="att-card__btn att-card__retry" onClick={onRetry} title={t("chat.common.retry")} aria-label={t("chat.attachment.retryUpload")}>↻</button>
       )}
       {onRemove && (
-        <button type="button" className="att-card__btn att-card__x" onClick={onRemove} title="移除" aria-label="移除附件">✕</button>
+        <button type="button" className="att-card__btn att-card__x" onClick={onRemove} title={t("chat.attachment.removeTitle")} aria-label={t("chat.attachment.removeAria")}>✕</button>
       )}
 
       {uploading && (

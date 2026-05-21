@@ -3,6 +3,16 @@
 // Components and hooks land here as the apps/desktop → apps/web extraction
 // progresses (SP-2 Section 8). See SP-2 plan Tasks 21-24 for the migration order.
 
+// i18n — side-effect import inits i18next before any component renders, so the
+// correct language (Chinese / English) is on screen from first paint.
+import "./i18n/index.js";
+export { i18n, setLocale, getLocale } from "./i18n/index.js";
+export type { Locale } from "./i18n/index.js";
+export { useLocale } from "./hooks/useLocale.js";
+// Re-exported so apps/* (which don't depend on react-i18next directly) can
+// translate strings through the same i18n instance @cogni/ui initialised.
+export { useTranslation } from "react-i18next";
+
 // Transport
 export { ApiClient, ApiError } from "./transport/api.js";
 export type {

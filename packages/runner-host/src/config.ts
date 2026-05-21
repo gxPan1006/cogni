@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import type { SetProjectsRootResponse } from "@cogni/contract";
+import type { SetProjectsRootResponse, SetKeepAwakeResponse } from "@cogni/contract";
 import { expandTilde } from "./paths.js";
 
 export interface HostConfig {
@@ -11,6 +11,9 @@ export interface HostConfig {
   /** SP-4: per-host root for auto-created project folders; stored raw (may
    *  contain a leading `~`), expanded on read. Optional for old configs. */
   projectsRoot?: string;
+  /** Whether the daemon blocks OS sleep while running. Absent ⇢ default ON
+   *  (so old configs keep the machine reachable for remote clients). */
+  keepAwake?: boolean;
 }
 
 export function configDir(): string {
@@ -66,4 +69,24 @@ export async function setProjectsRoot(projectsRoot: string): Promise<SetProjects
   if (resolved.locked) return { projectsRoot: resolved.root, locked: true };
   if (cfg) await writeHostConfig({ ...cfg, projectsRoot });
   return { projectsRoot: resolved.root, locked: false };
+}
+
+/** Resolve keep-awake: COGNI_KEEP_AWAKE env (locked, accepts 1/true/yes/on)
+ *  → host.json `keepAwake` → default ON. */
+export function resolveKeepAwake(configValue: boolean | undefined): { enabled: boolean; locked: boolean } {
+  const env = process.env.COGNI_KEEP_AWAKE;
+  if (env !== undefined && env.trim().length > 0) {
+    const v = env.trim().toLowerCase();
+    return { enabled: v === "1" || v === "true" || v === "yes" || v === "on", locked: true };
+  }
+  return { enabled: configValue ?? true, locked: false };
+}
+
+/** Persist the keep-awake flag into host.json (no-op + locked when env pins it). */
+export async function setKeepAwake(enabled: boolean): Promise<SetKeepAwakeResponse> {
+  const resolved = resolveKeepAwake(enabled);
+  if (resolved.locked) return { enabled: resolved.enabled, locked: true };
+  const cfg = await readHostConfig();
+  if (cfg) await writeHostConfig({ ...cfg, keepAwake: enabled });
+  return { enabled, locked: false };
 }

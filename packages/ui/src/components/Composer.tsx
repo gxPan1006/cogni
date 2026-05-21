@@ -11,6 +11,7 @@
  *   - attach / model picker stay disabled placeholders for now
  */
 import { useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Icon } from "./icons.js";
 import type { UploadItem } from "../hooks/useUploads.js";
 import { AttachmentCard } from "./AttachmentCard.js";
@@ -103,6 +104,7 @@ export function Composer({
   model?: string;
   onModelChange?: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -147,7 +149,7 @@ export function Composer({
           ref={textareaRef}
           className="composer__input"
           value={draft}
-          placeholder={disabled ? "等待重连…" : (placeholder ?? "想聊点什么?")}
+          placeholder={disabled ? t("chat.composer.placeholderDisabled") : (placeholder ?? t("chat.composer.placeholder"))}
           rows={1}
           disabled={disabled}
           onFocus={onPrewarm ? () => onPrewarm() : undefined}
@@ -175,8 +177,8 @@ export function Composer({
             type="button"
             className="composer__icon-btn"
             disabled={disabled || !uploads}
-            title={uploads ? "添加附件" : "附件功能不可用"}
-            aria-label="Attach file"
+            title={uploads ? t("chat.composer.attach") : t("chat.composer.attachUnavailable")}
+            aria-label={t("chat.composer.attachAria")}
             onClick={() => fileInputRef.current?.click()}
           >
             {Icon.attach}
@@ -194,8 +196,8 @@ export function Composer({
             type="submit"
             className="composer__send"
             disabled={!canSubmit}
-            title="发送 (Enter)"
-            aria-label="Send message"
+            title={t("chat.composer.send")}
+            aria-label={t("chat.composer.sendAria")}
           >
             {Icon.send}
           </button>
@@ -206,11 +208,12 @@ export function Composer({
 }
 
 function StatusPill({ status }: { status: ComposerStatus }) {
+  const { t } = useTranslation();
   if (status.kind === "ok") {
     return (
       <div className="status-pill status-pill--ok" role="status">
         <span className="status-pill__dot" aria-hidden="true" />
-        <span className="status-pill__label">RUNNING ON</span>
+        <span className="status-pill__label">{t("chat.composer.runningOn")}</span>
         <span className="status-pill__name">{status.hostName}</span>
       </div>
     );

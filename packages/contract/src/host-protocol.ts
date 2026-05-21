@@ -294,6 +294,21 @@ export const setProjectsRootResponseSchema = z.object({
 });
 export type SetProjectsRootResponse = z.infer<typeof setProjectsRootResponseSchema>;
 
+// set-keep-awake — toggle whether the host blocks OS sleep while the daemon runs
+export const setKeepAwakeRequestSchema = z.object({
+  /** true ⇢ hold a sleep assertion; false ⇢ release it. */
+  enabled: z.boolean(),
+});
+export type SetKeepAwakeRequest = z.infer<typeof setKeepAwakeRequestSchema>;
+
+export const setKeepAwakeResponseSchema = z.object({
+  /** Effective state the host will use (may differ from request when locked). */
+  enabled: z.boolean(),
+  /** true ⇢ pinned by COGNI_KEEP_AWAKE env; the write was a no-op. */
+  locked: z.boolean(),
+});
+export type SetKeepAwakeResponse = z.infer<typeof setKeepAwakeResponseSchema>;
+
 // ─── Discriminated unions for typed dispatch ────────────────────────────────
 
 /**
@@ -317,6 +332,7 @@ export const hostRpcRequestSchema = z.discriminatedUnion("method", [
   z.object({ method: z.literal("upload-commit"), params: uploadCommitRequestSchema }),
   z.object({ method: z.literal("upload-abort"), params: uploadAbortRequestSchema }),
   z.object({ method: z.literal("set-projects-root"), params: setProjectsRootRequestSchema }),
+  z.object({ method: z.literal("set-keep-awake"), params: setKeepAwakeRequestSchema }),
 ]);
 export type HostRpcRequest = z.infer<typeof hostRpcRequestSchema>;
 
@@ -336,6 +352,7 @@ export const hostRpcMethodSchema = z.enum([
   "upload-commit",
   "upload-abort",
   "set-projects-root",
+  "set-keep-awake",
 ]);
 
 /**
@@ -365,6 +382,7 @@ export const hostRpcResponseSchema = z.union([
   z.object({ ok: z.literal(true), method: z.literal("upload-commit"), result: uploadCommitResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("upload-abort"), result: uploadAbortResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("set-projects-root"), result: setProjectsRootResponseSchema }),
+  z.object({ ok: z.literal(true), method: z.literal("set-keep-awake"), result: setKeepAwakeResponseSchema }),
   z.object({
     ok: z.literal(false),
     method: hostRpcMethodSchema,
@@ -396,5 +414,6 @@ export const HOST_RPC_METHODS = [
   "upload-commit",
   "upload-abort",
   "set-projects-root",
+  "set-keep-awake",
 ] as const;
 export type HostRpcMethod = (typeof HOST_RPC_METHODS)[number];

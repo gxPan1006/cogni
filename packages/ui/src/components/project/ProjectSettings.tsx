@@ -17,6 +17,7 @@
  * than a separate delete endpoint.
  */
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Project, MergePolicy } from "@cogni/contract";
 import type { HostInfo, UpdateProjectInput } from "../../transport/api.js";
 import { Icon } from "../icons.js";
@@ -40,6 +41,7 @@ export function ProjectSettings({
   onUpdate?: (patch: UpdateProjectInput) => Promise<void> | void;
   onArchive?: () => Promise<void> | void;
 }) {
+  const { t } = useTranslation();
   const [section, setSection] = useState<Section>("basics");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -68,24 +70,24 @@ export function ProjectSettings({
       <div className="ps ps--loading" aria-busy={loading}>
         <aside className="ps__nav">
           <div className="ps__nav-head">
-            <button className="ps__icon-btn" onClick={onClose} title="返回">{Icon.x}</button>
+            <button className="ps__icon-btn" onClick={onClose} title={t("project.settings.back")}>{Icon.x}</button>
             <div className="ps__nav-text">
-              <div className="ps__nav-eyebrow">PROJECT SETTINGS</div>
-              <div className="ps__nav-name">{loading ? "正在同步" : "项目未找到"}</div>
+              <div className="ps__nav-eyebrow">{t("project.settings.eyebrow")}</div>
+              <div className="ps__nav-name">{loading ? t("project.settings.syncing") : t("project.settings.notFound")}</div>
             </div>
           </div>
         </aside>
         <main className="ps__body">
           {loading ? (
             <>
-              <LoadingState variant="section" title="正在加载项目设置" subtitle="同步默认 host、合并策略和系统提示词" />
+              <LoadingState variant="section" title={t("project.settings.loadingTitle")} subtitle={t("project.settings.loadingSubtitle")} />
               <div className="settings-card ps__loading-card">
                 <LoadingRows rows={4} />
               </div>
             </>
           ) : (
             <div className="settings-card ps__loading-card">
-              <div className="ps__empty">这个项目不存在或你没有访问权限。</div>
+              <div className="ps__empty">{t("project.settings.notFoundBody")}</div>
             </div>
           )}
         </main>
@@ -104,30 +106,30 @@ export function ProjectSettings({
     <div className="ps">
       <aside className="ps__nav">
         <div className="ps__nav-head">
-          <button className="ps__icon-btn" onClick={onClose} title="返回">{Icon.x}</button>
+          <button className="ps__icon-btn" onClick={onClose} title={t("project.settings.back")}>{Icon.x}</button>
           <div className="ps__nav-text">
-            <div className="ps__nav-eyebrow">PROJECT SETTINGS</div>
+            <div className="ps__nav-eyebrow">{t("project.settings.eyebrow")}</div>
             <div className="ps__nav-name">{project.name}</div>
           </div>
         </div>
         <nav className="ps__menu">
-          <NavBtn id="basics"  active={section} onClick={setSection} icon={Icon.edit}>基础</NavBtn>
-          <NavBtn id="runner"  active={section} onClick={setSection} icon={Icon.bolt}>Runner</NavBtn>
-          <NavBtn id="prompt"  active={section} onClick={setSection} icon={Icon.brain}>System prompt</NavBtn>
-          <NavBtn id="danger"  active={section} onClick={setSection} icon={Icon.trash} danger>危险区</NavBtn>
+          <NavBtn id="basics"  active={section} onClick={setSection} icon={Icon.edit}>{t("project.settings.navBasics")}</NavBtn>
+          <NavBtn id="runner"  active={section} onClick={setSection} icon={Icon.bolt}>{t("project.settings.navRunner")}</NavBtn>
+          <NavBtn id="prompt"  active={section} onClick={setSection} icon={Icon.brain}>{t("project.settings.navPrompt")}</NavBtn>
+          <NavBtn id="danger"  active={section} onClick={setSection} icon={Icon.trash} danger>{t("project.settings.navDanger")}</NavBtn>
         </nav>
       </aside>
 
       <main className="ps__body">
         {section === "basics" && (
-          <Section title="基础" subtitle="项目最基本的几样东西。">
+          <Section title={t("project.settings.basicsTitle")} subtitle={t("project.settings.basicsSubtitle")}>
             <div className="settings-card">
               <div className="ps__field">
-                <div className="field__label">名字</div>
+                <div className="field__label">{t("project.settings.fieldName")}</div>
                 <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="ps__field">
-                <div className="field__label">描述</div>
+                <div className="field__label">{t("project.settings.fieldDescription")}</div>
                 <textarea className="input ps__textarea" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
               </div>
               <SaveBar onSave={saveBasics} />
@@ -136,21 +138,21 @@ export function ProjectSettings({
         )}
 
         {section === "runner" && (
-          <Section title="Runner" subtitle="任务跑在哪儿、跑多少、合并怎么把关。">
+          <Section title={t("project.settings.runnerTitle")} subtitle={t("project.settings.runnerSubtitle")}>
             <div className="settings-card">
               <div className="ps__field">
-                <div className="field__label">默认 host</div>
+                <div className="field__label">{t("project.settings.defaultHost")}</div>
                 <select className="input" value={hostId} onChange={(e) => setHostId(e.target.value)}>
                   {hosts.map((h) => (
                     <option key={h.id} value={h.id}>
-                      {h.name}{h.status === "offline" ? " · 离线" : ""}
+                      {h.name}{h.status === "offline" ? t("project.settings.hostOffline") : ""}
                     </option>
                   ))}
                 </select>
-                <div className="field__hint">新任务首先尝试在这台机器上跑。离线时按 SP-2 fallback 流程切换。</div>
+                <div className="field__hint">{t("project.settings.defaultHostHint")}</div>
               </div>
               <div className="ps__field">
-                <div className="field__label">合并策略</div>
+                <div className="field__label">{t("project.settings.mergePolicy")}</div>
                 <select className="input" value={mergePolicy} onChange={(e) => setMergePolicy(e.target.value as MergePolicy)}>
                   <option value="require-review">require-review</option>
                   <option value="auto-merge">auto-merge</option>
@@ -158,13 +160,13 @@ export function ProjectSettings({
                 </select>
               </div>
               <div className="ps__field">
-                <div className="field__label">并发上限</div>
+                <div className="field__label">{t("project.settings.concurrency")}</div>
                 <div className="np__stepper">
                   <button className="btn btn-sm btn-ghost" onClick={() => setConcurrency(Math.max(1, concurrency - 1))} disabled={concurrency <= 1}>−</button>
                   <div className="np__stepper-value">{concurrency}</div>
                   <button className="btn btn-sm btn-ghost" onClick={() => setConcurrency(Math.min(16, concurrency + 1))} disabled={concurrency >= 16}>+</button>
                 </div>
-                <div className="field__hint">超过的任务自动进队列,等空位。</div>
+                <div className="field__hint">{t("project.settings.concurrencyHint")}</div>
               </div>
               <div className="ps__field">
                 <label className="ps__check">
@@ -173,9 +175,9 @@ export function ProjectSettings({
                     checked={pushToRemote}
                     onChange={(e) => setPushToRemote(e.target.checked)}
                   />
-                  <span>合并后 push 到 remote</span>
+                  <span>{t("project.settings.pushToRemote")}</span>
                 </label>
-                <div className="field__hint">任务 Accept 合并到 main 后,自动 `git push origin main`。仓库没配 remote 时静默跳过。</div>
+                <div className="field__hint">{t("project.settings.pushToRemoteHint")}</div>
               </div>
               <SaveBar onSave={saveRunner} />
             </div>
@@ -183,11 +185,11 @@ export function ProjectSettings({
         )}
 
         {section === "prompt" && (
-          <Section title="System prompt" subtitle="注入每个任务对话的开头。改完只影响新建任务。">
+          <Section title={t("project.settings.promptTitle")} subtitle={t("project.settings.promptSubtitle")}>
             <div className="settings-card">
               <div className="ps__field">
-                <textarea className="input ps__textarea ps__textarea--lg" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="例:你是这个项目的高级开发,熟悉 TS。优先写测试。" rows={8} />
-                <div className="field__hint">{prompt.length} 字 · 一般保持 200 字以内。</div>
+                <textarea className="input ps__textarea ps__textarea--lg" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t("project.settings.promptPlaceholder")} rows={8} />
+                <div className="field__hint">{t("project.settings.promptCharsHint", { n: prompt.length })}</div>
               </div>
               <SaveBar onSave={savePrompt} />
             </div>
@@ -195,30 +197,30 @@ export function ProjectSettings({
         )}
 
         {section === "danger" && (
-          <Section title="危险区" subtitle="不可逆操作。三思后再点。">
+          <Section title={t("project.settings.dangerTitle")} subtitle={t("project.settings.dangerSubtitle")}>
             <div className="settings-card ps__danger-card">
               <div className="ps__danger-row">
                 <div>
-                  <div className="ps__danger-title">归档项目</div>
-                  <div className="ps__danger-sub">项目从列表上消失,任务停止排队,已跑的历史保留。</div>
+                  <div className="ps__danger-title">{t("project.settings.archiveTitle")}</div>
+                  <div className="ps__danger-sub">{t("project.settings.archiveSub")}</div>
                 </div>
                 {confirmArchive ? (
                   <div className="ps__danger-confirm">
-                    <span>确定?</span>
-                    <button className="btn btn-sm" onClick={() => setConfirmArchive(false)}>取消</button>
-                    <button className="btn btn-sm ps__danger-delete" onClick={() => { void onArchive?.(); setConfirmArchive(false); }}>归档</button>
+                    <span>{t("project.settings.confirmArchive")}</span>
+                    <button className="btn btn-sm" onClick={() => setConfirmArchive(false)}>{t("project.settings.cancel")}</button>
+                    <button className="btn btn-sm ps__danger-delete" onClick={() => { void onArchive?.(); setConfirmArchive(false); }}>{t("project.settings.archive")}</button>
                   </div>
                 ) : (
-                  <button className="btn btn-sm" onClick={() => setConfirmArchive(true)}>归档</button>
+                  <button className="btn btn-sm" onClick={() => setConfirmArchive(true)}>{t("project.settings.archive")}</button>
                 )}
               </div>
               <div className="ps__danger-row">
                 <div>
-                  <div className="ps__danger-title">删除项目</div>
-                  <div className="ps__danger-sub">SP-3 中"删除"等价归档(走同一条路径)。硬删要等 SP-4 的 retention policy。</div>
+                  <div className="ps__danger-title">{t("project.settings.deleteTitle")}</div>
+                  <div className="ps__danger-sub">{t("project.settings.deleteSub")}</div>
                 </div>
-                <button className="btn btn-sm ps__danger-delete" disabled title="SP-3 用归档代替">
-                  {Icon.trash} 不可用
+                <button className="btn btn-sm ps__danger-delete" disabled title={t("project.settings.deleteUnavailableTitle")}>
+                  {Icon.trash} {t("project.settings.deleteUnavailable")}
                 </button>
               </div>
             </div>
@@ -263,10 +265,11 @@ function Section({ title, subtitle, children }: { title: string; subtitle?: stri
 }
 
 function SaveBar({ onSave }: { onSave?: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="ps__save">
-      <span className="ps__save-hint">改完点保存</span>
-      <button className="btn btn-sm btn-primary" onClick={onSave}>保存</button>
+      <span className="ps__save-hint">{t("project.settings.saveHint")}</span>
+      <button className="btn btn-sm btn-primary" onClick={onSave}>{t("project.settings.save")}</button>
     </div>
   );
 }

@@ -6,10 +6,13 @@
  * Composer should stay disabled while this is up: there's literally nowhere
  * to dispatch to.
  */
+import { useTranslation } from "react-i18next";
+
 export function NoHostBanner() {
+  const { t } = useTranslation();
   return (
     <div className="no-host-banner">
-      🔌 没有在线的 cogni 桌面端 — 至少打开一台 Mac 上的 cogni app 才能发消息。
+      {t("chat.noHostBanner.text")}
     </div>
   );
 }

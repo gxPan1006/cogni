@@ -19,6 +19,7 @@
  *   - 发送登录链接 (magic): unchanged from before.
  */
 import { useEffect, useState } from "react";
+import { useTranslation, Trans } from "react-i18next";
 import { LogoMark } from "./LogoMark.js";
 import "./login.css";
 
@@ -45,6 +46,7 @@ export interface LoginProps {
 }
 
 export function Login(props: LoginProps) {
+  const { t } = useTranslation();
   const passwordEnabled = Boolean(props.onPasswordLogin);
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
@@ -59,7 +61,7 @@ export function Login(props: LoginProps) {
   }, [status.kind]);
 
   const fail = (e: unknown) =>
-    setStatus({ kind: "idle", error: e instanceof Error ? e.message : "网络错误,请重试" });
+    setStatus({ kind: "idle", error: e instanceof Error ? e.message : t("auth.errors.network") });
 
   const switchMode = (m: Mode) => {
     setMode(m);
@@ -77,9 +79,9 @@ export function Login(props: LoginProps) {
 
   const submit = async () => {
     const e = email.trim();
-    if (!e.includes("@")) { setStatus({ kind: "idle", error: "请输入合法的邮箱地址" }); return; }
+    if (!e.includes("@")) { setStatus({ kind: "idle", error: t("auth.errors.invalidEmail") }); return; }
     if (mode !== "forgot" && password.length < 8) {
-      setStatus({ kind: "idle", error: "密码至少 8 位" }); return;
+      setStatus({ kind: "idle", error: t("auth.errors.passwordTooShort") }); return;
     }
     setStatus({ kind: "submitting" });
     try {
@@ -111,11 +113,10 @@ export function Login(props: LoginProps) {
         </div>
         <div className="login__hero">
           <h1 className="login__display">
-            一台安静的机器,<br/>住在你已有的设备里。
+            <Trans i18nKey="auth.hero.title" components={{ br: <br /> }} />
           </h1>
           <p className="login__lede">
-            你的账号、对话、项目都在云端。<br/>
-            任务跑在你哪台机器正巧在线。
+            <Trans i18nKey="auth.hero.lede" components={{ br: <br /> }} />
           </p>
           <div className="login__status">
             <span className="dot dot-online" />
@@ -165,18 +166,19 @@ function FormView({
   onSubmit: () => void;
   onSendMagic: () => void;
 }) {
+  const { t } = useTranslation();
   const titles: Record<Mode, { eyebrow: string; title: string; sub: string; cta: string }> = {
-    login:    { eyebrow: "WELCOME",    title: "登录 Cogni",   sub: "一个账号,所有设备同步", cta: "登录" },
-    register: { eyebrow: "GET STARTED", title: "注册 Cogni",  sub: "用邮箱和密码创建账号",   cta: "注册" },
-    forgot:   { eyebrow: "RESET",      title: "重置密码",     sub: "我们会把重置链接发到你的邮箱", cta: "发送重置链接" },
+    login:    { eyebrow: t("auth.form.login.eyebrow"),    title: t("auth.form.login.title"),   sub: t("auth.form.login.sub"), cta: t("auth.form.login.cta") },
+    register: { eyebrow: t("auth.form.register.eyebrow"), title: t("auth.form.register.title"),  sub: t("auth.form.register.sub"),   cta: t("auth.form.register.cta") },
+    forgot:   { eyebrow: t("auth.form.forgot.eyebrow"),      title: t("auth.form.forgot.title"),     sub: t("auth.form.forgot.sub"), cta: t("auth.form.forgot.cta") },
   };
-  const t = titles[mode];
+  const copy = titles[mode];
 
   return (
     <>
-      <div className="login__eyebrow">{t.eyebrow}</div>
-      <div className="login__card-title">{t.title}</div>
-      <div className="login__card-sub">{t.sub}</div>
+      <div className="login__eyebrow">{copy.eyebrow}</div>
+      <div className="login__card-title">{copy.title}</div>
+      <div className="login__card-sub">{copy.sub}</div>
 
       {passwordEnabled && mode !== "forgot" && (
         <div className="login__tabs" role="tablist">
@@ -185,24 +187,24 @@ function FormView({
             className={`login__tab ${mode === "login" ? "login__tab--active" : ""}`}
             disabled={submitting}
             onClick={() => onMode("login")}
-          >登录</button>
+          >{t("auth.tabLogin")}</button>
           <button
             role="tab"
             className={`login__tab ${mode === "register" ? "login__tab--active" : ""}`}
             disabled={submitting}
             onClick={() => onMode("register")}
-          >注册</button>
+          >{t("auth.tabRegister")}</button>
         </div>
       )}
 
       <button className="login__google" onClick={onGoogle} disabled={submitting}>
         <GoogleGlyph />
-        <span>用 Google 登录</span>
+        <span>{t("auth.google")}</span>
       </button>
 
       <div className="login__or">
         <div className="login__or-line" />
-        <span className="login__or-text">OR</span>
+        <span className="login__or-text">{t("auth.orText")}</span>
         <div className="login__or-line" />
       </div>
 
@@ -210,11 +212,11 @@ function FormView({
         className="login__form"
         onSubmit={(e) => { e.preventDefault(); if (passwordEnabled) onSubmit(); else onSendMagic(); }}
       >
-        <label className="login__label">邮箱</label>
+        <label className="login__label">{t("auth.emailLabel")}</label>
         <input
           type="email"
           className="login__input"
-          placeholder="you@somewhere.com"
+          placeholder={t("auth.emailPlaceholder")}
           value={email}
           disabled={submitting}
           autoComplete="email"
@@ -223,11 +225,11 @@ function FormView({
 
         {passwordEnabled && mode !== "forgot" && (
           <>
-            <label className="login__label">密码</label>
+            <label className="login__label">{t("auth.passwordLabel")}</label>
             <input
               type="password"
               className="login__input"
-              placeholder={mode === "register" ? "至少 8 位" : "你的密码"}
+              placeholder={mode === "register" ? t("auth.passwordPlaceholderRegister") : t("auth.passwordPlaceholderLogin")}
               value={password}
               disabled={submitting}
               autoComplete={mode === "register" ? "new-password" : "current-password"}
@@ -240,11 +242,11 @@ function FormView({
 
         {passwordEnabled ? (
           <button type="submit" className="btn btn-primary login__submit" disabled={submitting}>
-            {submitting ? "处理中…" : t.cta}
+            {submitting ? t("auth.submitting") : copy.cta}
           </button>
         ) : (
           <button type="submit" className="btn btn-primary login__submit" disabled={submitting}>
-            {submitting ? "发送中…" : "发送登录链接"}
+            {submitting ? t("auth.sendingMagic") : t("auth.sendMagicLink")}
           </button>
         )}
       </form>
@@ -253,22 +255,22 @@ function FormView({
         <div className="login__alts">
           {mode === "login" && (
             <button className="login__link" disabled={submitting} onClick={() => onMode("forgot")}>
-              忘记密码?
+              {t("auth.forgotPassword")}
             </button>
           )}
           {mode === "forgot" && (
             <button className="login__link" disabled={submitting} onClick={() => onMode("login")}>
-              ← 返回登录
+              {t("auth.backToLogin")}
             </button>
           )}
           <button className="login__link" disabled={submitting} onClick={onSendMagic}>
-            改用邮箱登录链接
+            {t("auth.useMagicLink")}
           </button>
         </div>
       )}
 
       <p className="login__legal">
-        登录即代表同意《服务条款》与《隐私政策》。SP-1 是开发版本。
+        {t("auth.legal")}
       </p>
     </>
   );
@@ -282,11 +284,12 @@ function SentView({
   onResend: (email: string) => void;
   onReset: () => void;
 }) {
+  const { t } = useTranslation();
   const remaining = Math.max(0, Math.ceil((status.resendAt - now) / 1000));
   const copy: Record<SentChannel, { eyebrow: string; title: string }> = {
-    magic:    { eyebrow: "CHECK YOUR EMAIL", title: "登录链接已发送" },
-    register: { eyebrow: "CHECK YOUR EMAIL", title: "确认邮件已发送" },
-    forgot:   { eyebrow: "CHECK YOUR EMAIL", title: "重置链接已发送" },
+    magic:    { eyebrow: t("auth.sent.magic.eyebrow"), title: t("auth.sent.magic.title") },
+    register: { eyebrow: t("auth.sent.register.eyebrow"), title: t("auth.sent.register.title") },
+    forgot:   { eyebrow: t("auth.sent.forgot.eyebrow"), title: t("auth.sent.forgot.title") },
   };
   const c = copy[status.channel];
   return (
@@ -294,14 +297,17 @@ function SentView({
       <div className="login__eyebrow login__eyebrow--good">{c.eyebrow}</div>
       <div className="login__card-title">{c.title}</div>
       <div className="login__card-sub">
-        我们把链接发到了 <strong>{status.email}</strong>。<br/>
-        在任意设备上点开都可以,30 分钟内有效。
+        <Trans
+          i18nKey="auth.sent.body"
+          values={{ email: status.email }}
+          components={[<strong key="email" />, <br key="br" />]}
+        />
       </div>
       <button className="btn btn-primary login__submit" disabled={remaining > 0} onClick={() => onResend(status.email)}>
-        {remaining > 0 ? `${remaining}s 后可重发` : "重发邮件"}
+        {remaining > 0 ? t("auth.sent.resendIn", { seconds: remaining }) : t("auth.sent.resend")}
       </button>
       <button className="login__link" onClick={onReset}>
-        用其他邮箱?
+        {t("auth.sent.useOtherEmail")}
       </button>
     </>
   );

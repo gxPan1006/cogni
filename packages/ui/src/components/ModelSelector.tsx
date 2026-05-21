@@ -4,6 +4,7 @@
  * tokens; replaces the old static "claude-code" label.
  */
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import "./model-selector.css";
 
 export interface ModelOption {
@@ -22,6 +23,7 @@ export function ModelSelector({
   onChange: (id: string) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -51,7 +53,7 @@ export function ModelSelector({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        title="选择模型"
+        title={t("chat.model.selectTitle")}
       >
         <span className="model-sel__dot" aria-hidden="true" />
         <span className="model-sel__label">{current?.label ?? value}</span>

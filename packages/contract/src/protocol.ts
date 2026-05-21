@@ -56,6 +56,10 @@ export const hostToCloudSchema = z.discriminatedUnion("t", [
     projectsRoot: z.string().optional(),
     /** true ⇢ root pinned by COGNI_PROJECTS_ROOT env (UI shows read-only). */
     projectsRootLocked: z.boolean().optional(),
+    /** Whether the host blocks OS sleep while alive. Optional for old hosts. */
+    keepAwake: z.boolean().optional(),
+    /** true ⇢ pinned by COGNI_KEEP_AWAKE env (UI shows the toggle read-only). */
+    keepAwakeLocked: z.boolean().optional(),
   }),
   z.object({ t: z.literal("heartbeat") }),
   z.object({ t: z.literal("event"), sessionId: z.string(), event: runnerEventSchema }),

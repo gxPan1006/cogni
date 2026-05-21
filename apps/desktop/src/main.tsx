@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "@cogni/ui"; // side-effect: init i18next (language) before first render
 import App from "./App";
 
 // Global stylesheet chain — order matters:

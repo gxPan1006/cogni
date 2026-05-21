@@ -19,6 +19,7 @@
  * column — alignment is preserved by giving every block the same outer padding.
  */
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Markdown } from "./Markdown.js";
 import { Icon } from "./icons.js";
 import { AttachmentCard } from "./AttachmentCard.js";
@@ -111,12 +112,13 @@ export function AssistantBlocks({
 }
 
 export function ThinkingBlock({ text, collapsed = false }: { text: string; collapsed?: boolean }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(!collapsed);
   return (
     <div className="msg msg--aux">
       <button className={"thinking" + (open ? " thinking--open" : "")} onClick={() => setOpen(!open)} type="button">
         <span className="thinking__icon">{Icon.brain}</span>
-        <span className="thinking__label">思考中</span>
+        <span className="thinking__label">{t("chat.blocks.thinking")}</span>
         <span className="thinking__toggle">{open ? "−" : "+"}</span>
       </button>
       {open && (
@@ -187,24 +189,25 @@ export function PermissionPrompt({
   onAllowAlways?: () => void;
   onDeny: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="msg msg--aux">
       <div className="perm">
         <div className="perm__head">
           <span className="perm__icon">{Icon.shield}</span>
           <div>
-            <div className="perm__title">需要授权</div>
+            <div className="perm__title">{t("chat.blocks.permissionNeeded")}</div>
             <div className="perm__sub">
-              <code>{toolName}</code> 想要 {what}
+              <code>{toolName}</code> {t("chat.blocks.permissionWant")} {what}
             </div>
           </div>
         </div>
         <div className="perm__actions">
-          <button className="btn btn-sm" onClick={onDeny} type="button">拒绝</button>
-          <button className="btn btn-sm btn-primary" onClick={onAllow} type="button">允许一次</button>
+          <button className="btn btn-sm" onClick={onDeny} type="button">{t("chat.blocks.deny")}</button>
+          <button className="btn btn-sm btn-primary" onClick={onAllow} type="button">{t("chat.blocks.allowOnce")}</button>
           {onAllowAlways && (
             <button className="btn btn-sm btn-ghost" onClick={onAllowAlways} type="button">
-              在此对话中总是允许
+              {t("chat.blocks.allowAlways")}
             </button>
           )}
         </div>
@@ -236,6 +239,7 @@ export function FallbackCard({
   onSwitch: (hostId: string) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [picked, setPicked] = useState(alternatives[0]?.id ?? "");
   return (
     <div className="msg msg--aux">
@@ -243,11 +247,11 @@ export function FallbackCard({
         <div className="fallback__head">
           <span className="fallback__icon">{Icon.bolt}</span>
           <div className="fallback__head-text">
-            <div className="fallback__title">{offlineHost} 不在线</div>
+            <div className="fallback__title">{t("chat.blocks.hostOffline", { host: offlineHost })}</div>
             <div className="fallback__sub">{offlineSince}</div>
           </div>
         </div>
-        <div className="fallback__body">切换到另一台机器跑?</div>
+        <div className="fallback__body">{t("chat.blocks.switchMachine")}</div>
         <div className="fallback__options">
           {alternatives.map((alt) => (
             <label key={alt.id} className={"fallback__opt" + (picked === alt.id ? " fallback__opt--on" : "")}>
@@ -259,11 +263,11 @@ export function FallbackCard({
           ))}
         </div>
         <div className="fallback__note">
-          Claude Code 会基于消息历史在新机器上重建上下文。{offlineHost} 上未保存的文件不会过来。
+          {t("chat.blocks.rebuildNote", { host: offlineHost })}
         </div>
         <div className="fallback__actions">
-          <button className="btn btn-sm" onClick={onCancel} type="button">等 {offlineHost} 上线</button>
-          <button className="btn btn-sm btn-primary" onClick={() => onSwitch(picked)} type="button">切换并发送</button>
+          <button className="btn btn-sm" onClick={onCancel} type="button">{t("chat.blocks.waitForHost", { host: offlineHost })}</button>
+          <button className="btn btn-sm btn-primary" onClick={() => onSwitch(picked)} type="button">{t("chat.blocks.switchAndSend")}</button>
         </div>
       </div>
     </div>
@@ -271,14 +275,15 @@ export function FallbackCard({
 }
 
 export function NoHostBanner({ onOpenSettings }: { onOpenSettings?: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="no-host">
       <span className="no-host__icon">{Icon.bolt}</span>
       <div className="no-host__body">
-        <div className="no-host__title">没有在线的 Cogni 桌面端</div>
-        <div className="no-host__sub">至少打开一台 Mac 上的 Cogni 才能发消息。</div>
+        <div className="no-host__title">{t("chat.blocks.noHostTitle")}</div>
+        <div className="no-host__sub">{t("chat.blocks.noHostSub")}</div>
       </div>
-      {onOpenSettings && <button className="btn btn-sm" onClick={onOpenSettings} type="button">管理 hosts</button>}
+      {onOpenSettings && <button className="btn btn-sm" onClick={onOpenSettings} type="button">{t("chat.blocks.manageHosts")}</button>}
     </div>
   );
 }

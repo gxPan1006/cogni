@@ -440,11 +440,11 @@
   gap: 6px;
   margin: 0 12px 6px;
   padding: 5px 8px 5px 9px;
-  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.08));
   border-radius: 8px;
-  background: var(--accent-soft, rgba(120, 110, 90, 0.08));
+  background: var(--bg-sunk, rgba(120, 110, 90, 0.06));
   font-size: 11.5px;
-  color: var(--text, #333);
+  color: var(--ink-2, #333);
   max-width: calc(100% - 24px);
 }
 .cb-focus-chip__dot {

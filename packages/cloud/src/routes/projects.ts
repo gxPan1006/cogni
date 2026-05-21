@@ -801,6 +801,43 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
     return c.json(result);
   });
 
+  // PUT /api/hosts/:id/keep-awake — sends set-keep-awake RPC to the host,
+  // persists the effective state, and pushes a host-meta update. 502 when the
+  // host is offline / the RPC fails; an env-locked host returns its pinned
+  // state + locked:true (the write was a no-op).
+  app.put("/api/hosts/:id/keep-awake", async (c) => {
+    const { userId } = c.get("claims");
+    const id = c.req.param("id");
+    const owned = await ownedHostRow(deps, id, userId);
+    if (!owned) return c.json({ error: "not found" }, 404);
+
+    const raw = await c.req.json().catch(() => ({}));
+    const parsed = z.object({ enabled: z.boolean() }).safeParse(raw);
+    if (!parsed.success) return c.json({ error: "invalid enabled" }, 400);
+
+    if (!deps.projectDomain) {
+      return c.json({ error: "project domain unavailable" }, 503);
+    }
+
+    let result: { enabled: boolean; locked: boolean };
+    try {
+      result = await deps.projectDomain.setKeepAwake(id, parsed.data.enabled);
+    } catch (err) {
+      logger.warn({ hostId: id, err: String(err) }, "set keep-awake RPC failed");
+      return c.json({ error: "host unavailable" }, 502);
+    }
+
+    const { setHostKeepAwake } = await import("../db/hosts.js");
+    await setHostKeepAwake(deps.db, id, result.enabled, result.locked);
+    deps.clients.publishHostMeta(userId, {
+      hostId: id,
+      name: owned.name,
+      status: owned.status as "online" | "offline",
+      lastSeen: owned.lastSeen ? owned.lastSeen.toISOString() : null,
+    });
+    return c.json(result);
+  });
+
   // ─── SP-4 Artifacts: project file browser (tree + file bytes) ─────────────
   // Confined to the project's repoPath so a crafted ?path can't read arbitrary
   // host disk. Both endpoints resolve the requested path and verify it stays

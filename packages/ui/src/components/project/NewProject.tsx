@@ -22,6 +22,7 @@
  * it does not ask users to classify work by external tracker/source.
  */
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { MergePolicy } from "@cogni/contract";
 import type { HostInfo } from "../../transport/api.js";
 import { Icon } from "../icons.js";
@@ -61,6 +62,7 @@ export function NewProject({
    */
   onBrowseHost?: (hostId: string, path?: string) => Promise<BrowseResponse>;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [defaultHostId, setDefaultHostId] = useState(hosts[0]?.id ?? "");
@@ -97,7 +99,7 @@ export function NewProject({
   // illustrative — `<root>/<项目名>` — so the user sees where a new project
   // will land even before typing a name (the field stays empty until then).
   const repoPathPlaceholder = selectedHost?.projectsRoot
-    ? `${selectedHost.projectsRoot.replace(/\/+$/, "")}/<项目名>`
+    ? t("project.newProject.repoPathPlaceholder", { root: selectedHost.projectsRoot.replace(/\/+$/, "") })
     : "/Users/you/code/myapp";
 
   const canSubmit =
@@ -110,33 +112,33 @@ export function NewProject({
       <div className="modal np" onClick={(e) => e.stopPropagation()}>
         <header className="modal__head">
           <div>
-            <div className="modal__eyebrow">新建</div>
-            <h2 className="modal__title">新项目</h2>
+            <div className="modal__eyebrow">{t("project.newProject.eyebrow")}</div>
+            <h2 className="modal__title">{t("project.newProject.title")}</h2>
           </div>
-          <button className="modal__close" onClick={onClose} title="关闭 (Esc)">{Icon.x}</button>
+          <button className="modal__close" onClick={onClose} title={t("project.newProject.close")}>{Icon.x}</button>
         </header>
 
         <div className="modal__body">
-          <Field label="名字" required hint="一句话能说出这个项目做什么">
-            <input className="input" placeholder="例:SP-2 多端同步" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+          <Field label={t("project.newProject.fieldName")} required hint={t("project.newProject.fieldNameHint")}>
+            <input className="input" placeholder={t("project.newProject.fieldNamePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
           </Field>
 
-          <Field label="描述" hint="可选">
-            <textarea className="input np__textarea" placeholder="给一两句话上下文,会进 system prompt" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+          <Field label={t("project.newProject.fieldDescription")} hint={t("project.newProject.fieldDescriptionHint")}>
+            <textarea className="input np__textarea" placeholder={t("project.newProject.fieldDescriptionPlaceholder")} value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
           </Field>
 
-          <Field label="默认 host" required hint="新任务首先尝试在这台机器上跑">
+          <Field label={t("project.newProject.defaultHost")} required hint={t("project.newProject.defaultHostHint")}>
             <select className="input" value={defaultHostId} onChange={(e) => setDefaultHostId(e.target.value)}>
-              {hosts.length === 0 && <option value="">(还没注册 host)</option>}
+              {hosts.length === 0 && <option value="">{t("project.newProject.noHosts")}</option>}
               {hosts.map((h) => (
                 <option key={h.id} value={h.id}>
-                  {h.name}{h.status === "offline" ? " · 离线" : ""}
+                  {h.name}{h.status === "offline" ? t("project.newProject.hostOffline") : ""}
                 </option>
               ))}
             </select>
           </Field>
 
-          <Field label="代码仓库路径" required hint="host 上的绝对路径,worktree 会在它的兄弟目录里创建">
+          <Field label={t("project.newProject.repoPath")} required hint={t("project.newProject.repoPathHint")}>
             <div className="np__path">
               <input
                 className="input np__path-input"
@@ -150,26 +152,26 @@ export function NewProject({
                   disabled={!defaultHostId}
                   onClick={() => setBrowseOpen(true)}
                 >
-                  {Icon.search} 浏览
+                  {Icon.search} {t("project.newProject.browse")}
                 </button>
               )}
             </div>
             <label className="np__init">
               <input type="checkbox" checked={initRepo} onChange={(e) => setInitRepo(e.target.checked)} />
-              <span>如果不是 git 仓库,自动执行 git init</span>
+              <span>{t("project.newProject.initRepo")}</span>
             </label>
           </Field>
 
           <div className="np__row">
-            <Field label="合并策略">
+            <Field label={t("project.newProject.mergePolicy")}>
               <select className="input" value={mergePolicy} onChange={(e) => setMergePolicy(e.target.value as MergePolicy)}>
-                <option value="require-review">require-review · 等我点 Accept</option>
-                <option value="auto-merge">auto-merge · 任务跑完自动合</option>
-                <option value="auto-merge-if-tests-pass">auto-merge-if-tests-pass · 仅 tests 过才合</option>
+                <option value="require-review">{t("project.newProject.mergeRequireReview")}</option>
+                <option value="auto-merge">{t("project.newProject.mergeAutoMerge")}</option>
+                <option value="auto-merge-if-tests-pass">{t("project.newProject.mergeAutoMergeIfTests")}</option>
               </select>
             </Field>
 
-            <Field label="并发上限" hint="最多同时几个 runner">
+            <Field label={t("project.newProject.concurrency")} hint={t("project.newProject.concurrencyHint")}>
               <div className="np__stepper">
                 <button className="btn btn-sm btn-ghost" onClick={() => setConcurrencyLimit(Math.max(1, concurrencyLimit - 1))} disabled={concurrencyLimit <= 1}>−</button>
                 <div className="np__stepper-value">{concurrencyLimit}</div>
@@ -178,13 +180,13 @@ export function NewProject({
             </Field>
           </div>
 
-          <Field label="System prompt" hint="可选,会注入每个任务的对话开头">
-            <textarea className="input np__textarea" placeholder="例:你是这个项目的高级开发,熟悉 TS。优先写测试。" rows={3} value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} />
+          <Field label={t("project.newProject.systemPrompt")} hint={t("project.newProject.systemPromptHint")}>
+            <textarea className="input np__textarea" placeholder={t("project.newProject.systemPromptPlaceholder")} rows={3} value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} />
           </Field>
         </div>
 
         <footer className="modal__foot">
-          <button className="btn btn-sm" onClick={onClose}>取消</button>
+          <button className="btn btn-sm" onClick={onClose}>{t("project.newProject.cancel")}</button>
           <button
             className="btn btn-sm btn-primary"
             disabled={!canSubmit}
@@ -194,7 +196,7 @@ export function NewProject({
               mergePolicy, initRepo,
             })}
           >
-            {Icon.plus} 创建项目
+            {Icon.plus} {t("project.newProject.create")}
           </button>
         </footer>
 
@@ -237,6 +239,7 @@ function FsBrowseModal({
   onPick: (path: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [cwd, setCwd] = useState<string>("");
   const [entries, setEntries] = useState<BrowseEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -267,8 +270,8 @@ function FsBrowseModal({
       <div className="modal np-browse" onClick={(e) => e.stopPropagation()}>
         <header className="modal__head">
           <div>
-            <div className="modal__eyebrow">浏览 host</div>
-            <h2 className="modal__title">{cwd || "正在读取目录"}</h2>
+            <div className="modal__eyebrow">{t("project.newProject.browseEyebrow")}</div>
+            <h2 className="modal__title">{cwd || t("project.newProject.browseReading")}</h2>
           </div>
           <button className="modal__close" onClick={onClose}>{Icon.x}</button>
         </header>
@@ -276,7 +279,7 @@ function FsBrowseModal({
           {error && <div className="np-browse__error">{error}</div>}
           {loading && (
             <div className="np-browse__loading" aria-busy="true">
-              <LoadingState variant="inline" title="正在读取目录" subtitle={cwd || "连接 host 文件系统"} />
+              <LoadingState variant="inline" title={t("project.newProject.browseReading")} subtitle={cwd || t("project.newProject.browseReadingSubtitle")} />
               <LoadingRows rows={4} compact />
             </div>
           )}
@@ -295,16 +298,16 @@ function FsBrowseModal({
               <span>{e.name}</span>
             </button>
           ))}
-          {!loading && entries.length === 0 && <div className="np-browse__empty">这个目录里没有子目录</div>}
+          {!loading && entries.length === 0 && <div className="np-browse__empty">{t("project.newProject.browseEmpty")}</div>}
         </div>
         <footer className="modal__foot">
-          <button className="btn btn-sm" onClick={onClose}>取消</button>
+          <button className="btn btn-sm" onClick={onClose}>{t("project.newProject.cancel")}</button>
           <button
             className="btn btn-sm btn-primary"
             disabled={!cwd}
             onClick={() => onPick(cwd)}
           >
-            选这个目录
+            {t("project.newProject.browsePick")}
           </button>
         </footer>
       </div>

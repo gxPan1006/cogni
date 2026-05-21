@@ -3,6 +3,7 @@
  * then either the SessionList (browse) or a SessionView (one conversation).
  * Purely presentational; all state lives in <ChatBubble>.
  */
+import { useTranslation } from "react-i18next";
 import type { ThreadSummary } from "@cogni/contract";
 import type { ApiClient } from "../../../transport/api.js";
 import type { WorkspaceTaskFocus } from "../WorkspaceChatBar.js";
@@ -49,24 +50,25 @@ export function ChatPanel({
   onResizeStart: (e: React.MouseEvent) => void;
   onTitled: (id: string, title: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <div className="cb-panel" role="dialog" aria-label="Cogni 编排">
+    <div className="cb-panel" role="dialog" aria-label={t("chat.bubble.dialogLabel")}>
       <div
         className="cb-resize"
         onMouseDown={onResizeStart}
-        title="拖动缩放"
-        aria-label="拖动缩放窗口"
+        title={t("chat.bubble.resizeTitle")}
+        aria-label={t("chat.bubble.resizeAria")}
       />
 
       <div className="cb-panel-top">
         <div className="cb-panel-crumb">
-          {active ? "编排会话" : `编排会话 · ${sessions.length}`}
+          {active ? t("chat.bubble.session") : t("chat.bubble.sessionCount", { count: sessions.length })}
         </div>
         <div className="cb-panel-top-right">
-          <button className="cb-icon-btn" title="新建会话" onClick={onNew} type="button">
+          <button className="cb-icon-btn" title={t("chat.bubble.newSession")} onClick={onNew} type="button">
             {Icon.plus}
           </button>
-          <button className="cb-icon-btn" title="收起" onClick={onClose} type="button">
+          <button className="cb-icon-btn" title={t("chat.bubble.collapseTitle")} onClick={onClose} type="button">
             {Icon.x}
           </button>
         </div>

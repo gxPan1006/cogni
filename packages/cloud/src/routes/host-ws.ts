@@ -6,7 +6,7 @@ import { hostToCloudSchema } from "@cogni/contract";
 import type { CloudToHost } from "@cogni/contract";
 // SP-3 additions for the host-RPC envelope plumbing below.
 import type { HostRpcRequest, HostRpcResponse } from "@cogni/contract";
-import { findHostByToken, setHostStatus, setHostProjectsRoot } from "../db/hosts.js";
+import { findHostByToken, setHostStatus, setHostProjectsRoot, setHostKeepAwake } from "../db/hosts.js";
 import { hosts as hostsTable } from "../db/schema.js";
 import { logger } from "@cogni/shared";
 import type { ServerDeps } from "../server.js";
@@ -152,6 +152,16 @@ export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, de
                     host.id,
                     msg.projectsRoot,
                     msg.projectsRootLocked ?? false,
+                  );
+                }
+                // Persist the host's reported keep-awake state (old hosts omit
+                // it → column keeps its default ON, no error).
+                if (msg.keepAwake !== undefined) {
+                  await setHostKeepAwake(
+                    deps.db,
+                    host.id,
+                    msg.keepAwake,
+                    msg.keepAwakeLocked ?? false,
                   );
                 }
                 deps.hosts.register({

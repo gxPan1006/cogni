@@ -8,6 +8,8 @@
  * via the WS echo). The empty state shows just the "+" card with hint text.
  */
 import { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { TaskComment } from "@cogni/contract";
 import type { ApiClient } from "../../transport/api.js";
 import { useTaskComments } from "../../hooks/useTaskComments.js";
@@ -17,17 +19,24 @@ import { Markdown } from "../Markdown.js";
 import { Icon } from "../icons.js";
 import { STATE_COLOR } from "./ProjectBoard.js";
 
-const STATE_CHIP: Record<string, string> = {
-  done: "→ 完成",
-  reviewing: "→ 待 Review",
-  "needs-input": "→ 等待输入",
-  running: "→ 进行中",
-  queued: "→ 排队中",
-  failed: "→ 失败",
-  cancelled: "→ 已取消",
+const STATE_CHIP_KEY: Record<string, string> = {
+  done: "project.comments.chipDone",
+  reviewing: "project.comments.chipReviewing",
+  "needs-input": "project.comments.chipNeedsInput",
+  running: "project.comments.chipRunning",
+  queued: "project.comments.chipQueued",
+  failed: "project.comments.chipFailed",
+  cancelled: "project.comments.chipCancelled",
 };
 
+/** Localized worker-handoff state chip ("→ Done" etc.), falling back to the raw state. */
+function stateChip(t: TFunction, state: string): string {
+  const key = STATE_CHIP_KEY[state];
+  return key ? t(key) : state;
+}
+
 export function TaskComments({ api, taskId }: { api: ApiClient; taskId: string }) {
+  const { t } = useTranslation();
   const { comments, loading, add, remove } = useTaskComments(api, taskId);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -56,7 +65,7 @@ export function TaskComments({ api, taskId }: { api: ApiClient; taskId: string }
 
   return (
     <section className="tc">
-      <div className="tc__head">评论 · 交接说明</div>
+      <div className="tc__head">{t("project.comments.head")}</div>
       <div className="tc__grid">
         {comments.map((c) => (
           <CommentCard key={c.id} comment={c} onDelete={() => void remove(c.id)} onOpen={() => setOpenComment(c)} />
@@ -67,7 +76,7 @@ export function TaskComments({ api, taskId }: { api: ApiClient; taskId: string }
           <button className="tc__card tc__card--add" onClick={() => setAdding(true)}>
             <span className="tc__add-plus">{Icon.plus}</span>
             <span className="tc__add-hint">
-              {comments.length === 0 && !loading ? "给下一次运行留点说明…" : "新增评论"}
+              {comments.length === 0 && !loading ? t("project.comments.addHintEmpty") : t("project.comments.addHint")}
             </span>
           </button>
         )}
@@ -93,6 +102,7 @@ function CommentComposer({
   onCancel: () => void;
   uploads: UseUploads;
 }) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   // Focus on open, then autosize (reset to auto so it grows AND shrinks).
@@ -132,7 +142,7 @@ function CommentComposer({
         className="tc__compose-input"
         value={draft}
         rows={2}
-        placeholder="写条说明,给下一次运行…"
+        placeholder={t("project.comments.composePlaceholder")}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
@@ -158,12 +168,12 @@ function CommentComposer({
             className="tc__compose-attach"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => fileRef.current?.click()}
-            title="添加附件"
-            aria-label="添加附件"
+            title={t("project.comments.attach")}
+            aria-label={t("project.comments.attach")}
           >
             {Icon.attach}
           </button>
-          <span className="tc__compose-hint">↵ 发送 · esc 取消</span>
+          <span className="tc__compose-hint">{t("project.comments.composeHint")}</span>
         </div>
         <button
           type="button"
@@ -171,8 +181,8 @@ function CommentComposer({
           disabled={!canSubmit}
           onMouseDown={(e) => e.preventDefault()}
           onClick={onSubmit}
-          title="发送 (Enter)"
-          aria-label="发送"
+          title={t("project.comments.sendTitle")}
+          aria-label={t("project.comments.send")}
         >
           {Icon.send}
         </button>
@@ -182,6 +192,7 @@ function CommentComposer({
 }
 
 function CommentCard({ comment, onDelete, onOpen }: { comment: TaskComment; onDelete: () => void; onOpen: () => void }) {
+  const { t } = useTranslation();
   const isWorker = comment.author === "worker";
   return (
     <div
@@ -190,20 +201,20 @@ function CommentCard({ comment, onDelete, onOpen }: { comment: TaskComment; onDe
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
-      title="点击查看完整内容"
+      title={t("project.comments.cardOpenTitle")}
     >
       <div className="tc__card-head">
         <span className="tc__avatar">{isWorker ? Icon.spark : Icon.user}</span>
         {isWorker && (
           <span className="tc__chip" style={{ color: STATE_COLOR[comment.state] }}>
-            {STATE_CHIP[comment.state] ?? comment.state}
+            {stateChip(t, comment.state)}
           </span>
         )}
-        {!isWorker && comment.consumedByRunId && <span className="tc__badge">已交给 worker</span>}
+        {!isWorker && comment.consumedByRunId && <span className="tc__badge">{t("project.comments.delivered")}</span>}
         {!isWorker && !comment.consumedByRunId && (
           <button
             className="tc__del"
-            title="删除"
+            title={t("project.comments.delete")}
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
           >
             {Icon.x}
@@ -231,6 +242,7 @@ function CommentCard({ comment, onDelete, onOpen }: { comment: TaskComment; onDe
  * close the parent task panel.
  */
 function CommentDetailModal({ comment, onClose }: { comment: TaskComment; onClose: () => void }) {
+  const { t } = useTranslation();
   const isWorker = comment.author === "worker";
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -247,11 +259,11 @@ function CommentDetailModal({ comment, onClose }: { comment: TaskComment; onClos
           <span className="tcd__who">
             <span className="tc__avatar">{isWorker ? Icon.spark : Icon.user}</span>
             {isWorker
-              ? <span className="tc__chip" style={{ color: STATE_COLOR[comment.state] }}>{STATE_CHIP[comment.state] ?? comment.state}</span>
-              : <span className="tcd__who-label">人类备注</span>}
+              ? <span className="tc__chip" style={{ color: STATE_COLOR[comment.state] }}>{stateChip(t, comment.state)}</span>
+              : <span className="tcd__who-label">{t("project.comments.humanNote")}</span>}
             <time className="tcd__time">{formatAgo(comment.createdAt)}</time>
           </span>
-          <button className="td__icon-btn" onClick={onClose} title="关闭 (Esc)" aria-label="关闭">{Icon.x}</button>
+          <button className="td__icon-btn" onClick={onClose} title={t("project.comments.detailClose")} aria-label={t("project.comments.detailClose")}>{Icon.x}</button>
         </div>
         <div className="tcd__body"><Markdown text={comment.body} /></div>
         {comment.attachments && comment.attachments.length > 0 && (

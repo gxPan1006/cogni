@@ -9,12 +9,14 @@
  * down from whatever decoded the JWT (Shell.tsx on desktop, WebShell on web).
  */
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Icon } from "./icons.js";
 import type { ApiClient, HostInfo } from "../transport/api.js";
 import { useIdentities } from "../hooks/useIdentities.js";
 import { useDevices } from "../hooks/useDevices.js";
 import { useHosts } from "../hooks/useHosts.js";
 import { useTheme } from "../hooks/useTheme.js";
+import { useLocale } from "../hooks/useLocale.js";
 import { LoadingRows, LoadingState } from "./LoadingState.js";
 import "./settings.css";
 
@@ -30,26 +32,27 @@ export function SettingsPage({
   onClose?: () => void;
 }) {
   const [page, setPage] = useState<Page>("account");
+  const { t } = useTranslation();
 
   return (
     <div className="settings">
       <div className="settings__nav">
         <div className="settings__title">
           {onClose && (
-            <button className="btn btn-sm btn-ghost" onClick={onClose} title="关闭设置">
+            <button className="btn btn-sm btn-ghost" onClick={onClose} title={t("settings.close")}>
               {Icon.x}
             </button>
           )}
-          <div className="settings__title-text">设置</div>
+          <div className="settings__title-text">{t("settings.title")}</div>
         </div>
         <nav className="settings__menu">
           {(
             [
-              ["account",   "账户",       Icon.user],
-              ["devices",   "设备",       Icon.desktop],
-              ["hosts",     "Runner Hosts", Icon.flow],
-              ["customize", "外观",       Icon.spark],
-              ["about",     "关于",       Icon.shield],
+              ["account",   t("settings.nav.account"),   Icon.user],
+              ["devices",   t("settings.nav.devices"),   Icon.desktop],
+              ["hosts",     t("settings.nav.hosts"),     Icon.flow],
+              ["customize", t("settings.nav.customize"), Icon.spark],
+              ["about",     t("settings.nav.about"),     Icon.shield],
             ] as const
           ).map(([id, label, icon]) => (
             <button
@@ -83,6 +86,7 @@ function AccountPage({
   api: ApiClient;
   user: { name: string; email: string };
 }) {
+  const { t } = useTranslation();
   const initial = user.name.slice(0, 1).toUpperCase();
   const { identities, loading, remove } = useIdentities(api);
   // Guard against locking yourself out — disable the last Disconnect button.
@@ -90,53 +94,53 @@ function AccountPage({
 
   return (
     <>
-      <SectionHead title="账户" subtitle="一个身份,跨 Google、邮件链接、任何登录过的设备。" />
+      <SectionHead title={t("settings.account.title")} subtitle={t("settings.account.subtitle")} />
       <div className="settings-card">
         <Row
           icon={<span className="settings-bigchar">{initial}</span>}
           title={user.name}
-          sub={`${user.email} · default tenant`}
-          right={<button className="btn btn-sm btn-ghost" disabled title="改名 API 还没接">改名</button>}
+          sub={`${user.email} · ${t("settings.account.tenantSuffix")}`}
+          right={<button className="btn btn-sm btn-ghost" disabled title={t("settings.account.renameDisabledTitle")}>{t("settings.account.rename")}</button>}
         />
       </div>
 
-      <SectionHead title="登录方式" subtitle="至少保留一种,否则下次进不来。" />
+      <SectionHead title={t("settings.account.methodsTitle")} subtitle={t("settings.account.methodsSubtitle")} />
       <div className="settings-card">
-        {loading && <SettingsLoading label="登录方式" rows={2} />}
+        {loading && <SettingsLoading label={t("settings.account.methodsLoadingLabel")} rows={2} />}
         {!loading && identities.length === 0 && (
-          <div className="settings-card__foot"><span>没有任何登录方式 — 这不该发生</span></div>
+          <div className="settings-card__foot"><span>{t("settings.account.noMethods")}</span></div>
         )}
         {!loading && identities.map((id) => (
           <Row
             key={`${id.kind}-${id.sub}`}
             icon={<span style={{ fontSize: 14 }}>{kindIcon(id.kind)}</span>}
-            title={kindLabel(id.kind)}
+            title={kindLabel(id.kind, t)}
             sub={id.sub}
             right={
               <button
                 className="btn btn-sm"
                 disabled={!canRemove}
-                title={canRemove ? "解绑这个登录方式" : "至少保留一种登录方式"}
+                title={canRemove ? t("settings.account.unbindTitle") : t("settings.account.unbindDisabledTitle")}
                 onClick={() => { void remove(id.kind, id.sub); }}
               >
-                解绑
+                {t("settings.account.unbind")}
               </button>
             }
           />
         ))}
         <div className="settings-card__foot">
           <span style={{ color: "var(--warn)" }}>{Icon.shield}</span>
-          <span>至少保留一种登录方式。</span>
+          <span>{t("settings.account.keepOneMethod")}</span>
         </div>
       </div>
     </>
   );
 }
 
-function kindLabel(kind: string): string {
-  if (kind === "google") return "Google";
-  if (kind === "email") return "邮件登录链接";
-  if (kind === "dev") return "Dev token";
+function kindLabel(kind: string, t: (key: string) => string): string {
+  if (kind === "google") return t("settings.account.kindGoogle");
+  if (kind === "email") return t("settings.account.kindEmail");
+  if (kind === "dev") return t("settings.account.kindDev");
   return kind;
 }
 function kindIcon(kind: string): string {
@@ -149,6 +153,7 @@ function kindIcon(kind: string): string {
 /* ─── Devices ──────────────────────────────────────────── */
 
 function DevicesPage({ api }: { api: ApiClient }) {
+  const { t } = useTranslation();
   const { devices, loading, revoke } = useDevices(api);
   const revokeOthers = async () => {
     for (const d of devices) if (!d.isCurrent) await revoke(d.id);
@@ -158,18 +163,18 @@ function DevicesPage({ api }: { api: ApiClient }) {
   return (
     <>
       <SectionHead
-        title="已登录的设备"
-        subtitle="当前能拿你账号说话的会话。撤销后那台设备立即被踢出。"
+        title={t("settings.devices.title")}
+        subtitle={t("settings.devices.subtitle")}
         action={
           <button className="btn btn-sm" disabled={!hasOthers} onClick={() => { void revokeOthers(); }}>
-            撤销其它所有
+            {t("settings.devices.revokeOthers")}
           </button>
         }
       />
       <div className="settings-card">
-        {loading && <SettingsLoading label="已登录设备" rows={3} />}
+        {loading && <SettingsLoading label={t("settings.devices.loadingLabel")} rows={3} />}
         {!loading && devices.length === 0 && (
-          <div className="settings-card__foot"><span>没有任何已登录设备</span></div>
+          <div className="settings-card__foot"><span>{t("settings.devices.none")}</span></div>
         )}
         {!loading && devices.map((d) => (
           <Row
@@ -177,11 +182,11 @@ function DevicesPage({ api }: { api: ApiClient }) {
             current={d.isCurrent}
             icon={deviceKindIcon(d.deviceName)}
             title={d.deviceName}
-            sub={`${fmtRelative(d.lastSeenAt)}${d.ip ? " · IP " + d.ip : ""}`}
+            sub={`${fmtRelative(d.lastSeenAt, t)}${d.ip ? " · IP " + d.ip : ""}`}
             right={
               d.isCurrent
-                ? <span className="settings-card__current-tag">当前设备</span>
-                : <button className="btn btn-sm" onClick={() => { void revoke(d.id); }}>撤销</button>
+                ? <span className="settings-card__current-tag">{t("settings.devices.current")}</span>
+                : <button className="btn btn-sm" onClick={() => { void revoke(d.id); }}>{t("settings.devices.revoke")}</button>
             }
           />
         ))}
@@ -197,17 +202,18 @@ function deviceKindIcon(deviceName: string) {
   return Icon.desktop;
 }
 
-function fmtRelative(iso: string): string {
+function fmtRelative(iso: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60_000) return "刚刚";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  if (diff < 60_000) return t("settings.devices.justNow");
+  if (diff < 3_600_000) return t("settings.devices.minutesAgo", { n: Math.floor(diff / 60_000) });
+  if (diff < 86_400_000) return t("settings.devices.hoursAgo", { n: Math.floor(diff / 3_600_000) });
   return new Date(iso).toLocaleDateString();
 }
 
 /* ─── Hosts ────────────────────────────────────────────── */
 
 function HostsPage({ api }: { api: ApiClient }) {
+  const { t } = useTranslation();
   const { hosts, loading, rename, remove } = useHosts(api);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -215,13 +221,13 @@ function HostsPage({ api }: { api: ApiClient }) {
   return (
     <>
       <SectionHead
-        title="Runner Hosts"
-        subtitle="能跑 agent 的机器。每台机器汇报自己装了什么 adapter。"
+        title={t("settings.hosts.title")}
+        subtitle={t("settings.hosts.subtitle")}
       />
       <div className="settings-card">
-        {loading && <SettingsLoading label="Runner Hosts" rows={3} />}
+        {loading && <SettingsLoading label={t("settings.hosts.loadingLabel")} rows={3} />}
         {!loading && hosts.length === 0 && (
-          <div className="settings-card__foot"><span>还没有 Runner Host — 在 Mac 上打开 cogni 桌面端就会自动注册</span></div>
+          <div className="settings-card__foot"><span>{t("settings.hosts.none")}</span></div>
         )}
         {!loading && hosts.map((h) => {
           const isEditing = editingId === h.id;
@@ -246,7 +252,7 @@ function HostsPage({ api }: { api: ApiClient }) {
                   />
                 ) : h.name
               }
-              sub={`${h.status}${h.lastSeen ? " · 最后在线 " + fmtRelative(h.lastSeen) : ""}`}
+              sub={`${h.status}${h.lastSeen ? " · " + t("settings.hosts.lastSeen", { when: fmtRelative(h.lastSeen, t) }) : ""}`}
               right={
                 <div className="settings-card__row-actions">
                   {isEditing ? (
@@ -265,13 +271,13 @@ function HostsPage({ api }: { api: ApiClient }) {
                     <>
                       <button
                         className="btn btn-sm btn-ghost"
-                        title="改名"
+                        title={t("settings.hosts.rename")}
                         onClick={() => { setEditingId(h.id); setDraftName(h.name); }}
                       >{Icon.edit}</button>
                       <button
                         className="btn btn-sm btn-ghost"
                         style={{ color: "var(--bad)" }}
-                        title="移除"
+                        title={t("settings.hosts.remove")}
                         onClick={() => { void remove(h.id); }}
                       >{Icon.trash}</button>
                     </>
@@ -280,12 +286,13 @@ function HostsPage({ api }: { api: ApiClient }) {
               }
             />
             <HostProjectsRootRow api={api} host={h} />
+            <HostKeepAwakeRow api={api} host={h} />
             </div>
           );
         })}
         <div className="settings-card__foot">
           <span style={{ color: "var(--muted)" }}>+</span>
-          <span>要加新机器:在那台机器装 Cogni 桌面 app 并登录。</span>
+          <span>{t("settings.hosts.addHint")}</span>
         </div>
       </div>
     </>
@@ -299,6 +306,7 @@ function HostsPage({ api }: { api: ApiClient }) {
  * and shows a "由环境变量锁定" hint.
  */
 function HostProjectsRootRow({ api, host }: { api: ApiClient; host: HostInfo }) {
+  const { t } = useTranslation();
   const [value, setValue] = useState(host.projectsRoot ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -306,13 +314,13 @@ function HostProjectsRootRow({ api, host }: { api: ApiClient; host: HostInfo }) 
   const locked = host.projectsRootLocked === true;
   return (
     <div className="settings__projroot">
-      <label className="field__label">项目根目录</label>
+      <label className="field__label">{t("settings.hosts.projectsRootLabel")}</label>
       <div className="np__path">
         <input
           className="input"
           value={value}
           disabled={locked || saving}
-          placeholder="~/cogni"
+          placeholder={t("settings.hosts.projectsRootPlaceholder")}
           onChange={(e) => { setValue(e.target.value); setSaved(false); setError(null); }}
         />
         <button
@@ -331,16 +339,73 @@ function HostProjectsRootRow({ api, host }: { api: ApiClient; host: HostInfo }) 
               setSaving(false);
             }
           }}
-        >保存</button>
+        >{t("settings.hosts.save")}</button>
       </div>
       <div className="field__hint">
         {locked
-          ? "由环境变量 COGNI_PROJECTS_ROOT 锁定"
+          ? t("settings.hosts.projectsRootLocked")
           : error
             ? error
             : saved
-              ? "已保存"
-              : "新建项目时会用它预填仓库路径"}
+              ? t("settings.hosts.saved")
+              : t("settings.hosts.projectsRootHint")}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Per-host "keep awake" toggle — when on, the host daemon blocks the machine
+ * from sleeping so remote clients (other browsers, phone web) can always reach
+ * it. Default on. Read-only with a hint when pinned by COGNI_KEEP_AWAKE.
+ */
+function HostKeepAwakeRow({ api, host }: { api: ApiClient; host: HostInfo }) {
+  const { t } = useTranslation();
+  const [enabled, setEnabled] = useState(host.keepAwake !== false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const locked = host.keepAwakeLocked === true;
+
+  const apply = async (next: boolean) => {
+    if (locked || saving || next === enabled) return;
+    setSaving(true);
+    setError(null);
+    const prev = enabled;
+    setEnabled(next); // optimistic
+    try {
+      const r = await api.setKeepAwake(host.id, next);
+      setEnabled(r.enabled);
+    } catch (e) {
+      setEnabled(prev); // revert on failure
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="settings__projroot">
+      <label className="field__label">{t("settings.hosts.keepAwakeLabel")}</label>
+      <div className="seg">
+        <button
+          className={"seg__btn" + (enabled ? " is-on" : "")}
+          disabled={locked || saving}
+          onClick={() => { void apply(true); }}
+        >{t("settings.hosts.on")}</button>
+        <button
+          className={"seg__btn" + (!enabled ? " is-on" : "")}
+          disabled={locked || saving}
+          onClick={() => { void apply(false); }}
+        >{t("settings.hosts.off")}</button>
+      </div>
+      <div className="field__hint">
+        {locked
+          ? t("settings.hosts.keepAwakeLocked")
+          : error
+            ? error
+            : enabled
+              ? t("settings.hosts.keepAwakeOnHint")
+              : t("settings.hosts.keepAwakeOffHint")}
       </div>
     </div>
   );
@@ -349,38 +414,54 @@ function HostProjectsRootRow({ api, host }: { api: ApiClient; host: HostInfo }) 
 /* ─── Customize ───────────────────────────────────────── */
 
 function CustomizePage() {
+  const { t } = useTranslation();
   const { pref, setPref } = useTheme();
+  const { locale, setLocale } = useLocale();
   const sub =
-    pref === "system" ? "跟随系统 · 随 macOS 外观切换"
-    : pref === "dark" ? "深色 · 适合低光环境"
-    : "浅色 · 适合白天";
+    pref === "system" ? t("settings.customize.themeSystemSub")
+    : pref === "dark" ? t("settings.customize.themeDarkSub")
+    : t("settings.customize.themeLightSub");
   return (
     <>
-      <SectionHead title="外观" subtitle="应用的视觉调性。保存在本机。" />
+      <SectionHead title={t("settings.customize.title")} subtitle={t("settings.customize.subtitle")} />
 
       <div className="settings-card">
         <Row
-          icon={pref === "dark" ? Icon.moon : Icon.sun}
-          title="主题"
-          sub={sub}
+          icon={Icon.globe}
+          title={t("settings.language.title")}
+          sub={t("settings.language.sub")}
           right={
             <div className="seg">
-              <button className={"seg__btn" + (pref === "light"  ? " is-on" : "")} onClick={() => setPref("light")}>浅</button>
-              <button className={"seg__btn" + (pref === "dark"   ? " is-on" : "")} onClick={() => setPref("dark")}>深</button>
-              <button className={"seg__btn" + (pref === "system" ? " is-on" : "")} onClick={() => setPref("system")}>跟随系统</button>
+              <button className={"seg__btn" + (locale === "zh" ? " is-on" : "")} onClick={() => setLocale("zh")}>{t("settings.language.zh")}</button>
+              <button className={"seg__btn" + (locale === "en" ? " is-on" : "")} onClick={() => setLocale("en")}>{t("settings.language.en")}</button>
             </div>
           }
         />
       </div>
 
-      <SectionHead title="快捷键" subtitle="全局快捷键速查。" />
+      <div className="settings-card">
+        <Row
+          icon={pref === "dark" ? Icon.moon : Icon.sun}
+          title={t("settings.customize.themeTitle")}
+          sub={sub}
+          right={
+            <div className="seg">
+              <button className={"seg__btn" + (pref === "light"  ? " is-on" : "")} onClick={() => setPref("light")}>{t("settings.customize.themeLight")}</button>
+              <button className={"seg__btn" + (pref === "dark"   ? " is-on" : "")} onClick={() => setPref("dark")}>{t("settings.customize.themeDark")}</button>
+              <button className={"seg__btn" + (pref === "system" ? " is-on" : "")} onClick={() => setPref("system")}>{t("settings.customize.themeSystem")}</button>
+            </div>
+          }
+        />
+      </div>
+
+      <SectionHead title={t("settings.customize.shortcutsTitle")} subtitle={t("settings.customize.shortcutsSubtitle")} />
       <div className="settings-card">
         {[
-          ["新对话",              "⌘ N"],
-          ["搜索",                "⌘ K"],
-          ["折叠侧边栏",          "⌘ \\"],
-          ["切换 chat ↔ project", "⌘ ⇧ M"],
-          ["打开设置",            "⌘ ,"],
+          [t("settings.customize.shortcutNewChat"),         "⌘ N"],
+          [t("settings.customize.shortcutSearch"),          "⌘ K"],
+          [t("settings.customize.shortcutCollapseSidebar"), "⌘ \\"],
+          [t("settings.customize.shortcutToggleMode"),      "⌘ ⇧ M"],
+          [t("settings.customize.shortcutOpenSettings"),    "⌘ ,"],
         ].map(([k, v]) => (
           <div key={k} className="settings-card__row">
             <div className="settings-card__row-label">{k}</div>
@@ -395,14 +476,15 @@ function CustomizePage() {
 /* ─── About ────────────────────────────────────────────── */
 
 function AboutPage() {
+  const { t } = useTranslation();
   return (
     <>
-      <SectionHead title="关于" />
+      <SectionHead title={t("settings.about.title")} />
       <div className="settings-card" style={{ padding: 24 }}>
         <div className="settings-card__about">
           <div className="settings__title-text" style={{ marginBottom: 12 }}>cogni</div>
           <div className="settings-card__about-tag">
-            一个把云端账号 + 本地 runner 串起来的私人 AI 助手。
+            {t("settings.about.tagline")}
           </div>
           <dl className="settings-card__kv">
             <dt>Build</dt><dd>sp1.0.4-dev · e715bb5</dd>
@@ -443,9 +525,10 @@ function Row({ icon, title, sub, right, current }: { icon: React.ReactNode; titl
 }
 
 function SettingsLoading({ label, rows }: { label: string; rows: number }) {
+  const { t } = useTranslation();
   return (
     <div className="settings-card__loading" aria-busy="true">
-      <LoadingState variant="inline" title={`正在同步${label}`} />
+      <LoadingState variant="inline" title={t("settings.syncing", { label })} />
       <LoadingRows rows={rows} compact />
     </div>
   );

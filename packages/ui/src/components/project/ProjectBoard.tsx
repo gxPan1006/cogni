@@ -22,6 +22,8 @@
  *     fetches via `useHosts`, not a mock.
  */
 import { useMemo, useState } from "react";
+import { useTranslation, Trans } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { Project, ProjectTask, TaskState } from "@cogni/contract";
 import type { HostInfo } from "../../transport/api.js";
 import { Icon } from "../icons.js";
@@ -44,6 +46,13 @@ export const STATE_COLOR: Record<TaskState, string> = {
   cancelled:     "var(--muted)",
 };
 
+/**
+ * Static, NON-reactive state→label map. Kept exported (the package barrel
+ * re-exports it) as a backwards-compatible fallback, but UI in this file no
+ * longer reads it for display — it translates at render time via
+ * `t(`project.state.${state}`)` so switching language updates instantly.
+ * Do NOT use this for user-facing text in new code; call `t()` instead.
+ */
 export const STATE_LABEL: Record<TaskState, string> = {
   queued:        "排队中",
   running:       "进行中",
@@ -53,6 +62,11 @@ export const STATE_LABEL: Record<TaskState, string> = {
   failed:        "失败",
   cancelled:     "已取消",
 };
+
+/** Translate a TaskState to its localized label at render time. */
+export function stateLabel(t: TFunction, state: TaskState): string {
+  return t(`project.state.${state}`);
+}
 
 export function ProjectBoard({
   project,
@@ -84,6 +98,7 @@ export function ProjectBoard({
    */
   onMoveTask?: (taskId: string, to: TaskState) => void;
 }) {
+  const { t } = useTranslation();
   const [view, setView] = useState<View>("columns");
 
   const live   = tasks.filter((t) => t.state === "running" || t.state === "needs-input").length;
@@ -105,18 +120,24 @@ export function ProjectBoard({
       <header className="project__head">
         <div className="project__head-text">
           <nav className="project__crumbs">
-            <button className="project__crumb" onClick={onBack}>项目</button>
+            <button className="project__crumb" onClick={onBack}>{t("project.board.crumbRoot")}</button>
             <span className="project__crumb-sep">/</span>
-            <span className="project__crumb project__crumb--current">{project?.name ?? "项目未找到"}</span>
+            <span className="project__crumb project__crumb--current">{project?.name ?? t("project.board.notFound")}</span>
           </nav>
           {project?.description && <div className="project__desc">{project.description}</div>}
           <div className="project__sub">
             <span className="dot" style={{ background: "var(--accent)" }} />
-            <span><b>{live}</b> 在跑 · <b>{queued}</b> 排队</span>
+            <span>
+              <Trans
+                i18nKey="project.board.summary"
+                values={{ live, queued }}
+                components={[<b key="live" />, <b key="queued" />]}
+              />
+            </span>
             {needs > 0 && (
               <span className="project__needs-pill">
                 <span className="project__needs-pill-dot" />
-                <span>{needs} 个等你</span>
+                <span>{t("project.board.needsPill", { n: needs })}</span>
               </span>
             )}
           </div>
@@ -127,8 +148,8 @@ export function ProjectBoard({
             <button className={"seg__btn" + (view === "swarm"   ? " is-on" : "")} onClick={() => setView("swarm")}>Swarm</button>
             <button className={"seg__btn" + (view === "timeline"? " is-on" : "")} onClick={() => setView("timeline")}>Timeline</button>
           </div>
-          <button className="btn btn-sm" onClick={onNewTask}>{Icon.plus} 新任务</button>
-          <button className="btn btn-sm btn-ghost" onClick={onOpenSettings} title="项目设置">{Icon.cog}</button>
+          <button className="btn btn-sm" onClick={onNewTask}>{Icon.plus} {t("project.board.newTask")}</button>
+          <button className="btn btn-sm btn-ghost" onClick={onOpenSettings} title={t("project.board.settings")}>{Icon.cog}</button>
         </div>
       </header>
 
@@ -155,19 +176,20 @@ export function ProjectBoard({
 /* ─── Columns ──────────────────────────────────────────── */
 
 function ProjectBoardLoading({ onBack }: { onBack?: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="project project--loading" aria-busy="true">
       <header className="project__head">
         <div className="project__head-text">
           <nav className="project__crumbs">
-            <button className="project__crumb" onClick={onBack}>项目</button>
+            <button className="project__crumb" onClick={onBack}>{t("project.board.crumbRoot")}</button>
             <span className="project__crumb-sep">/</span>
-            <span className="project__crumb project__crumb--current">同步中</span>
+            <span className="project__crumb project__crumb--current">{t("project.board.syncing")}</span>
           </nav>
           <span className="project__title-skeleton loading-skeleton" />
           <div className="project__sub">
             <span className="dot dot-accent" />
-            <span>正在装载任务面板</span>
+            <span>{t("project.board.loadingTasks")}</span>
           </div>
         </div>
         <div className="project__head-tools">
@@ -176,13 +198,13 @@ function ProjectBoardLoading({ onBack }: { onBack?: () => void }) {
         </div>
       </header>
       <div className="project__body project__body--loading">
-        <LoadingState variant="section" title="正在同步项目面板" subtitle="加载任务队列、Runner 状态和时间线" />
+        <LoadingState variant="section" title={t("project.board.syncingBoardTitle")} subtitle={t("project.board.syncingBoardSubtitle")} />
         <div className="kb-cols kb-cols--loading">
           {COLUMN_STATES.map((state) => (
             <div key={state} className="kb-col">
               <div className="kb-col__head">
                 <span className="dot" style={{ background: STATE_COLOR[state] }} />
-                <span className="kb-col__label">{STATE_LABEL[state]}</span>
+                <span className="kb-col__label">{stateLabel(t, state)}</span>
               </div>
               <div className="kb-col__body">
                 <TaskCardSkeleton />
@@ -215,6 +237,7 @@ function TaskCardSkeleton({ compact = false }: { compact?: boolean }) {
 }
 
 function ColumnsView({ tasks, hostMap, onOpenTask, onMoveTask }: { tasks: ProjectTask[]; hostMap: Map<string, HostInfo>; onOpenTask?: (id: string) => void; onMoveTask?: (taskId: string, to: TaskState) => void }) {
+  const { t } = useTranslation();
   return (
     <div className="kb-cols">
       {COLUMN_STATES.map((state) => {
@@ -241,12 +264,12 @@ function ColumnsView({ tasks, hostMap, onOpenTask, onMoveTask }: { tasks: Projec
           >
             <div className="kb-col__head">
               <span className="dot" style={{ background: STATE_COLOR[state] }} />
-              <span className="kb-col__label">{STATE_LABEL[state]}</span>
+              <span className="kb-col__label">{stateLabel(t, state)}</span>
               <span className="kb-col__count">{filtered.length}</span>
             </div>
             <div className="kb-col__body">
               {filtered.length === 0
-                ? <div className="kb-col__empty">空</div>
+                ? <div className="kb-col__empty">{t("project.board.columnEmpty")}</div>
                 : filtered.map((t) => <ColumnCard key={t.id} task={t} hostMap={hostMap} onOpen={onOpenTask} draggable={!!onMoveTask} />)}
             </div>
           </div>
@@ -257,13 +280,14 @@ function ColumnsView({ tasks, hostMap, onOpenTask, onMoveTask }: { tasks: Projec
 }
 
 function ColumnCard({ task, hostMap, onOpen, draggable = false }: { task: ProjectTask; hostMap: Map<string, HostInfo>; onOpen?: (id: string) => void; draggable?: boolean }) {
+  const { t } = useTranslation();
   const host = task.hostId ? hostMap.get(task.hostId) : undefined;
   const cls = "kb-card"
     + (task.state === "running"     ? " kb-card--running" : "")
     + (task.state === "needs-input" ? " kb-card--needs-input" : "")
     + (task.state === "failed"      ? " kb-card--failed" : "");
   const progress = inferProgress(task);
-  const activity = inferActivity(task);
+  const activity = inferActivity(t, task);
   const elapsed = inferElapsed(task);
   return (
     <button
@@ -296,7 +320,7 @@ function ColumnCard({ task, hostMap, onOpen, draggable = false }: { task: Projec
             </>
           )}
           {task.retries > 0 && (
-            <span className="kb-card__retry" title={`${task.retries} retries`}>
+            <span className="kb-card__retry" title={t("project.board.retries", { n: task.retries })}>
               {Icon.refresh}{task.retries}
             </span>
           )}
@@ -312,34 +336,35 @@ function ColumnCard({ task, hostMap, onOpen, draggable = false }: { task: Projec
 /* ─── Swarm ────────────────────────────────────────────── */
 
 function SwarmView({ tasks, hostMap, onOpenTask }: { tasks: ProjectTask[]; hostMap: Map<string, HostInfo>; onOpenTask?: (id: string) => void }) {
+  const { t: tr } = useTranslation();
   const live   = tasks.filter((t) => t.state === "running" || t.state === "needs-input" || t.state === "reviewing" || t.state === "failed");
   const queued = tasks.filter((t) => t.state === "queued");
   const done   = tasks.filter((t) => t.state === "done");
   return (
     <div className="sw">
-      <SwarmSection state="needs-input" title="等你回应" count={live.filter((t) => t.state === "needs-input").length}>
+      <SwarmSection state="needs-input" title={tr("project.board.swarmNeedsInput")} count={live.filter((t) => t.state === "needs-input").length}>
         <div className="sw__grid">
           {live.filter((t) => t.state === "needs-input").map((t) => <Pod key={t.id} task={t} hostMap={hostMap} onOpen={onOpenTask} />)}
         </div>
       </SwarmSection>
-      <SwarmSection state="running" title="进行中" count={live.filter((t) => t.state !== "needs-input").length}>
+      <SwarmSection state="running" title={tr("project.board.swarmRunning")} count={live.filter((t) => t.state !== "needs-input").length}>
         <div className="sw__grid">
           {live.filter((t) => t.state !== "needs-input").map((t) => <Pod key={t.id} task={t} hostMap={hostMap} onOpen={onOpenTask} />)}
         </div>
       </SwarmSection>
-      <SwarmSection state="queued" title="排队" count={queued.length}>
+      <SwarmSection state="queued" title={tr("project.board.swarmQueued")} count={queued.length}>
         <div className="sw__list">
           {queued.map((t) => (
             <button key={t.id} className="sw__row" data-task-id={t.id} onClick={() => onOpenTask?.(t.id)}>
               <span className="kb-card__ref">{t.ref}</span>
               <span className="sw__row-title">{t.title}</span>
-              <span className="sw__row-meta">等可用 runner</span>
+              <span className="sw__row-meta">{tr("project.board.swarmQueuedMeta")}</span>
             </button>
           ))}
         </div>
       </SwarmSection>
       {done.length > 0 && (
-        <SwarmSection state="done" title="今日完成" count={done.length}>
+        <SwarmSection state="done" title={tr("project.board.swarmDone")} count={done.length}>
           <div className="sw__list">
             {done.map((t) => (
               <button key={t.id} className="sw__row sw__row--dim" data-task-id={t.id} onClick={() => onOpenTask?.(t.id)}>
@@ -370,6 +395,7 @@ function SwarmSection({ state, title, count, children }: { state: TaskState; tit
 }
 
 function Pod({ task, hostMap, onOpen }: { task: ProjectTask; hostMap: Map<string, HostInfo>; onOpen?: (id: string) => void }) {
+  const { t } = useTranslation();
   const host = task.hostId ? hostMap.get(task.hostId) : undefined;
   const cls = "pod"
     + (task.state === "running"     ? " pod--live" : "")
@@ -377,13 +403,13 @@ function Pod({ task, hostMap, onOpen }: { task: ProjectTask; hostMap: Map<string
     + (task.state === "failed"      ? " pod--failed" : "");
   const progress = inferProgress(task);
   const elapsed = inferElapsed(task) ?? "—";
-  const activity = inferActivity(task);
+  const activity = inferActivity(t, task);
   return (
     <button className={cls} data-task-id={task.id} onClick={() => onOpen?.(task.id)}>
       <div className="pod__head">
         <div className="pod__host">
           <span className={"dot " + (host?.status === "online" ? "dot-online" : "dot-offline")} />
-          <span className="kb-card__host">{shortHost(host?.name || "unassigned")}</span>
+          <span className="kb-card__host">{shortHost(host?.name || t("project.board.hostUnassigned"))}</span>
         </div>
         <StatePill state={task.state} />
       </div>
@@ -394,14 +420,14 @@ function Pod({ task, hostMap, onOpen }: { task: ProjectTask; hostMap: Map<string
         <span className="pod__activity-text">{activity}</span>
       </div>
       <div className="pod__meters">
-        <Meter label="进度">
+        <Meter label={t("project.board.meterProgress")}>
           <div className="kb-progress">
             <div className="kb-progress__fill" style={{ width: `${progress * 100}%`, background: STATE_COLOR[task.state] }} />
           </div>
         </Meter>
-        <Meter label="已用"><span className="pod__metric">{elapsed}</span></Meter>
-        <Meter label="重试"><span className="pod__metric" style={{ color: task.retries > 0 ? "var(--warn)" : "var(--muted)" }}>{task.retries}</span></Meter>
-        <Meter label="尝试"><span className="pod__metric">#{task.retries + 1}</span></Meter>
+        <Meter label={t("project.board.meterElapsed")}><span className="pod__metric">{elapsed}</span></Meter>
+        <Meter label={t("project.board.meterRetry")}><span className="pod__metric" style={{ color: task.retries > 0 ? "var(--warn)" : "var(--muted)" }}>{task.retries}</span></Meter>
+        <Meter label={t("project.board.meterAttempt")}><span className="pod__metric">#{task.retries + 1}</span></Meter>
       </div>
     </button>
   );
@@ -419,6 +445,7 @@ function Meter({ label, children }: { label: string; children: React.ReactNode }
 /* ─── Timeline ────────────────────────────────────────── */
 
 function TimelineView({ tasks, hostMap, onOpenTask }: { tasks: ProjectTask[]; hostMap: Map<string, HostInfo>; onOpenTask?: (id: string) => void }) {
+  const { t: tr } = useTranslation();
   const live = tasks.filter((t) => t.state !== "queued");
   const NOW_PCT = 78;
   return (
@@ -439,7 +466,7 @@ function TimelineView({ tasks, hostMap, onOpenTask }: { tasks: ProjectTask[]; ho
           const startPct = Math.max(2, NOW_PCT - 65 * progress);
           const widthPct = NOW_PCT - startPct;
           const color = STATE_COLOR[t.state];
-          const activity = inferActivity(t);
+          const activity = inferActivity(tr, t);
           return (
             <button key={t.id} className="tl__row" data-task-id={t.id} onClick={() => onOpenTask?.(t.id)}>
               <div className="tl__row-label">
@@ -463,12 +490,13 @@ function TimelineView({ tasks, hostMap, onOpenTask }: { tasks: ProjectTask[]; ho
 /* ─── Atoms ────────────────────────────────────────────── */
 
 export function StatePill({ state }: { state: TaskState }) {
+  const { t } = useTranslation();
   const color = STATE_COLOR[state];
   const isPulse = state === "running" || state === "needs-input";
   return (
     <span className="state-pill" style={{ color, background: `color-mix(in oklch, ${color}, var(--bg) 86%)` }}>
       <span className={"state-pill__dot" + (isPulse ? " state-pill__dot--pulse" : "")} style={{ background: color }} />
-      {STATE_LABEL[state]}
+      {stateLabel(t, state)}
     </span>
   );
 }
@@ -493,13 +521,13 @@ function inferProgress(t: ProjectTask): number {
   return 0;
 }
 
-function inferActivity(t: ProjectTask): string {
-  if (t.state === "needs-input" && t.needsInputWhat) return t.needsInputWhat;
-  if (t.state === "queued")    return "等可用 runner";
-  if (t.state === "reviewing") return "等你 review";
-  if (t.state === "failed")    return "失败";
-  if (t.state === "done")      return "已完成";
-  return "运行中";
+function inferActivity(t: TFunction, task: ProjectTask): string {
+  if (task.state === "needs-input" && task.needsInputWhat) return task.needsInputWhat;
+  if (task.state === "queued")    return t("project.board.activityWaitRunner");
+  if (task.state === "reviewing") return t("project.board.activityReviewing");
+  if (task.state === "failed")    return t("project.board.activityFailed");
+  if (task.state === "done")      return t("project.board.activityDone");
+  return t("project.board.activityRunning");
 }
 
 function inferElapsed(t: ProjectTask): string | null {

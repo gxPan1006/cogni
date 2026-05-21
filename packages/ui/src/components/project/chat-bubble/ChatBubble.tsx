@@ -19,8 +19,10 @@
  * never get lost either.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ThreadSummary } from "@cogni/contract";
 import type { ApiClient } from "../../../transport/api.js";
+import { i18n } from "../../../i18n/index.js";
 import { Icon } from "../../icons.js";
 import type { WorkspaceChatScope, WorkspaceTaskFocus } from "../WorkspaceChatBar.js";
 import { scopePlaceholder } from "../WorkspaceChatBar.js";
@@ -41,7 +43,7 @@ import "./chat-bubble.css";
 
 function errText(e: unknown): string {
   if (e instanceof Error && e.message) return e.message;
-  return String(e ?? "未知错误");
+  return String(e ?? i18n.t("chat.common.unknownError"));
 }
 
 function loadPos(): Pos | null {
@@ -81,9 +83,10 @@ export function ChatBubble({
   /** Dismiss the focus chip (✕) — the next send goes project-wide. */
   onClearFocus?: () => void;
 }) {
+  const { t } = useTranslation();
   const projectId = scope.kind === "project" ? scope.projectId : undefined;
-  const scopeLabel = scope.kind === "project" ? scope.projectName : "工作区编排";
-  const composerPlaceholder = scopePlaceholder(scope);
+  const scopeLabel = scope.kind === "project" ? scope.projectName : t("chat.bubble.workspaceScope");
+  const composerPlaceholder = scopePlaceholder(scope, t);
 
   const [open, setOpen] = useState(false);
   // Clamp the persisted position into the *current* viewport at init: a pill
@@ -136,7 +139,7 @@ export function ChatBubble({
         if (live) setSessions(rows);
       })
       .catch((e) => {
-        if (live) setError("加载会话失败:" + errText(e));
+        if (live) setError(t("chat.bubble.loadSessionsFailed", { error: errText(e) }));
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -144,7 +147,7 @@ export function ChatBubble({
     return () => {
       live = false;
     };
-  }, [api, open, projectId]);
+  }, [api, open, projectId, t]);
 
   const onNew = useCallback(() => {
     setCreating(true);
@@ -157,10 +160,10 @@ export function ChatBubble({
       })
       .catch((e) => {
         // Never fail silently — a swallowed error here looked like "点击没反应".
-        setError("新建会话失败:" + errText(e));
+        setError(t("chat.bubble.createSessionFailed", { error: errText(e) }));
       })
       .finally(() => setCreating(false));
-  }, [api, projectId]);
+  }, [api, projectId, t]);
 
   const onTitled = useCallback((id: string, title: string) => {
     setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, title } : s)));
@@ -347,11 +350,11 @@ export function ChatBubble({
           className={"cb-bubble" + (open ? " is-open" : "") + (dragging ? " is-dragging" : "")}
           onMouseDown={onBubbleMouseDown}
           onClick={() => setOpen((o) => !o)}
-          aria-label={open ? "收起 Cogni 编排" : "打开 Cogni 编排"}
+          aria-label={open ? t("chat.bubble.collapse") : t("chat.bubble.open")}
           type="button"
         >
           <span className="cb-bubble-icon">{open ? Icon.x : Icon.chat}</span>
-          {!open && <span className="cb-bubble-label">Cogni 编排</span>}
+          {!open && <span className="cb-bubble-label">{t("chat.bubble.label")}</span>}
           {!open && (
             <span className="cb-bubble-grip" aria-hidden="true">
               <span />

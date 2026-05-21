@@ -13,6 +13,8 @@
  *      pile on more text before resolving.
  */
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import { i18n } from "../i18n/index.js";
 
 type HostRef = { id: string; name: string; lastSeenAgoMs: number };
 
@@ -27,14 +29,20 @@ export function HostFallbackCard({
   onSwitch: (targetHostId: string) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [chosen, setChosen] = useState<string | null>(alternatives[0]?.id ?? null);
   return (
     <div className="fallback-card">
       <div className="fallback-card__title">
-        ⚠️ &nbsp;<strong>{preferred.name}</strong> 不在线 (last seen {fmtAgo(preferred.lastSeenAgoMs)})
+        ⚠️ &nbsp;
+        <Trans
+          i18nKey="chat.hostFallback.offlineTitle"
+          values={{ ago: fmtAgo(preferred.lastSeenAgoMs) }}
+          components={[<strong key="name">{preferred.name}</strong>]}
+        />
       </div>
       <div className="fallback-card__body">
-        <div>切到这台机器跑?</div>
+        <div>{t("chat.hostFallback.switchHere")}</div>
         <ul className="fallback-card__options">
           {alternatives.map((a) => (
             <li key={a.id}>
@@ -45,13 +53,13 @@ export function HostFallbackCard({
                   checked={chosen === a.id}
                   onChange={() => setChosen(a.id)}
                 />
-                {a.name} <span className="fallback-card__sub">(online · {fmtAgo(a.lastSeenAgoMs)})</span>
+                {a.name} <span className="fallback-card__sub">{t("chat.hostFallback.onlineSub", { ago: fmtAgo(a.lastSeenAgoMs) })}</span>
               </label>
             </li>
           ))}
         </ul>
         <div className="fallback-card__note">
-          Claude Code 会在新机器上从消息历史重建上下文,之前在 {preferred.name} 上未保存的文件不会过来。
+          {t("chat.hostFallback.rebuildNote", { host: preferred.name })}
         </div>
       </div>
       <div className="fallback-card__actions">
@@ -60,10 +68,10 @@ export function HostFallbackCard({
           disabled={!chosen}
           onClick={() => chosen && onSwitch(chosen)}
         >
-          切换并发送
+          {t("chat.hostFallback.switchAndSend")}
         </button>
         <button className="fallback-card__secondary" onClick={onCancel}>
-          取消(等 {preferred.name} 上线)
+          {t("chat.hostFallback.cancelWait", { host: preferred.name })}
         </button>
       </div>
     </div>
@@ -71,8 +79,8 @@ export function HostFallbackCard({
 }
 
 function fmtAgo(ms: number) {
-  if (ms < 60_000) return "刚刚";
-  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)} min`;
-  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h`;
-  return `${Math.floor(ms / 86_400_000)}d`;
+  if (ms < 60_000) return i18n.t("chat.hostFallback.agoJustNow");
+  if (ms < 3_600_000) return i18n.t("chat.hostFallback.agoMin", { n: Math.floor(ms / 60_000) });
+  if (ms < 86_400_000) return i18n.t("chat.hostFallback.agoHour", { n: Math.floor(ms / 3_600_000) });
+  return i18n.t("chat.hostFallback.agoDay", { n: Math.floor(ms / 86_400_000) });
 }

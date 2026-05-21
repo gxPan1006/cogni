@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import "@cogni/ui"; // side-effect: init i18next (language) before first render
 import App from "./App.js";
 
 // Global stylesheet chain — order matters (matches apps/desktop):

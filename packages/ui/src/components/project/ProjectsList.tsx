@@ -20,6 +20,7 @@
  *     <NewProject> modal at the parent level.
  */
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Project } from "@cogni/contract";
 import { Icon } from "../icons.js";
 import { LoadingState } from "../LoadingState.js";
@@ -56,6 +57,7 @@ export function ProjectsList({
   /** Hover-prefetch a project's board into the SWR cache (flash-free open). */
   onPrefetch?: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const [q, setQ] = useState("");
   const [showArchived, setShowArchived] = useState(false);
 
@@ -86,10 +88,10 @@ export function ProjectsList({
     <div className={"projects-list" + (loading ? " projects-list--busy" : "")} aria-busy={loading}>
       <header className="projects-list__head">
         <div className="projects-list__head-text">
-          <div className="projects-list__eyebrow">PROJECTS</div>
-          <h1 className="projects-list__title">我的项目</h1>
+          <div className="projects-list__eyebrow">{t("project.list.eyebrow")}</div>
+          <h1 className="projects-list__title">{t("project.list.title")}</h1>
           <p className="projects-list__intro">
-            每个项目下挂一组任务,各自跑在 runner 上。Cogni 监督每条 runner、必要时叫你。
+            {t("project.list.intro")}
           </p>
         </div>
         <div className="projects-list__head-tools">
@@ -97,13 +99,13 @@ export function ProjectsList({
             <span className="projects-list__search-icon">{Icon.search}</span>
             <input
               className="projects-list__search-input"
-              placeholder="搜索项目"
+              placeholder={t("project.list.searchPlaceholder")}
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
           <button className="btn btn-primary" onClick={onNew}>
-            {Icon.plus} 新项目
+            {Icon.plus} {t("project.list.newProject")}
           </button>
         </div>
       </header>
@@ -111,16 +113,16 @@ export function ProjectsList({
       <div className="projects-list__body">
         {loading && (
           <div className="projects-list__refreshing">
-            <LoadingState variant="inline" title="正在刷新项目" subtitle="同步最新项目和 Runner 统计" />
+            <LoadingState variant="inline" title={t("project.list.refreshingTitle")} subtitle={t("project.list.refreshingSubtitle")} />
           </div>
         )}
         {pinned.length > 0 && (
-          <Section title="PINNED" icon={Icon.spark}>
+          <Section title={t("project.list.pinned")} icon={Icon.spark}>
             <Grid items={pinned} onOpen={onOpen} onPrefetch={onPrefetch} />
           </Section>
         )}
 
-        <Section title="进行中" subtitle={`${active.length} 个`}>
+        <Section title={t("project.list.active")} subtitle={t("project.list.activeCount", { n: active.length })}>
           {active.length === 0
             ? <EmptyActive onNew={onNew} />
             : <Grid items={active} onOpen={onOpen} onPrefetch={onPrefetch} />}
@@ -128,7 +130,7 @@ export function ProjectsList({
 
         {archived.length > 0 && (
           <Section
-            title={`已归档 · ${archived.length}`}
+            title={t("project.list.archived", { n: archived.length })}
             collapsible
             open={showArchived}
             onToggle={() => setShowArchived(!showArchived)}
@@ -186,6 +188,7 @@ function Grid({ items, onOpen, onPrefetch, dim }: { items: ProjectListItem[]; on
 }
 
 function ProjectCard({ item, onOpen, onPrefetch }: { item: ProjectListItem; onOpen?: (id: string) => void; onPrefetch?: (id: string) => void }) {
+  const { t } = useTranslation();
   const { project, liveRunners, queuedCount, needsInputCount, health } = item;
   const totalRunners = liveRunners + queuedCount;
   const updatedAtLabel = item.updatedAtLabel ?? "";
@@ -193,9 +196,9 @@ function ProjectCard({ item, onOpen, onPrefetch }: { item: ProjectListItem; onOp
   return (
     <button className="project-card" onClick={() => onOpen?.(project.id)} onMouseEnter={() => onPrefetch?.(project.id)}>
       <div className="project-card__head">
-        <span className={`project-card__health project-card__health--${health}`} title={`Health: ${health}`} />
+        <span className={`project-card__health project-card__health--${health}`} title={t("project.card.health", { health })} />
         {needsInputCount > 0 && (
-          <span className="project-card__needs-input" title={`${needsInputCount} 个任务在等你`}>
+          <span className="project-card__needs-input" title={t("project.card.needsInputTitle", { n: needsInputCount })}>
             <span className="project-card__needs-input-dot" />
             {needsInputCount}
           </span>
@@ -208,17 +211,17 @@ function ProjectCard({ item, onOpen, onPrefetch }: { item: ProjectListItem; onOp
       <div className="project-card__meta">
         <span className="project-card__meta-cell">
           <span className="project-card__meta-num">{liveRunners}</span>
-          <span className="project-card__meta-label">在跑</span>
+          <span className="project-card__meta-label">{t("project.card.running")}</span>
         </span>
         <span className="project-card__meta-sep">·</span>
         <span className="project-card__meta-cell">
           <span className="project-card__meta-num">{queuedCount}</span>
-          <span className="project-card__meta-label">排队</span>
+          <span className="project-card__meta-label">{t("project.card.queued")}</span>
         </span>
         {totalRunners === 0 && health === "ok" && (
           <>
             <span className="project-card__meta-sep">·</span>
-            <span className="project-card__meta-idle">空闲</span>
+            <span className="project-card__meta-idle">{t("project.card.idle")}</span>
           </>
         )}
       </div>
@@ -233,16 +236,17 @@ function ProjectCard({ item, onOpen, onPrefetch }: { item: ProjectListItem; onOp
 // ─── Empty states ────────────────────────────────────────
 
 function EmptyAll({ onNew }: { onNew?: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="projects-list projects-list--empty">
       <div className="projects-list__empty">
         <div className="projects-list__empty-art">{Icon.kanban}</div>
-        <h2 className="projects-list__empty-title">还没有项目</h2>
+        <h2 className="projects-list__empty-title">{t("project.list.emptyTitle")}</h2>
         <p className="projects-list__empty-text">
-          项目就是一组让 Cogni 持续跑的任务,由你设定边界,它负责推进。
+          {t("project.list.emptyText")}
         </p>
         <button className="btn btn-primary" onClick={onNew}>
-          {Icon.plus} 创建第一个项目
+          {Icon.plus} {t("project.list.emptyCreate")}
         </button>
       </div>
     </div>
@@ -250,33 +254,35 @@ function EmptyAll({ onNew }: { onNew?: () => void }) {
 }
 
 function EmptyActive({ onNew }: { onNew?: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="projects-list__empty-active">
-      <div className="projects-list__empty-active-text">没有进行中的项目。</div>
-      {onNew && <button className="btn btn-sm" onClick={onNew}>{Icon.plus} 新项目</button>}
+      <div className="projects-list__empty-active-text">{t("project.list.emptyActive")}</div>
+      {onNew && <button className="btn btn-sm" onClick={onNew}>{Icon.plus} {t("project.list.newProject")}</button>}
     </div>
   );
 }
 
 function ProjectsListLoading({ onNew }: { onNew?: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="projects-list projects-list--loading" aria-busy="true">
       <header className="projects-list__head">
         <div className="projects-list__head-text">
-          <div className="projects-list__eyebrow">PROJECTS</div>
-          <h1 className="projects-list__title">我的项目</h1>
+          <div className="projects-list__eyebrow">{t("project.list.eyebrow")}</div>
+          <h1 className="projects-list__title">{t("project.list.title")}</h1>
           <p className="projects-list__intro">
-            每个项目下挂一组任务,各自跑在 runner 上。Cogni 监督每条 runner、必要时叫你。
+            {t("project.list.intro")}
           </p>
         </div>
         <div className="projects-list__head-tools">
           <button className="btn btn-primary" onClick={onNew}>
-            {Icon.plus} 新项目
+            {Icon.plus} {t("project.list.newProject")}
           </button>
         </div>
       </header>
       <div className="projects-list__body">
-        <LoadingState variant="section" title="正在同步项目" subtitle="加载项目列表、归档状态和最近更新时间" />
+        <LoadingState variant="section" title={t("project.list.syncingTitle")} subtitle={t("project.list.syncingSubtitle")} />
         <div className="projects-list__grid projects-list__grid--loading">
           {Array.from({ length: 6 }, (_, i) => <ProjectCardSkeleton key={i} />)}
         </div>

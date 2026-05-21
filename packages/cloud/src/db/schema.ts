@@ -49,6 +49,11 @@ export const hosts = pgTable("hosts", {
   // host's COGNI_PROJECTS_ROOT env pin (UI shows the field read-only).
   projectsRoot: text("projects_root"),
   projectsRootLocked: boolean("projects_root_locked").notNull().default(false),
+  // Whether the host blocks OS sleep while its daemon runs (keeps it reachable
+  // for remote clients). Defaults ON; `keepAwakeLocked` mirrors a
+  // COGNI_KEEP_AWAKE env pin (UI shows the toggle read-only).
+  keepAwake: boolean("keep_awake").notNull().default(true),
+  keepAwakeLocked: boolean("keep_awake_locked").notNull().default(false),
   lastSeen: timestamp("last_seen"),
   // SP-2: soft delete. Filter `removedAt IS NULL` in user-visible lookups; keep
   // the row so historic runner_sessions / events keep a valid host_id reference.

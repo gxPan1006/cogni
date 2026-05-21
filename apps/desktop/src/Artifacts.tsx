@@ -9,7 +9,7 @@
  * folder).
  */
 import { useState } from "react";
-import { Icon } from "@cogni/ui";
+import { Icon, useTranslation } from "@cogni/ui";
 import "./artifacts.css";
 
 type Kind = "patch" | "note" | "sql" | "screenshot" | "doc" | "shell";
@@ -40,6 +40,7 @@ const KIND_LABEL: Record<Kind, string> = {
 };
 
 export function Artifacts() {
+  const { t } = useTranslation();
   const [filter, setFilter] = useState<Kind | "all">("all");
 
   const tabs: { id: Kind | "all"; label: string; count: number }[] = [
@@ -60,12 +61,12 @@ export function Artifacts() {
           <div className="artifacts__eyebrow">LIBRARY</div>
           <h1 className="artifacts__title">Artifacts</h1>
           <p className="artifacts__intro">
-            Cogni 在所有对话和项目里生成的东西都汇到这里。值得保留的就 pin 起来。
+            {t("settings.artifacts.intro")}
           </p>
         </div>
         <div className="artifacts__search">
           <span className="artifacts__search-icon">{Icon.search}</span>
-          <input className="artifacts__search-input" placeholder="搜索 artifacts" />
+          <input className="artifacts__search-input" placeholder={t("settings.artifacts.searchPlaceholder")} />
         </div>
       </header>
 

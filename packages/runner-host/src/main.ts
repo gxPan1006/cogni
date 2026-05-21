@@ -1,4 +1,4 @@
-import { readHostConfig, setProjectsRoot } from "./config.js";
+import { readHostConfig, setProjectsRoot, setKeepAwake, resolveKeepAwake } from "./config.js";
 import { RunnerManager } from "./runner-manager.js";
 import { ClaudeCodeAdapter } from "./adapters/claude-code.js";
 import { CodexAdapter } from "./adapters/codex/index.js";
@@ -16,6 +16,7 @@ import {
 import { fsBrowse, readFile } from "./fs-browse.js";
 import { generateThreadTitle } from "./generate-title.js";
 import { UploadStore } from "./uploads.js";
+import { startKeepAwake, stopKeepAwake } from "./keep-awake.js";
 import { logger } from "@cogni/shared";
 
 // SP-4: `mcp-serve` subcommand runs the cogni stdio MCP server instead of the
@@ -64,9 +65,23 @@ if (process.argv.includes("mcp-serve")) {
       uploadCommit: (r) => uploads.commit(r),
       uploadAbort: (r) => uploads.abort(r),
       setProjectsRoot: (req) => setProjectsRoot(req.projectsRoot),
+      // Persist the flag, then apply it live so the toggle takes effect without
+      // a daemon restart.
+      setKeepAwake: async (req) => {
+        const res = await setKeepAwake(req.enabled);
+        if (res.enabled) startKeepAwake();
+        else stopKeepAwake();
+        return res;
+      },
     }),
   );
   logger.info({ hostId: config.hostId }, "runner host daemon started");
+
+  // Keep this machine awake while the daemon runs, so remote clients can always
+  // reach the host. On by default; user can toggle it off from Settings or pin
+  // it via COGNI_KEEP_AWAKE. Released on shutdown (and caffeinate -w
+  // self-terminates if we crash).
+  if (resolveKeepAwake(config.keepAwake).enabled) startKeepAwake();
 
   // Kill any warm `claude` processes on shutdown so they don't outlive the
   // daemon as orphans.
@@ -75,6 +90,7 @@ if (process.argv.includes("mcp-serve")) {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info({ signal }, "shutting down — closing runner sessions");
+    stopKeepAwake();
     void manager.closeAll().finally(() => process.exit(0));
   };
   process.on("SIGINT", () => shutdown("SIGINT"));

@@ -1,4 +1,4 @@
-import { useAuthCore } from "@cogni/ui";
+import { useAuthCore, useTranslation } from "@cogni/ui";
 import { api, ApiError } from "./api.js";
 
 /**
@@ -26,6 +26,7 @@ import { api, ApiError } from "./api.js";
  *     in mail client → lands on /auth/email/callback → "正在登录…" → /chat.
  */
 export function useAuthWeb() {
+  const { t } = useTranslation();
   const core = useAuthCore(api);
 
   const loginWithGoogle = () => {
@@ -44,9 +45,9 @@ export function useAuthWeb() {
       const { token } = await api.passwordLogin(email, password);
       core.acceptToken(token);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) throw new Error("邮箱或密码不正确");
-      if (e instanceof ApiError && e.status === 429) throw new Error("尝试过于频繁,请稍后再试");
-      throw new Error("网络错误,请重试");
+      if (e instanceof ApiError && e.status === 401) throw new Error(t("auth.errors.invalidCredentials"));
+      if (e instanceof ApiError && e.status === 429) throw new Error(t("auth.errors.tooManyAttempts"));
+      throw new Error(t("auth.errors.network"));
     }
   };
   const passwordRegister = async (email: string, password: string): Promise<void> => {

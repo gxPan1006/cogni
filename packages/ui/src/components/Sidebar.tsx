@@ -14,6 +14,7 @@
  * unchanged — same look as SP-2.
  */
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useTranslation } from "react-i18next";
 import type { ThreadSummary } from "@cogni/contract";
 import { Icon } from "./icons.js";
 import { LogoMark } from "./LogoMark.js";
@@ -85,6 +86,7 @@ export function Sidebar(props: {
    */
   onToggleCollapse?: () => void;
 }) {
+  const { t } = useTranslation();
   const user = props.user ?? { name: "Cogni", email: "" };
   const initial = user.name.slice(0, 1).toUpperCase();
 
@@ -117,8 +119,8 @@ export function Sidebar(props: {
   // destination. No-op on desktop (onNavigate just clears already-false state).
   const goThenClose = (fn: () => void) => () => { fn(); props.onNavigate?.(); };
   const newAction  = goThenClose(isChat ? props.onNewChat : (props.onNewProject ?? (() => {})));
-  const newLabel   = isChat ? "新对话" : "新项目";
-  const searchHint = isChat ? "搜索对话" : "搜索项目";
+  const newLabel   = isChat ? t("chat.sidebar.newChat") : t("chat.sidebar.newProject");
+  const searchHint = isChat ? t("chat.sidebar.searchChats") : t("chat.sidebar.searchProjects");
   const selectThread = (id: string) => { props.onSelect(id); props.onNavigate?.(); };
   const selectProject = (id: string) => { props.onSelectProject?.(id); props.onNavigate?.(); };
 
@@ -130,8 +132,8 @@ export function Sidebar(props: {
           <button
             className="sb__collapse"
             onClick={props.onToggleCollapse}
-            title="折叠侧边栏 (⌘\)"
-            aria-label="折叠侧边栏"
+            title={t("chat.sidebar.collapseTitle")}
+            aria-label={t("chat.sidebar.collapseAria")}
           >
             {Icon.panel}
           </button>
@@ -141,10 +143,10 @@ export function Sidebar(props: {
       <div className="sb__modewrap">
         <div className="sb-mode">
           <button className={"sb-mode__btn" + (isChat ? " is-on" : "")} onClick={() => props.onMode("chat")}>
-            {Icon.chat} Chat
+            {Icon.chat} {t("chat.sidebar.chat")}
           </button>
           <button className={"sb-mode__btn" + (!isChat ? " is-on" : "")} onClick={() => props.onMode("project")}>
-            {Icon.kanban} 项目
+            {Icon.kanban} {t("chat.sidebar.project")}
           </button>
         </div>
       </div>
@@ -160,7 +162,7 @@ export function Sidebar(props: {
           onKeyDown={(e) => { if (e.key === "Escape") { setQuery(""); e.currentTarget.blur(); } }}
         />
         {q ? (
-          <button className="sb__search-clear" onClick={() => { setQuery(""); searchRef.current?.focus(); }} title="清除" aria-label="清除搜索">
+          <button className="sb__search-clear" onClick={() => { setQuery(""); searchRef.current?.focus(); }} title={t("chat.common.clear")} aria-label={t("chat.sidebar.clearSearch")}>
             {Icon.x}
           </button>
         ) : (
@@ -210,6 +212,7 @@ function ChatLists(props: {
   onPrefetch?: (id: string) => void;
   searching?: boolean;
 }) {
+  const { t } = useTranslation();
   // Only one row is in rename / delete-confirm mode (or has its ⋮ menu open) at
   // a time; keeping that state here (not per-row) means switching threads or
   // modes cleanly resets any open input/menu, and the modes are mutually
@@ -261,7 +264,7 @@ function ChatLists(props: {
       <section className="sb__section">
         <div className="sb__section-head">RECENTS</div>
         <div className="sb__section-body">
-          {rest.length > 0 ? rest.map(row) : <div className="sb__empty">{props.searching ? "没有匹配的对话" : "还没有对话"}</div>}
+          {rest.length > 0 ? rest.map(row) : <div className="sb__empty">{props.searching ? t("chat.sidebar.noMatchingChats") : t("chat.sidebar.noChatsYet")}</div>}
         </div>
       </section>
     </>
@@ -292,6 +295,7 @@ function ThreadRow({
   onConfirmDelete: () => void;
   onCancelDelete: () => void;
 }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState(thread.title);
   const kebabRef = useRef<HTMLButtonElement>(null);
 
@@ -314,8 +318,8 @@ function ThreadRow({
           }}
         />
         <span className="sb-thread__actions">
-          <button className="sb-thread__act" title="保存" onClick={commit}>{Icon.check}</button>
-          <button className="sb-thread__act" title="取消" onClick={onCancelRename}>{Icon.x}</button>
+          <button className="sb-thread__act" title={t("chat.common.save")} onClick={commit}>{Icon.check}</button>
+          <button className="sb-thread__act" title={t("chat.common.cancel")} onClick={onCancelRename}>{Icon.x}</button>
         </span>
       </div>
     );
@@ -330,10 +334,10 @@ function ThreadRow({
         tabIndex={-1}
         onKeyDown={(e) => { if (e.key === "Escape") onCancelDelete(); }}
       >
-        <span className="sb-thread__confirm" title={thread.title}>删除「{thread.title}」?</span>
+        <span className="sb-thread__confirm" title={thread.title}>{t("chat.sidebar.deleteConfirm", { title: thread.title })}</span>
         <span className="sb-thread__actions">
-          <button className="sb-thread__act sb-thread__act--danger" title="确认删除" onClick={onConfirmDelete}>{Icon.check}</button>
-          <button className="sb-thread__act" title="取消" onClick={onCancelDelete}>{Icon.x}</button>
+          <button className="sb-thread__act sb-thread__act--danger" title={t("chat.sidebar.confirmDelete")} onClick={onConfirmDelete}>{Icon.check}</button>
+          <button className="sb-thread__act" title={t("chat.common.cancel")} onClick={onCancelDelete}>{Icon.x}</button>
         </span>
       </div>
     );
@@ -349,7 +353,7 @@ function ThreadRow({
           <button
             ref={kebabRef}
             className={"sb-thread__act" + (menuOpen ? " is-on" : "")}
-            title="更多"
+            title={t("chat.common.more")}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             onClick={(e) => { e.stopPropagation(); onToggleMenu(); }}
@@ -382,6 +386,7 @@ function ThreadMenu({
   onRename?: () => void;
   onDelete?: () => void;
 }) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -420,13 +425,13 @@ function ThreadMenu({
     >
       {onRename && (
         <button className="sb-menu__item" role="menuitem" onClick={() => { onClose(); onRename(); }}>
-          {Icon.edit}<span>重命名</span>
+          {Icon.edit}<span>{t("chat.common.rename")}</span>
         </button>
       )}
       {onRename && onDelete && <div className="sb-menu__sep" />}
       {onDelete && (
         <button className="sb-menu__item sb-menu__item--danger" role="menuitem" onClick={() => { onClose(); onDelete(); }}>
-          {Icon.trash}<span>删除</span>
+          {Icon.trash}<span>{t("chat.common.delete")}</span>
         </button>
       )}
     </div>
@@ -442,6 +447,7 @@ function ProjectLists(props: {
   onPrefetchProject?: (id: string) => void;
   searching?: boolean;
 }) {
+  const { t } = useTranslation();
   const list = props.projects ?? [];
   const pinned   = list.filter((p) => p.pinned && !p.archived);
   const active   = list.filter((p) => !p.pinned && !p.archived);
@@ -468,13 +474,13 @@ function ProjectLists(props: {
             ? active.map((p) => (
                 <ProjectButton key={p.id} project={p} active={p.id === props.activeProjectId} onClick={() => props.onSelectProject?.(p.id)} onPrefetch={() => onPrefetch(p.id)} />
               ))
-            : <div className="sb__empty">{props.searching ? "没有匹配的项目" : "还没有项目"}</div>}
+            : <div className="sb__empty">{props.searching ? t("chat.sidebar.noMatchingProjects") : t("chat.sidebar.noProjectsYet")}</div>}
         </div>
       </section>
 
       {archived.length > 0 && (
         <section className="sb__section">
-          <div className="sb__section-head">已归档</div>
+          <div className="sb__section-head">{t("chat.sidebar.archived")}</div>
           <div className="sb__section-body">
             {archived.map((p) => (
               <ProjectButton key={p.id} project={p} active={p.id === props.activeProjectId} onClick={() => props.onSelectProject?.(p.id)} onPrefetch={() => onPrefetch(p.id)} dim />
@@ -487,6 +493,7 @@ function ProjectLists(props: {
 }
 
 function ProjectButton({ project, active, onClick, onPrefetch, dim }: { project: SidebarProject; active: boolean; onClick: () => void; onPrefetch?: () => void; dim?: boolean }) {
+  const { t } = useTranslation();
   const live = project.liveRunners;
   const queued = project.queuedCount;
   return (
@@ -500,7 +507,7 @@ function ProjectButton({ project, active, onClick, onPrefetch, dim }: { project:
         <span className={`sb-project__health sb-project__health--${project.health}`} />
         <span className="sb-project__name">{project.name}</span>
         {project.needsInputCount > 0 && (
-          <span className="sb-project__needs" title={`${project.needsInputCount} 个等你`}>
+          <span className="sb-project__needs" title={t("chat.sidebar.projectNeeds", { count: project.needsInputCount })}>
             <span className="sb-project__needs-dot" />
             {project.needsInputCount}
           </span>
@@ -508,10 +515,10 @@ function ProjectButton({ project, active, onClick, onPrefetch, dim }: { project:
       </div>
       <div className="sb-project__meta">
         {live > 0
-          ? <><span className="dot" style={{ background: "var(--accent)" }} /><span>{live} 在跑</span></>
+          ? <><span className="dot" style={{ background: "var(--accent)" }} /><span>{t("chat.sidebar.running", { count: live })}</span></>
           : queued > 0
-            ? <><span className="dot" style={{ background: "var(--muted)" }} /><span>{queued} 排队</span></>
-            : <span>空闲</span>}
+            ? <><span className="dot" style={{ background: "var(--muted)" }} /><span>{t("chat.sidebar.queued", { count: queued })}</span></>
+            : <span>{t("chat.sidebar.idle")}</span>}
       </div>
     </button>
   );

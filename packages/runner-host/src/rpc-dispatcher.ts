@@ -53,6 +53,8 @@ import {
   type UploadAbortResponse,
   type SetProjectsRootRequest,
   type SetProjectsRootResponse,
+  type SetKeepAwakeRequest,
+  type SetKeepAwakeResponse,
 } from "@cogni/contract";
 import { GitOpError } from "./git-ops.js";
 import { FsBrowseError } from "./fs-browse.js";
@@ -75,6 +77,7 @@ export interface RpcDeps {
   uploadCommit: (req: UploadCommitRequest) => Promise<UploadCommitResponse>;
   uploadAbort: (req: UploadAbortRequest) => Promise<UploadAbortResponse>;
   setProjectsRoot: (req: SetProjectsRootRequest) => Promise<SetProjectsRootResponse>;
+  setKeepAwake: (req: SetKeepAwakeRequest) => Promise<SetKeepAwakeResponse>;
 }
 
 /**
@@ -148,6 +151,8 @@ async function routeRpc(frame: HostRpcRequest, deps: RpcDeps): Promise<HostRpcRe
       return { ok: true, method: frame.method, result: await deps.uploadAbort(frame.params) };
     case "set-projects-root":
       return { ok: true, method: frame.method, result: await deps.setProjectsRoot(frame.params) };
+    case "set-keep-awake":
+      return { ok: true, method: frame.method, result: await deps.setKeepAwake(frame.params) };
   }
 }
 

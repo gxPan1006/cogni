@@ -76,6 +76,20 @@ export async function setHostProjectsRoot(
     .where(eq(hosts.id, hostId));
 }
 
+/** Persist a host's keep-awake flag (and whether it's env-locked). Written on
+ *  the `register` frame and by PUT /api/hosts/:id/keep-awake. */
+export async function setHostKeepAwake(
+  db: AnyDb,
+  hostId: string,
+  keepAwake: boolean,
+  locked: boolean,
+): Promise<void> {
+  await db
+    .update(hosts)
+    .set({ keepAwake, keepAwakeLocked: locked })
+    .where(eq(hosts.id, hostId));
+}
+
 export async function getActiveHostsForUser(db: AnyDb, userId: string) {
   return db
     .select()

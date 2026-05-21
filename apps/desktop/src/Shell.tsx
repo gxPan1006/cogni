@@ -37,6 +37,7 @@ import {
   useProjects, useProjectBoard, useGlobalShortcuts, useAutoHideScrollbars,
   ChatBubble,
   Icon,
+  useTranslation,
   type ProjectListItem, type NewProjectDraft, type NewTaskDraft,
 } from "@cogni/ui";
 
@@ -57,6 +58,7 @@ function decodeJwt(token: string): { email?: string; sub?: string } | null {
 }
 
 export function Shell({ token, onLogout }: { token: string; onLogout: () => void }) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<"chat" | "project">("chat");
   const [page, setPage] = useState<Page>("chat");
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
@@ -360,8 +362,8 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
       {sidebarCollapsed && (
         <button
           className="sb-expand"
-          title="展开侧边栏 (⌘\)"
-          aria-label="展开侧边栏"
+          title={t("settings.shell.expandSidebar")}
+          aria-label={t("settings.shell.expandSidebarAria")}
           onClick={() => setSidebarCollapsed(false)}
         >
           {Icon.panel}

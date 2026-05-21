@@ -22,6 +22,8 @@
  * components do all the rendering, exactly like <Conversation>.
  */
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { ApiClient } from "../../transport/api.js";
 import { useThreadStream } from "../../hooks/useThreadStream.js";
 import { buildTimeline } from "../chat-timeline.js";
@@ -40,13 +42,23 @@ export type WorkspaceChatScope =
  */
 export type WorkspaceTaskFocus = { id: string; ref: string; title: string };
 
-/** Pure scope → idle placeholder mapping (unit-tested in WorkspaceChatBar.test.ts). */
-export function scopePlaceholder(scope: WorkspaceChatScope): string {
-  if (scope.kind !== "project") return "让 Cogni 帮你建任务、关任务、整理项目…";
+/**
+ * Pure scope → idle placeholder mapping (unit-tested in WorkspaceChatBar.test.ts).
+ *
+ * `t` is optional: when provided (React render path) the text comes from the
+ * i18n catalog and tracks the active language; when omitted the original
+ * Chinese literals are returned, so the unit test and any non-React caller
+ * keep working unchanged.
+ */
+export function scopePlaceholder(scope: WorkspaceChatScope, t?: TFunction): string {
+  if (scope.kind !== "project") {
+    return t ? t("project.chatbar.placeholderWorkspace") : "让 Cogni 帮你建任务、关任务、整理项目…";
+  }
   // Guard a missing/blank project name so the placeholder never reads the
   // literal「undefined」 (a half-loaded or nameless project row).
-  const name = scope.projectName?.trim() ? scope.projectName.trim() : "这个项目";
-  return `在「${name}」里帮你建任务、改任务…`;
+  const fallbackName = t ? t("project.chatbar.placeholderProjectFallback") : "这个项目";
+  const name = scope.projectName?.trim() ? scope.projectName.trim() : fallbackName;
+  return t ? t("project.chatbar.placeholderProject", { name }) : `在「${name}」里帮你建任务、改任务…`;
 }
 
 export function WorkspaceChatBar({
@@ -56,6 +68,7 @@ export function WorkspaceChatBar({
   api: ApiClient;
   scope: WorkspaceChatScope;
 }) {
+  const { t } = useTranslation();
   const [threadId, setThreadId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -85,11 +98,11 @@ export function WorkspaceChatBar({
       )}
       <input
         className="wschat__bar"
-        placeholder={scopePlaceholder(scope)}
+        placeholder={scopePlaceholder(scope, t)}
         onFocus={() => setOpen(true)}
         onClick={() => setOpen(true)}
         readOnly
-        aria-label="Cogni 编排输入框"
+        aria-label={t("project.chatbar.ariaInput")}
       />
     </div>
   );
@@ -104,6 +117,7 @@ function WorkspaceChatPopup({
   threadId: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const { messages, events, hostOnline, connected, send } = useThreadStream(api, threadId);
   const { rows } = buildTimeline(messages, events);
   const [draft, setDraft] = useState("");
@@ -123,14 +137,14 @@ function WorkspaceChatPopup({
   return (
     <div className="wschat__popup" data-testid="wschat-popup">
       <div className="wschat__head">
-        <span>COGNI 编排</span>
-        <button className="wschat__close" onClick={onClose} aria-label="收起" type="button">
+        <span>{t("project.chatbar.title")}</span>
+        <button className="wschat__close" onClick={onClose} aria-label={t("project.chatbar.collapse")} type="button">
           ×
         </button>
       </div>
       <div className="wschat__body" ref={scrollRef}>
         {rows.length === 0 && (
-          <div className="wschat__empty">告诉 Cogni 你想建/改/删什么任务或项目。</div>
+          <div className="wschat__empty">{t("project.chatbar.empty")}</div>
         )}
         {rows.map((row) => {
           if (row.kind === "user") return <UserMessage key={row.key} text={row.text} attachments={row.attachments} />;
@@ -144,8 +158,8 @@ function WorkspaceChatPopup({
         setDraft={setDraft}
         onSubmit={submit}
         disabled={disabled}
-        placeholder="让 Cogni 执行项目/任务的增删改…"
-        status={disabled ? { kind: "danger", text: "需要本地 Cogni 在线才能编排" } : undefined}
+        placeholder={t("project.chatbar.composerPlaceholder")}
+        status={disabled ? { kind: "danger", text: t("project.chatbar.offline") } : undefined}
       />
     </div>
   );

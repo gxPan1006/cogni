@@ -21,6 +21,7 @@
  * `hostName` and hand it to <Composer status={…} />.
  */
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ApiClient } from "../transport/api.js";
 import { CHAT_MODELS, DEFAULT_CHAT_MODEL } from "@cogni/contract";
 import { useThreadStream } from "../hooks/useThreadStream.js";
@@ -63,6 +64,7 @@ export function Conversation({
   /** Name of the host this thread is routed to. Shown above the composer. */
   hostName?: string;
 }) {
+  const { t } = useTranslation();
   const {
     messages, events, loading, hostOnline, connected, send, prewarm, stalled, retry,
     pendingFallback, pendingNoHost, resolveFallback,
@@ -108,11 +110,11 @@ export function Conversation({
 
   const status: ComposerStatus | undefined =
     !connected
-      ? { kind: "danger", text: "与服务器的连接已断开,正在重连…" }
+      ? { kind: "danger", text: t("chat.conversation.disconnected") }
       : !hostOnline
         ? hostName
-          ? { kind: "warn", hostName, text: "离线 · 等待上线" }
-          : { kind: "danger", text: "没有在线的 Cogni 桌面端" }
+          ? { kind: "warn", hostName, text: t("chat.conversation.hostOfflineWaiting") }
+          : { kind: "danger", text: t("chat.conversation.noHostOnline") }
         : hostName
           ? { kind: "ok", hostName }
           : undefined;
@@ -130,8 +132,8 @@ export function Conversation({
               : (
                 <div className="conversation__empty">
                   <LogoMark className="conversation__empty-mark" size={48} />
-                  <p className="conversation__empty-title">开始你的对话吧</p>
-                  <p className="conversation__empty-sub">在下方输入框里问点什么,Cogni 随时在听</p>
+                  <p className="conversation__empty-title">{t("chat.conversation.emptyTitle")}</p>
+                  <p className="conversation__empty-sub">{t("chat.conversation.emptySub")}</p>
                 </div>
               )
           )}
@@ -158,7 +160,7 @@ export function Conversation({
 
           {showTyping && (
             <div className="msg msg--assistant">
-              <span className="typing-dots" aria-label="正在思考">
+              <span className="typing-dots" aria-label={t("chat.conversation.thinking")}>
                 <span className="typing-dots__dot" />
                 <span className="typing-dots__dot" />
                 <span className="typing-dots__dot" />
@@ -174,10 +176,10 @@ export function Conversation({
             <div className="msg msg--assistant">
               <div className="turn-stall" role="alert">
                 <span className="turn-stall__text">
-                  回复好像没收到 —— 可能是网络波动或桌面端临时掉线。
+                  {t("chat.conversation.stalled")}
                 </span>
                 <button type="button" className="turn-stall__retry" onClick={retry}>
-                  重试
+                  {t("chat.common.retry")}
                 </button>
               </div>
             </div>

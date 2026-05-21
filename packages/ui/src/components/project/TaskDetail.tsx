@@ -21,6 +21,8 @@
  *   - ←/→ cycle to adjacent tasks (if `allTaskIds` is provided by the board)
  */
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { ProjectTask, TaskState, Project } from "@cogni/contract";
 import type { ApiClient, HostInfo } from "../../transport/api.js";
 import { useTaskDetail, type UseTaskDetailResult } from "../../hooks/useTaskDetail.js";
@@ -39,13 +41,21 @@ import { LoadingRows, LoadingState } from "../LoadingState.js";
 import "../conversation.css";
 import "./task-detail.css";
 
-const STEPPER: { state: TaskState; label: string }[] = [
-  { state: "queued",      label: "排队中" },
-  { state: "running",     label: "进行中" },
-  { state: "needs-input", label: "等待输入" },
-  { state: "reviewing",   label: "Review" },
-  { state: "done",        label: "完成" },
+// Stepper steps, keyed by state. Labels are translated at render time via the
+// `labelKey` so switching language updates instantly (the stepper's labels
+// differ slightly from the generic STATE_LABEL — e.g. "Review" / "完成").
+const STEPPER: { state: TaskState; labelKey: string }[] = [
+  { state: "queued",      labelKey: "project.task.stepQueued" },
+  { state: "running",     labelKey: "project.task.stepRunning" },
+  { state: "needs-input", labelKey: "project.task.stepNeedsInput" },
+  { state: "reviewing",   labelKey: "project.task.stepReviewing" },
+  { state: "done",        labelKey: "project.task.stepDone" },
 ];
+
+/** Translate a TaskState to its drawer-card label at render time. */
+function drawerStateLabel(t: TFunction, state: TaskState): string {
+  return t(`project.state.${state}`);
+}
 
 export function TaskDetail({
   api,
@@ -65,6 +75,7 @@ export function TaskDetail({
   onClose: () => void;
   onNavigate?: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const detail = useTaskDetail(api, taskId);
   const task = detail.task;
   const [tab, setTab] = useState<"overview" | "thread" | "files">("overview");
@@ -103,14 +114,14 @@ export function TaskDetail({
       <aside className="td" role="dialog" aria-label={`Task ${task?.ref ?? ""}`} onClick={(e) => e.stopPropagation()}>
         <header className="td__head">
           <div className="td__head-nav">
-            <button className="td__icon-btn" onClick={onClose} title="关闭 (Esc)">{Icon.x}</button>
+            <button className="td__icon-btn" onClick={onClose} title={t("project.task.close")}>{Icon.x}</button>
             {allTaskIds && total > 1 && (
               <div className="td__pager">
                 <button
                   className="td__icon-btn"
                   disabled={idx <= 0}
                   onClick={() => idx > 0 && onNavigate?.(allTaskIds[idx - 1]!)}
-                  title="上一个任务 (←)"
+                  title={t("project.task.prevTask")}
                 >
                   <span style={{ transform: "rotate(180deg)", display: "inline-flex" }}>{Icon.arrow}</span>
                 </button>
@@ -119,7 +130,7 @@ export function TaskDetail({
                   className="td__icon-btn"
                   disabled={idx >= total - 1}
                   onClick={() => idx < total - 1 && onNavigate?.(allTaskIds[idx + 1]!)}
-                  title="下一个任务 (→)"
+                  title={t("project.task.nextTask")}
                 >
                   {Icon.arrow}
                 </button>
@@ -136,7 +147,7 @@ export function TaskDetail({
               {task?.title ?? (
                 detail.loading
                   ? <span className="td__title-skeleton loading-skeleton" aria-hidden="true" />
-                  : "任务未找到"
+                  : t("project.task.notFound")
               )}
             </h2>
             {task && (
@@ -148,7 +159,7 @@ export function TaskDetail({
                     <span>{host.name}</span>
                   </span>
                 )}
-                {task.startedAt && <span className="td__started">started {formatAgo(task.startedAt)}</span>}
+                {task.startedAt && <span className="td__started">{t("project.task.started", { ago: formatAgo(task.startedAt) })}</span>}
               </div>
             )}
           </div>
@@ -163,14 +174,14 @@ export function TaskDetail({
               aria-selected={activeTab === "overview"}
               className={"td-tab" + (activeTab === "overview" ? " is-on" : "")}
               onClick={() => setTab("overview")}
-            >主页面</button>
+            >{t("project.task.tabOverview")}</button>
             {hasThread && (
               <button
                 role="tab"
                 aria-selected={activeTab === "thread"}
                 className={"td-tab" + (activeTab === "thread" ? " is-on" : "")}
                 onClick={() => setTab("thread")}
-              >执行记录</button>
+              >{t("project.task.tabThread")}</button>
             )}
             {hasFiles && (
               <button
@@ -178,7 +189,7 @@ export function TaskDetail({
                 aria-selected={activeTab === "files"}
                 className={"td-tab" + (activeTab === "files" ? " is-on" : "")}
                 onClick={() => setTab("files")}
-              >文件</button>
+              >{t("project.task.tabFiles")}</button>
             )}
           </div>
         )}
@@ -186,7 +197,7 @@ export function TaskDetail({
         <div className={"td__scroll" + (task && activeTab !== "overview" ? " td__scroll--flush" : "")}>
           {detail.loading && !task && <TaskDetailLoading />}
           {!detail.loading && !task && (
-            <div className="td-card td-card--empty">这个任务不存在或已经被删除。</div>
+            <div className="td-card td-card--empty">{t("project.task.notFoundBody")}</div>
           )}
 
           {/* 主页面: status stepper, activity card, needs-input, actions. */}
@@ -198,12 +209,12 @@ export function TaskDetail({
                 <div className="td-needs">
                   <div className="td-needs__head">
                     <span className="td-needs__icon">{Icon.shield}</span>
-                    <span className="td-needs__label">等你回应</span>
+                    <span className="td-needs__label">{t("project.task.needsInputLabel")}</span>
                   </div>
                   {task.needsInputWhat && <div className="td-needs__body">{task.needsInputWhat}</div>}
                   <TaskReply api={api} taskId={taskId} reply={detail.reply} />
                   <div className="td-needs__actions">
-                    <button className="btn btn-sm" onClick={() => { void detail.cancel(); }}>取消任务</button>
+                    <button className="btn btn-sm" onClick={() => { void detail.cancel(); }}>{t("project.task.cancelTask")}</button>
                   </div>
                 </div>
               )}
@@ -259,6 +270,7 @@ function TaskReply({
   taskId: string;
   reply: UseTaskDetailResult["reply"];
 }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState("");
   const uploads = useUploads((file, onProgress) => api.uploadTaskFile(taskId, file, onProgress));
 
@@ -276,7 +288,7 @@ function TaskReply({
         draft={draft}
         setDraft={setDraft}
         onSubmit={submit}
-        placeholder="回复 runner…"
+        placeholder={t("project.task.replyPlaceholder")}
         uploads={uploads}
       />
     </div>
@@ -284,15 +296,16 @@ function TaskReply({
 }
 
 function TaskDetailLoading() {
+  const { t } = useTranslation();
   return (
     <>
-      <LoadingState variant="section" title="正在加载任务详情" subtitle="同步任务状态、运行记录和执行对话" />
+      <LoadingState variant="section" title={t("project.task.loadingTitle")} subtitle={t("project.task.loadingSubtitle")} />
       <div className="td-card td-card--loading">
         <LoadingRows rows={3} compact />
       </div>
       <div className="td-thread td-thread--loading">
         <div className="td-thread__head">
-          <span>RUNNER THREAD</span>
+          <span>{t("project.task.runnerThread")}</span>
         </div>
         <LoadingRows rows={2} compact />
       </div>
@@ -301,6 +314,7 @@ function TaskDetailLoading() {
 }
 
 function Stepper({ currentState }: { currentState: TaskState }) {
+  const { t } = useTranslation();
   const isFailed = currentState === "failed";
   const isCancelled = currentState === "cancelled";
   const effective: TaskState = isFailed || isCancelled ? "running" : currentState;
@@ -316,7 +330,7 @@ function Stepper({ currentState }: { currentState: TaskState }) {
         return (
           <li key={s.state} className={cls}>
             <span className="td-stepper__dot" />
-            <span className="td-stepper__label">{s.label}</span>
+            <span className="td-stepper__label">{t(s.labelKey)}</span>
             {i < STEPPER.length - 1 && <span className="td-stepper__line" />}
           </li>
         );
@@ -326,6 +340,7 @@ function Stepper({ currentState }: { currentState: TaskState }) {
 }
 
 function ActivityCard({ task }: { task: ProjectTask }) {
+  const { t } = useTranslation();
   const elapsed = formatElapsed(task);
   const progress =
     task.state === "done" || task.state === "reviewing" ? 1 :
@@ -333,11 +348,11 @@ function ActivityCard({ task }: { task: ProjectTask }) {
   return (
     <div className="td-card">
       <div className="td-card__head">
-        <span className="td-card__head-label">当前活动</span>
+        <span className="td-card__head-label">{t("project.task.currentActivity")}</span>
         <span className="td-card__head-time">{elapsed ?? "—"}</span>
       </div>
       <div className="td-card__activity">
-        {task.needsInputWhat ?? STATE_LABEL_DRAWER[task.state]}
+        {task.needsInputWhat ?? drawerStateLabel(t, task.state)}
       </div>
       {(task.state === "running" || task.state === "reviewing" || task.state === "failed") && (
         <div className="kb-progress td-card__progress">
@@ -348,23 +363,13 @@ function ActivityCard({ task }: { task: ProjectTask }) {
         </div>
       )}
       <div className="td-card__metrics">
-        <Metric label="状态">{STATE_LABEL_DRAWER[task.state]}</Metric>
-        <Metric label="重试" tone={task.retries > 0 ? "warn" : "muted"}>{task.retries} / {task.maxRetries}</Metric>
-        <Metric label="尝试">#{task.retries + 1}</Metric>
+        <Metric label={t("project.task.metricState")}>{drawerStateLabel(t, task.state)}</Metric>
+        <Metric label={t("project.task.metricRetry")} tone={task.retries > 0 ? "warn" : "muted"}>{task.retries} / {task.maxRetries}</Metric>
+        <Metric label={t("project.task.metricAttempt")}>#{task.retries + 1}</Metric>
       </div>
     </div>
   );
 }
-
-const STATE_LABEL_DRAWER: Record<TaskState, string> = {
-  queued:        "排队中",
-  running:       "进行中",
-  "needs-input": "等待输入",
-  reviewing:     "待 review",
-  done:          "已完成",
-  failed:        "失败",
-  cancelled:     "已取消",
-};
 
 function Metric({ label, tone, children }: { label: string; tone?: "muted" | "warn"; children: React.ReactNode }) {
   return (
@@ -382,21 +387,22 @@ function Actions({ task, onAccept, onReject, onRetry, onCancel }: {
   onRetry:  () => Promise<void>;
   onCancel: () => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const actions: { label: string; tone?: "primary" | "danger" | "ghost"; icon?: React.ReactNode; onClick?: () => void }[] = [];
 
   if (task.state === "queued") {
-    actions.push({ label: "取消", tone: "ghost", icon: Icon.x, onClick: () => { void onCancel(); } });
+    actions.push({ label: t("project.task.actionCancel"), tone: "ghost", icon: Icon.x, onClick: () => { void onCancel(); } });
   } else if (task.state === "running") {
-    actions.push({ label: "中止", tone: "danger", icon: Icon.x, onClick: () => { void onCancel(); } });
+    actions.push({ label: t("project.task.actionAbort"), tone: "danger", icon: Icon.x, onClick: () => { void onCancel(); } });
   } else if (task.state === "reviewing") {
-    actions.push({ label: "批准并合并", tone: "primary", icon: Icon.check, onClick: () => { void onAccept(); } });
-    actions.push({ label: "拒绝并清理",                  icon: Icon.x,     onClick: () => { void onReject(); } });
-    actions.push({ label: "重新跑",                       icon: Icon.refresh, onClick: () => { void onRetry(); } });
+    actions.push({ label: t("project.task.actionAcceptMerge"), tone: "primary", icon: Icon.check, onClick: () => { void onAccept(); } });
+    actions.push({ label: t("project.task.actionReject"),                  icon: Icon.x,     onClick: () => { void onReject(); } });
+    actions.push({ label: t("project.task.actionRetry"),                       icon: Icon.refresh, onClick: () => { void onRetry(); } });
   } else if (task.state === "failed") {
-    actions.push({ label: "重新跑", tone: "primary", icon: Icon.refresh, onClick: () => { void onRetry(); } });
-    actions.push({ label: "取消任务", tone: "ghost", icon: Icon.x, onClick: () => { void onCancel(); } });
+    actions.push({ label: t("project.task.actionRetry"), tone: "primary", icon: Icon.refresh, onClick: () => { void onRetry(); } });
+    actions.push({ label: t("project.task.actionCancelTask"), tone: "ghost", icon: Icon.x, onClick: () => { void onCancel(); } });
   } else if (task.state === "done") {
-    actions.push({ label: "再跑一次", icon: Icon.refresh, onClick: () => { void onRetry(); } });
+    actions.push({ label: t("project.task.actionRunAgain"), icon: Icon.refresh, onClick: () => { void onRetry(); } });
   }
 
   if (actions.length === 0) return null;
@@ -421,6 +427,7 @@ function Actions({ task, onAccept, onReject, onRetry, onCancel }: {
 }
 
 function ThreadSection({ api, threadId }: { api: ApiClient; threadId: string }) {
+  const { t } = useTranslation();
   const { messages, events, loading } = useThreadStream(api, threadId);
   const { rows } = buildTimeline(messages, events);
   if (rows.length === 0) {
@@ -428,7 +435,7 @@ function ThreadSection({ api, threadId }: { api: ApiClient; threadId: string }) 
       <div className="conversation__list td-thread__list">
         {loading
           ? <LoadingRows rows={3} />
-          : <div className="conversation__empty">runner 还没说话…</div>}
+          : <div className="conversation__empty">{t("project.task.runnerSilent")}</div>}
       </div>
     );
   }

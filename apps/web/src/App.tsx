@@ -33,7 +33,7 @@ import {
   ProjectsList, ProjectBoard, TaskDetail,
   NewProject, NewTask, ProjectSettings,
   useProjects, useProjectBoard, useGlobalShortcuts, useAutoHideScrollbars, Icon,
-  ChatBubble,
+  ChatBubble, useTranslation,
   type HostInfo, type ProjectListItem, type NewProjectDraft, type NewTaskDraft,
 } from "@cogni/ui";
 import { api, ApiError } from "./api.js";
@@ -379,11 +379,12 @@ function WebShell({ page }: { page: Page }) {
     } catch (e) { handleApiError(e); }
   };
 
+  const { t } = useTranslation();
   const currentTitle =
-    page === "settings" ? "设置"
-    : mode === "project" ? "项目"
-    : params.threadId ? (threads.find((t) => t.id === params.threadId)?.title ?? "对话")
-    : "对话";
+    page === "settings" ? t("chat.shell.titleSettings")
+    : mode === "project" ? t("chat.shell.titleProject")
+    : params.threadId ? (threads.find((th) => th.id === params.threadId)?.title ?? t("chat.shell.titleChat"))
+    : t("chat.shell.titleChat");
 
   useAutoHideScrollbars();
 
@@ -399,8 +400,8 @@ function WebShell({ page }: { page: Page }) {
       {sidebarCollapsed && (
         <button
           className="sb-expand"
-          title="展开侧边栏 (⌘\)"
-          aria-label="展开侧边栏"
+          title={t("chat.shell.expandSidebar")}
+          aria-label={t("chat.shell.expandSidebarAria")}
           onClick={() => setSidebarCollapsed(false)}
         >
           {Icon.panel}
@@ -432,7 +433,7 @@ function WebShell({ page }: { page: Page }) {
       {sidebarOpen && (
         <button
           className="layout__scrim"
-          aria-label="关闭菜单"
+          aria-label={t("chat.shell.closeMenu")}
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -440,7 +441,7 @@ function WebShell({ page }: { page: Page }) {
         <header className="mobile-topbar">
           <button
             className="mobile-topbar__menu"
-            aria-label="打开菜单"
+            aria-label={t("chat.shell.openMenu")}
             onClick={() => setSidebarOpen(true)}
           >
             {Icon.menu}

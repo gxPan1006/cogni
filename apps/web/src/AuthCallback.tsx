@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useAuthCore } from "@cogni/ui";
+import { useAuthCore, useTranslation } from "@cogni/ui";
 import { api } from "./api.js";
 
 /**
@@ -13,6 +13,7 @@ import { api } from "./api.js";
  * On failure (no token in URL): an error line in Chinese for the user.
  */
 export function GoogleAuthCallback() {
+  const { t } = useTranslation();
   const { acceptToken } = useAuthCore(api);
   const nav = useNavigate();
   const [error, setError] = useState<string | null>(null);
@@ -30,12 +31,12 @@ export function GoogleAuthCallback() {
       window.history.replaceState(null, "", "/chat");
       nav("/chat", { replace: true });
     } else {
-      setError("登录失败：URL 中没有 token");
+      setError(t("auth.callback.googleNoToken"));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- run exactly once on mount
   }, []);
 
-  return <div style={{ padding: 24 }}>{error ?? "正在登录…"}</div>;
+  return <div style={{ padding: 24 }}>{error ?? t("auth.callback.signingIn")}</div>;
 }
 
 /**
@@ -47,6 +48,7 @@ export function GoogleAuthCallback() {
  * with a path back to /login.
  */
 export function PasswordVerifyCallback() {
+  const { t } = useTranslation();
   const { acceptToken } = useAuthCore(api);
   const nav = useNavigate();
   const loc = useLocation();
@@ -54,16 +56,16 @@ export function PasswordVerifyCallback() {
 
   useEffect(() => {
     const token = new URLSearchParams(loc.search).get("token");
-    if (!token) { setError("链接无效：缺少 token 参数"); return; }
+    if (!token) { setError(t("auth.callback.missingTokenParam")); return; }
     api.passwordVerify(token)
       .then(({ token: jwt }) => { acceptToken(jwt); nav("/chat", { replace: true }); })
-      .catch(() => setError("确认失败：链接可能已过期或被使用过。"));
+      .catch(() => setError(t("auth.callback.verifyFailed")));
   // eslint-disable-next-line react-hooks/exhaustive-deps -- run exactly once on mount
   }, []);
 
   return (
     <div style={{ padding: 24 }}>
-      {error ? <>{error} <a href="/login">返回登录</a></> : "正在确认…"}
+      {error ? <>{error} <a href="/login">{t("auth.callback.backToLogin")}</a></> : t("auth.callback.confirming")}
     </div>
   );
 }
@@ -74,6 +76,7 @@ export function PasswordVerifyCallback() {
  * new hash and returns a JWT so the user lands straight in the app.
  */
 export function PasswordResetCallback() {
+  const { t } = useTranslation();
   const { acceptToken } = useAuthCore(api);
   const nav = useNavigate();
   const loc = useLocation();
@@ -83,26 +86,26 @@ export function PasswordResetCallback() {
   const [error, setError] = useState<string | null>(null);
 
   if (!token) {
-    return <div style={{ padding: 24 }}>链接无效：缺少 token 参数 <a href="/login">返回登录</a></div>;
+    return <div style={{ padding: 24 }}>{t("auth.callback.missingTokenParam")} <a href="/login">{t("auth.callback.backToLogin")}</a></div>;
   }
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (password.length < 8) { setError("密码至少 8 位"); return; }
+    if (password.length < 8) { setError(t("auth.errors.passwordTooShort")); return; }
     setBusy(true);
     setError(null);
     api.passwordResetConfirm(token, password)
       .then(({ token: jwt }) => { acceptToken(jwt); nav("/chat", { replace: true }); })
-      .catch(() => { setError("重置失败：链接可能已过期或被使用过。"); setBusy(false); });
+      .catch(() => { setError(t("auth.callback.resetFailed")); setBusy(false); });
   };
 
   return (
     <div style={{ maxWidth: 360, margin: "80px auto", padding: 24, fontFamily: "inherit" }}>
-      <h2 style={{ marginTop: 0 }}>设置新密码</h2>
+      <h2 style={{ marginTop: 0 }}>{t("auth.reset.title")}</h2>
       <form onSubmit={submit}>
         <input
           type="password"
-          placeholder="新密码（至少 8 位）"
+          placeholder={t("auth.reset.newPasswordPlaceholder")}
           value={password}
           disabled={busy}
           autoComplete="new-password"
@@ -111,7 +114,7 @@ export function PasswordResetCallback() {
         />
         {error && <div style={{ color: "#c0392b", fontSize: 13, marginBottom: 12 }}>{error}</div>}
         <button type="submit" className="btn btn-primary" disabled={busy} style={{ width: "100%", padding: 12 }}>
-          {busy ? "处理中…" : "设置新密码并登录"}
+          {busy ? t("auth.reset.submitting") : t("auth.reset.submit")}
         </button>
       </form>
     </div>
@@ -127,6 +130,7 @@ export function PasswordResetCallback() {
  * already used, etc.) we surface the cloud's error message inline.
  */
 export function EmailAuthCallback() {
+  const { t } = useTranslation();
   const { acceptMagic } = useAuthCore(api);
   const nav = useNavigate();
   const loc = useLocation();
@@ -136,17 +140,17 @@ export function EmailAuthCallback() {
     const params = new URLSearchParams(loc.search);
     const token = params.get("token");
     if (!token) {
-      setError("链接无效：缺少 token 参数");
+      setError(t("auth.callback.missingTokenParam"));
       return;
     }
     acceptMagic(token)
       .then(() => nav("/chat", { replace: true }))
       .catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : "请重试";
-        setError(`登录失败：${msg}`);
+        const msg = e instanceof Error ? e.message : t("auth.callback.retry");
+        setError(t("auth.callback.signInFailed", { message: msg }));
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- run exactly once on mount
   }, []);
 
-  return <div style={{ padding: 24 }}>{error ?? "正在登录…"}</div>;
+  return <div style={{ padding: 24 }}>{error ?? t("auth.callback.signingIn")}</div>;
 }

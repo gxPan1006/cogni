@@ -9,20 +9,13 @@
  *   - Quick prompts as soft outlined chips
  */
 import { useCallback, useMemo, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Composer } from "./Composer.js";
 import { Icon } from "./icons.js";
 import { useUploads } from "../hooks/useUploads.js";
 import { CHAT_MODELS, DEFAULT_CHAT_MODEL } from "@cogni/contract";
 import type { ApiClient } from "../transport/api.js";
 import "./welcome.css";
-
-const CHIPS = [
-  { prompt: "帮我写 ",   label: "写作",   icon: Icon.edit },
-  { prompt: "给我讲讲 ", label: "学习",   icon: Icon.file },
-  { prompt: "写一段代码 ", label: "编程", icon: Icon.tool },
-  { prompt: "帮我处理 ", label: "生活",   icon: Icon.spark },
-  { prompt: "随便聊 ",   label: "随便聊", icon: Icon.bolt },
-];
 
 function pickSalutation(now: Date): { lead: string; coda: string } {
   const hour = now.getHours();
@@ -62,9 +55,21 @@ export function Welcome({
   /** Needed so attachments can target a thread before the first message is sent. */
   api: ApiClient;
 }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState("");
   const [model, setModel] = useState<string>(DEFAULT_CHAT_MODEL);
   const greeting = useMemo(() => buildGreeting(userName), [userName]);
+
+  const chips = useMemo(
+    () => [
+      { prompt: t("chat.welcome.chips.writingPrompt"),  label: t("chat.welcome.chips.writingLabel"),  icon: Icon.edit },
+      { prompt: t("chat.welcome.chips.learningPrompt"), label: t("chat.welcome.chips.learningLabel"), icon: Icon.file },
+      { prompt: t("chat.welcome.chips.codingPrompt"),   label: t("chat.welcome.chips.codingLabel"),   icon: Icon.tool },
+      { prompt: t("chat.welcome.chips.lifePrompt"),     label: t("chat.welcome.chips.lifeLabel"),     icon: Icon.spark },
+      { prompt: t("chat.welcome.chips.casualPrompt"),   label: t("chat.welcome.chips.casualLabel"),   icon: Icon.bolt },
+    ],
+    [t],
+  );
 
   // First-message attachments need a thread to upload into, but Welcome has no
   // thread yet. Lazily create one the first time the user attaches a file (no
@@ -94,10 +99,14 @@ export function Welcome({
     <div className="welcome">
       <div className="welcome__inner">
         <div className="welcome__eyebrow">{greeting.toUpperCase()}</div>
-        <h1 className="welcome__greeting">今天想做点什么?</h1>
+        <h1 className="welcome__greeting">{t("chat.welcome.greeting")}</h1>
         {hostName && (
           <div className="welcome__subtitle">
-            Cogni 会把任务交给 <strong>{hostName}</strong> — 你最近用的那台。
+            <Trans
+              i18nKey="chat.welcome.routeTo"
+              values={{ hostName }}
+              components={[<strong key="host" />]}
+            />
           </div>
         )}
 
@@ -117,7 +126,7 @@ export function Welcome({
           />
 
           <div className="welcome__chips" role="list">
-            {CHIPS.map((chip) => (
+            {chips.map((chip) => (
               <button
                 key={chip.label}
                 type="button"

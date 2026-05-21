@@ -13,6 +13,7 @@
  * persisted) so the list row stops reading "New conversation".
  */
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import type { ThreadSummary } from "@cogni/contract";
 import type { ApiClient } from "../../../transport/api.js";
 import type { WorkspaceTaskFocus } from "../WorkspaceChatBar.js";
@@ -45,6 +46,7 @@ export function SessionView({
   /** Fired after the first user turn renames a fresh session. */
   onTitled: (id: string, title: string) => void;
 }) {
+  const { t } = useTranslation();
   const { messages, events, hostOnline, connected, send } = useThreadStream(api, session.id);
   const { rows } = buildTimeline(messages, events);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -75,7 +77,7 @@ export function SessionView({
   return (
     <>
       <div className="cb-session-head">
-        <button className="cb-icon-btn cb-back" onClick={onBack} title="全部会话" type="button">
+        <button className="cb-icon-btn cb-back" onClick={onBack} title={t("chat.sessionView.backTitle")} type="button">
           {Icon.arrow}
         </button>
         <div className="cb-session-title-wrap">
@@ -83,7 +85,7 @@ export function SessionView({
           <div className="cb-session-sub">
             <span className={"cb-dot " + (hostOnline && connected ? "is-online" : "is-offline")} />
             <span className="cb-session-host">
-              {connected ? (hostOnline ? "本地 Cogni 在线" : "本地 Cogni 离线") : "重连中…"}
+              {connected ? (hostOnline ? t("chat.sessionView.online") : t("chat.sessionView.offline")) : t("chat.sessionView.reconnecting")}
             </span>
           </div>
         </div>
@@ -91,7 +93,7 @@ export function SessionView({
 
       <div className="cb-scroll" ref={scrollRef}>
         {rows.length === 0 && (
-          <div className="cb-empty">告诉 Cogni 你想建/改/删什么任务或项目。</div>
+          <div className="cb-empty">{t("chat.sessionView.empty")}</div>
         )}
         {rows.map((row) => {
           if (row.kind === "user") return <UserMessage key={row.key} text={row.text} attachments={row.attachments} />;
@@ -102,17 +104,17 @@ export function SessionView({
       </div>
 
       {focusedTask && (
-        <div className="cb-focus-chip" title={`这条消息默认针对 ${focusedTask.ref}「${focusedTask.title}」`}>
+        <div className="cb-focus-chip" title={t("chat.sessionView.focusHint", { ref: focusedTask.ref, title: focusedTask.title })}>
           <span className="cb-focus-chip__dot" aria-hidden="true" />
           <span className="cb-focus-chip__text">
-            聚焦 {focusedTask.ref}·{focusedTask.title}
+            {t("chat.sessionView.focusLabel", { ref: focusedTask.ref, title: focusedTask.title })}
           </span>
           {onClearFocus && (
             <button
               className="cb-focus-chip__x"
               onClick={onClearFocus}
-              title="取消聚焦,改为整个项目"
-              aria-label="取消聚焦这张卡"
+              title={t("chat.sessionView.clearFocusTitle")}
+              aria-label={t("chat.sessionView.clearFocusAria")}
               type="button"
             >
               {Icon.x}
@@ -127,7 +129,7 @@ export function SessionView({
         onSubmit={submit}
         disabled={disabled}
         placeholder={placeholder}
-        status={disabled ? { kind: "danger", text: "需要本地 Cogni 在线才能编排" } : undefined}
+        status={disabled ? { kind: "danger", text: t("chat.sessionView.needHostOnline") } : undefined}
       />
     </>
   );
