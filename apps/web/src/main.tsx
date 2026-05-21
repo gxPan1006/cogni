@@ -6,6 +6,7 @@ import App from "./App.js";
 import { InstallPrompt } from "./InstallPrompt.js";
 import { NotificationsPrompt } from "./NotificationsPrompt.js";
 import { setupSwAutoUpdate } from "./sw-update.js";
+import { setupAppHeight } from "./app-height.js";
 
 // Global stylesheet chain — order matters (matches apps/desktop):
 //   1. tokens (CSS variables — colors, type, radii, shadows; light + dark)
@@ -15,6 +16,9 @@ import { setupSwAutoUpdate } from "./sw-update.js";
 import "./styles/tokens.css";
 import "./styles/base.css";
 
+// Publish the real viewport height (JS is accurate where iOS CSS viewport units
+// lag on first paint) so the fixed drawer fills the screen immediately.
+setupAppHeight();
 // Auto-apply PWA updates on foreground so a deploy doesn't need a reinstall.
 setupSwAutoUpdate();
 

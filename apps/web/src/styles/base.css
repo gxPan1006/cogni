@@ -207,14 +207,14 @@ html, body, #root { height: 100%; }
   .layout > .sb {
     position: fixed;
     top: 0; left: 0;
-    /* Size the drawer with an explicit viewport height, exactly like .layout.
-       A fixed top:0/bottom:0 (or height:100%) box is mis-measured by iOS on
-       first paint — the drawer showed a black gap at the bottom until a
-       scroll/drag forced a reflow. 100dvh is computed directly and renders
-       correct immediately; box-sizing:border-box (global) keeps the safe-area
-       padding inside it. 100vh first as a fallback for engines without dvh. */
+    /* Height comes from --app-h (window.innerHeight, set in app-height.ts):
+       iOS mis-measures a fixed element's viewport-unit/bottom:0 height on first
+       paint, so the drawer opened too short with a gap at the bottom until a
+       scroll forced a reflow. The JS value is accurate from the first frame.
+       Fallbacks (100vh → 100dvh) cover the instant before JS runs / no-JS. */
     height: 100vh;
     height: 100dvh;
+    height: var(--app-h, 100dvh);
     z-index: 60;
     width: min(86vw, 320px);
     transform: translateX(-100%);
