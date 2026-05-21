@@ -5,6 +5,7 @@ import "@cogni/ui"; // side-effect: init i18next (language) before first render
 import App from "./App.js";
 import { InstallPrompt } from "./InstallPrompt.js";
 import { NotificationsPrompt } from "./NotificationsPrompt.js";
+import { setupSwAutoUpdate } from "./sw-update.js";
 
 // Global stylesheet chain — order matters (matches apps/desktop):
 //   1. tokens (CSS variables — colors, type, radii, shadows; light + dark)
@@ -13,6 +14,9 @@ import { NotificationsPrompt } from "./NotificationsPrompt.js";
 // @cogni/ui component module, so component-level styles co-locate with code.
 import "./styles/tokens.css";
 import "./styles/base.css";
+
+// Auto-apply PWA updates on foreground so a deploy doesn't need a reinstall.
+setupSwAutoUpdate();
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>

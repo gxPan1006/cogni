@@ -207,6 +207,12 @@ html, body, #root { height: 100%; }
   .layout > .sb {
     position: fixed;
     top: 0; left: 0; bottom: 0;
+    /* Override the base .sb height:100%. With top+bottom+height all set the box
+       is over-constrained and the UA ignores bottom, falling back to 100% of
+       the initial containing block — which iOS mis-measures on first paint, so
+       the drawer doesn't reach the bottom until a scroll forces a reflow.
+       height:auto lets top:0/bottom:0 define the height reliably. */
+    height: auto;
     z-index: 60;
     width: min(86vw, 320px);
     transform: translateX(-100%);
@@ -284,5 +290,13 @@ html, body, #root { height: 100%; }
     padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     border-top-color: var(--line-soft);
   }
+
+  /* The rail is a slide-in drawer on mobile, not a collapsible pane — the
+     desktop collapse toggle (in the drawer header) and its companion "expand"
+     button (fixed top-left) don't belong here. Worse, tapping collapse strands
+     the expand button under the status bar. Hide both; the drawer closes via
+     the scrim or by picking an item. */
+  .sb-expand,
+  .sb__collapse { display: none; }
 }
 @keyframes scrim-fade { from { opacity: 0; } }
