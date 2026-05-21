@@ -213,6 +213,10 @@ html, body, #root { height: 100%; }
     transition: transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
     box-shadow: var(--shadow-3);
     will-change: transform;
+    /* Drawer is fixed top:0 and (with black-translucent) extends behind the
+       status bar — pad its content down so the cogni wordmark clears the
+       clock instead of colliding with it. */
+    padding-top: env(safe-area-inset-top, 0px);
   }
   .layout > .sb.sb--open { transform: translateX(0); }
 
@@ -250,5 +254,13 @@ html, body, #root { height: 100%; }
   .input,
   .sb__search-input,
   .projects-list__search-input { font-size: 16px; }
+
+  /* Lift the chat composer off the very bottom edge: clear the home indicator
+     (env(safe-area-inset-bottom)) plus a little, so it doesn't sit in the
+     phone's curved-corner zone. Round it more to echo the rounded screen. */
+  .composer-region {
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .composer { border-radius: var(--r-5); }
 }
 @keyframes scrim-fade { from { opacity: 0; } }
