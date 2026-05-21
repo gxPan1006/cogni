@@ -4,6 +4,37 @@ Audit trail for /fanout batches in cogni. Each batch records what was paralleliz
 
 ---
 
+## User profile editing — avatar + display name — 2026-05-22 (3-agent fanout)
+
+**Goal**: 用户可在 设置→账户 改显示名、上传并裁剪头像。现状是名字=邮箱前缀、头像=首字母圈、且 `/api/me` 从未实现。Spec: `docs/superpowers/specs/2026-05-21-user-profile-editing-design.md`. Plan: `docs/superpowers/plans/2026-05-21-user-profile-editing.md` (11 tasks).
+
+**Structure**: feature 多在 `packages/ui` 内、task 间有依赖,按 task 直切会在 `index.ts`/`settings.css` 撞车。改按"新文件 vs 改动文件"切出 3 条零交集 track,接线层留给 integration lead。契约(`UserProfile` 形状、`ApiClient` 方法、组件 props、hook API、crop 签名)在 plan 里写死,三条据此独立开工。零新依赖(手搓 cropper)→ 无 lockfile churn。
+
+| Track | 独占路径 | Work | Commit | 测试 |
+|---|---|---|---|---|
+| A 云端 | `packages/cloud/src/**` | name/avatar 列 + helper + 迁移 + `GET/PATCH /api/me` + avatar 校验(mime/256KB) | `d8eb01b` | profile.test 9 pass |
+| B UI 数据层 | `transport/api.ts` + `hooks/useMe.ts` | `getMe/updateProfile` + `UserProfile` + `useMe` | `56eebe4` | tsc 绿 |
+| C UI 组件 | `lib/avatar-crop*` + `components/Avatar*` + `avatar.css` | crop 数学 + `<Avatar>` + 交互式 `<AvatarCropper>` | `7376fea` | avatar-crop.test 4 pass |
+| 整合(me) | index/SettingsPage/Sidebar/css/i18n/apps | 导出 + Account 接线 + Sidebar Avatar + en/zh + web/desktop `/api/me` overlay | `aead2de` | — |
+
+Merges: `e1f7e1d` / `e49aec5` / `d473b52`(`--no-ff` into main,均无冲突)。
+
+**Post-merge full sweep**: `pnpm build` clean · UI/web/desktop `tsc --noEmit` clean · `pnpm test` **683 pass / 0 fail (72 files)**(含新增 13 用例)。`pnpm lint` 仓库级失败(预存:ESLint v9 缺 `eslint.config.js`)——与本批无关。
+
+**Fanout 效果**:
+- 3 agents, ~+580 行(A 272 / B 50 / C 257 + 整合接线)。
+- Agent wallclock: B 73s · C 122s · A 150s(并行 → ~150s wall)。
+- Integration gate(3 次 scope 扫描 + 批量 merge + 接线 + 全量验证): ~10 min。
+- Conflicts / rejects: **0**。三条 scope 全干净(无越界、未碰 contract/index.ts/lockfile)。
+
+**踩坑 / 决策**:
+- **plan 的一个错误被 Track A 发现并修正**:plan 称"pglite 测试库从 drizzle schema 自动建表"——错。测试库用 `db/test-db.ts` 手维护 DDL(注释要求与 schema.ts 同步)。Agent 在主权内给 `test-db.ts` 补了 name/avatar 两列,合规且必要。**后续给 cloud 加列的 plan 必须带 test-db.ts 这一步。**
+- **契约前置 + 零依赖** 是本轮零冲突的关键:Track C 的组件即便引用尚未 merge 的接线也能各自 tsc 绿(新文件互不 import);cropper 手搓无 lockfile churn,整合极简。
+
+**下一轮候选**:头像 EXIF 方向校正;Google `profile` scope 自动带出默认头像/名字(本轮明确不做)。
+
+---
+
 ## Task comment cards + kanban free drag — 2026-05-21 (foundation-first, then 2-agent fanout)
 
 **Goal**: 主页面 gains a comment-card feed — worker leaves a structured handoff note at each transition, human drops inert supplementary notes that inject into the runner only at next dispatch (`consumed_by_run_id`); kanban gains free drag of any task card to any column (`moveTaskToState`). Spec: `docs/superpowers/specs/2026-05-21-task-comment-cards-design.md`. Plan: `docs/superpowers/plans/2026-05-21-task-comment-cards.md` (20 tasks).
