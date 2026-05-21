@@ -54,6 +54,14 @@ function isIOSNonSafari(): boolean {
   return isIOS() && /crios|fxios|edgios/i.test(navigator.userAgent);
 }
 
+function isMobileViewport(): boolean {
+  // The install nudge is a mobile concern (add-to-home-screen). On desktop the
+  // browser already offers an install icon in the address bar, so our floating
+  // bar would just be noise — only show it on narrow viewports (matches the
+  // app's mobile breakpoint in base.css).
+  return window.matchMedia("(max-width: 768px)").matches;
+}
+
 export function InstallPrompt() {
   const { locale } = useLocale();
   const zh = locale === "zh";
@@ -70,7 +78,7 @@ export function InstallPrompt() {
   });
 
   useEffect(() => {
-    if (dismissed || isStandalone()) return;
+    if (dismissed || isStandalone() || !isMobileViewport()) return;
 
     const onBIP = (e: Event) => {
       e.preventDefault(); // stop Chrome's mini-infobar; we drive our own UI
