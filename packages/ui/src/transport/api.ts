@@ -511,6 +511,20 @@ export class ApiClient {
   fetchThreadFile = (threadId: string, path: string): Promise<Blob> =>
     this.fetchBlob(`${this.cloudUrl}/api/threads/${threadId}/file?path=${encodeURIComponent(path)}`);
 
+  /** Fetch a comment attachment's bytes as a Blob (auth'd). Worker deliverables
+   *  carry a repo-relative `path`; user uploads are looked up by `name`. The
+   *  server validates the file against the comment's own attachment list. */
+  fetchCommentFile = (
+    taskId: string,
+    commentId: string,
+    att: { name: string; path?: string },
+  ): Promise<Blob> => {
+    const q = att.path
+      ? `path=${encodeURIComponent(att.path)}`
+      : `name=${encodeURIComponent(att.name)}`;
+    return this.fetchBlob(`${this.cloudUrl}/api/tasks/${taskId}/comments/${commentId}/file?${q}`);
+  };
+
   private async fetchBlob(url: string): Promise<Blob> {
     const res = await fetch(url, { headers: this.authHeaders() });
     if (!res.ok) throw new ApiError(res.status, `GET ${url} → ${res.status}`);

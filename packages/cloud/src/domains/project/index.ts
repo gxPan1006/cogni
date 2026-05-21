@@ -73,7 +73,7 @@ import type { PushNotifier } from "../../push/notifier.js";
 import { transitionTask, StateMismatch } from "./lifecycle.js";
 import { evaluateAndApplyMergeGate } from "./merge-gate.js";
 import { ProjectOrchestrator } from "./orchestrator.js";
-import { captureWorkerNote, renderCommentsForRunner, commentAttachments } from "./comments.js";
+import { captureWorkerNote, renderCommentsForRunner, commentAttachments, collectDeliverables } from "./comments.js";
 
 export interface ProjectDomainDeps {
   db: AnyDb;
@@ -596,10 +596,15 @@ export class ProjectDomain {
       this.broadcastTask(updated, "state-changed");
       // Snapshot the runner's final assistant message into the feed as a
       // "worker" handoff card (→ 完成 / → 待 Review). Best-effort: a capture
-      // failure must never block the lifecycle transition.
+      // failure must never block the lifecycle transition. Mirror the
+      // orchestrator finalize path's deliverable snapshot (see orchestrator.ts).
+      const deliverableBase = next === "done" ? project.repoPath : (task.worktreePath ?? project.repoPath);
+      const deliverables = task.hostId
+        ? await collectDeliverables(this.deps.hostRpc, task.hostId, deliverableBase, this.deps.logger)
+        : [];
       const note = await captureWorkerNote(
         this.deps.db,
-        { taskId, state: next, threadId: task.executionThreadId },
+        { taskId, state: next, threadId: task.executionThreadId, attachments: deliverables },
         this.deps.logger,
       );
       if (note) this.broadcastComment(note, "created");

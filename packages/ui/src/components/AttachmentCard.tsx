@@ -5,6 +5,7 @@
  * otherwise an uppercase extension badge tinted by file kind) sits beside the
  * name + size. Cohesive with Cogni's warm-sand tokens; no flat gray pills.
  */
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import "./attachment.css";
 
@@ -46,6 +47,7 @@ export function AttachmentCard({
   error,
   onRemove,
   onRetry,
+  onOpen,
 }: {
   name: string;
   size?: number;
@@ -57,6 +59,8 @@ export function AttachmentCard({
   error?: string;
   onRemove?: () => void;
   onRetry?: () => void;
+  /** When set, the whole tile becomes a button that opens a preview/download. */
+  onOpen?: () => void;
 }) {
   const { t } = useTranslation();
   const ext = extOf(name);
@@ -67,8 +71,18 @@ export function AttachmentCard({
 
   return (
     <div
-      className={`att-card att-card--${kind}${isError ? " att-card--error" : ""}`}
+      className={`att-card att-card--${kind}${isError ? " att-card--error" : ""}${onOpen ? " att-card--clickable" : ""}`}
       title={error ?? name}
+      {...(onOpen
+        ? {
+            role: "button",
+            tabIndex: 0,
+            onClick: onOpen,
+            onKeyDown: (e: ReactKeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); }
+            },
+          }
+        : {})}
     >
       <div className="att-card__tile">
         {previewUrl && kind === "img" ? (

@@ -350,3 +350,90 @@ describe("addUserComment / deleteUserComment", () => {
     await f.close();
   });
 });
+
+describe("collectDeliverables", () => {
+  const fakeFsBrowse = (tree: Record<string, { name: string; type: "file" | "dir"; size?: number }[]>) => ({
+    fsBrowse: vi.fn(async (_hostId: string, params: { path?: string }) => {
+      const entries = tree[params.path ?? ""];
+      if (!entries) throw new Error(`ENOENT ${params.path}`); // missing dir / RPC error
+      return { entries, cwd: params.path ?? "" };
+    }),
+  });
+
+  it("returns one attachment per file with repo-relative paths, recursing subdirs", async () => {
+    const { collectDeliverables } = await import("./comments.js");
+    const client = fakeFsBrowse({
+      "/wt/deliverables": [
+        { name: "report.md", type: "file", size: 1234 },
+        { name: "charts", type: "dir" },
+      ],
+      "/wt/deliverables/charts": [{ name: "fig1.png", type: "file", size: 50 }],
+    });
+    const out = await collectDeliverables(client, "host-1", "/wt");
+    expect(out).toEqual([
+      { name: "report.md", size: 1234, path: "deliverables/report.md" },
+      { name: "fig1.png", size: 50, path: "deliverables/charts/fig1.png" },
+    ]);
+  });
+
+  it("yields [] when the deliverables dir is absent (best-effort, never throws)", async () => {
+    const { collectDeliverables } = await import("./comments.js");
+    await expect(collectDeliverables(fakeFsBrowse({}), "h", "/wt")).resolves.toEqual([]);
+  });
+
+  it("defaults a missing file size to 0", async () => {
+    const { collectDeliverables } = await import("./comments.js");
+    const out = await collectDeliverables(
+      fakeFsBrowse({ "/repo/deliverables": [{ name: "notes.txt", type: "file" }] }),
+      "h",
+      "/repo",
+    );
+    expect(out).toEqual([{ name: "notes.txt", size: 0, path: "deliverables/notes.txt" }]);
+  });
+});
+
+describe("deliverable snapshot on completion", () => {
+  it("handleRunnerDoneForTask attaches the worker's deliverables/ files to the handoff card", async () => {
+    const { db, close } = await makeTestDb();
+    const u = await findOrCreateUserByEmail(db, "deliv-int@x.com");
+    const host = await createHost(db, { userId: u.id, tenantId: u.tenantId, name: "Mac" });
+    const project = await createProject(db, {
+      tenantId: u.tenantId, userId: u.id, name: "P", repoPath: "/r",
+      defaultHostId: host.hostId, mergePolicy: "require-review",
+    });
+    const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
+    const task = await createTask(db, { projectId: project.id, title: "Research" });
+    await updateTaskState(db, task.id, "queued", { executionThreadId: thread.id });
+    await updateTaskState(db, task.id, "running", {
+      hostId: host.hostId, worktreePath: "/r/.worktrees/T-1", branchName: "task/t-1", startedAt: new Date(),
+    });
+    await appendMessage(db, { threadId: thread.id, role: "assistant", content: "完成调研,见 deliverables/" });
+
+    // Host RPC stub: require-review needs no merge RPC, only the fs-browse walk
+    // of the worktree's deliverables dir.
+    const send = vi.fn(async (_h: string, req: HostRpcRequest): Promise<HostRpcResponse> => {
+      if (req.method === "fs-browse") {
+        const path = (req.params as { path?: string }).path;
+        if (path === "/r/.worktrees/T-1/deliverables") {
+          return { ok: true, method: "fs-browse", result: { entries: [{ name: "research.md", type: "file", size: 321 }], cwd: path } };
+        }
+        return { ok: true, method: "fs-browse", result: { entries: [], cwd: path ?? "" } };
+      }
+      throw new Error(`unexpected rpc ${req.method}`);
+    });
+    const domain = new ProjectDomain({
+      db,
+      hostRpc: new HostRpcClient({ sendHostRpc: send }),
+      hostRouter: new HostRouter(),
+      clients: new ClientHub(),
+      chat: {} as unknown as ChatDomain,
+    });
+
+    await domain.handleRunnerDoneForTask(task.id);
+
+    const note = (await listComments(db, task.id)).find((c) => c.author === "worker");
+    expect(note).toBeTruthy();
+    expect(note!.attachments).toEqual([{ name: "research.md", size: 321, path: "deliverables/research.md" }]);
+    await close();
+  });
+});

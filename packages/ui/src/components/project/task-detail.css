@@ -437,6 +437,17 @@
   padding: 0 16px 16px;
 }
 
+/* ── Attachment preview modal (产出物 预览/下载) ── */
+.tcd--preview { width: 860px; height: calc(100dvh - 96px); }
+.tcd__preview-body {
+  flex: 1; min-height: 0; overflow: auto;
+  display: flex; flex-direction: column;
+  background: var(--surface-2, var(--surface));
+}
+.tcd__preview-body .artifacts__iframe,
+.tcd__preview-body .artifacts__img,
+.tcd__preview-body .artifacts__pre { flex: 1; min-height: 0; }
+
 /* ── Comment replies ── */
 .tc__card-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; }
 .tc__reply-btn {

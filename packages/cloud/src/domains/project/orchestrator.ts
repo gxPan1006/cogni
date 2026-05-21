@@ -66,7 +66,7 @@ import type { PushNotifier } from "../../push/notifier.js";
 import { evaluateAndApplyMergeGate } from "./merge-gate.js";
 import { transitionTask, StateMismatch } from "./lifecycle.js";
 import { gatherUnconsumedUserComments, markCommentsConsumed } from "../../db/task-comments.js";
-import { renderCommentsForRunner, commentAttachments, captureWorkerNote } from "./comments.js";
+import { renderCommentsForRunner, commentAttachments, captureWorkerNote, collectDeliverables } from "./comments.js";
 
 const TICK_INTERVAL_MS = 5_000;
 const HOST_OFFLINE_THRESHOLD_MS = 60_000;
@@ -202,9 +202,18 @@ export class ProjectOrchestrator {
         // handleRunnerDoneForTask is not wired), so without this no worker card
         // is ever created on completion. Best-effort — never blocks the
         // transition (captureWorkerNote swallows its own errors).
+        //
+        // Also snapshot any user-facing deliverables the worker dropped under
+        // `deliverables/`: for `reviewing` the worktree is still in place; for
+        // `done` (auto-merge) the worktree is gone but the committed files now
+        // live under the project repo. Best-effort — failure yields no chips.
+        const deliverableBase = next === "done" ? project.repoPath : (task.worktreePath ?? project.repoPath);
+        const deliverables = task.hostId
+          ? await collectDeliverables(this.deps.hostRpc, task.hostId, deliverableBase, this.deps.logger)
+          : [];
         const note = await captureWorkerNote(
           this.deps.db,
-          { taskId: task.id, state: next, threadId: task.executionThreadId },
+          { taskId: task.id, state: next, threadId: task.executionThreadId, attachments: deliverables },
           this.deps.logger,
         );
         if (note) {
@@ -440,6 +449,7 @@ export class ProjectOrchestrator {
         "- Your CWD is a git worktree dedicated to this task. Treat it as the deliverable surface.",
         "- For any code/document/asset the user is asking for, **write real files** in CWD (do NOT only paste the content in chat).",
         "- When done implementing, run `git add -A && git commit -m \"<concise summary>\"` before reporting completion.",
+        "- 产出物 (deliverables): if this task's final output includes a **document/report meant for the human to read directly** (a research write-up, an analysis, a summary, a results table — NOT source code, configs, or tests), write those final files into a `deliverables/` directory at the CWD root (sub-dirs allowed) and `git commit` them with the rest. Files under `deliverables/` are surfaced as attachments on the task card for the user to preview/download. Do NOT put code or intermediate work files in `deliverables/` — only finished, user-facing artifacts. Most code tasks have no deliverable here; that's fine, leave the dir absent.",
         "- Do not ask the user clarifying questions with AskUserQuestion. If details are missing, make a conservative product-minded assumption, write it down briefly in the final response, and continue.",
         "- If the task is exploratory / Q&A only (no deliverable), say so explicitly and don't force a commit.",
         "- Before reporting completion or asking a question, your FINAL message must be a structured handoff note with three short parts: (1) 做了什么 — what you did; (2) 交付物在哪 — where the deliverable is (files / branch); (3) 下一步人类该检查什么 — what the human should review next.",

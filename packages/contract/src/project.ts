@@ -258,10 +258,19 @@ export type TaskCommentAuthor = (typeof TASK_COMMENT_AUTHORS)[number];
 export const taskCommentAuthorSchema = z.enum(TASK_COMMENT_AUTHORS);
 
 /** File attached to a comment. Same shape as the chat `attachmentSchema`, but
- *  defined here to avoid a project.ts ↔ protocol.ts import cycle. */
+ *  defined here to avoid a project.ts ↔ protocol.ts import cycle.
+ *
+ *  `path` is set only for **worker deliverables** (files the worker placed under
+ *  the task's `deliverables/` dir and that the cloud snapshots onto the handoff
+ *  comment): it is the path **relative to the worktree/repo root** (e.g.
+ *  `deliverables/research.md`), which stays valid across the worktree→merge
+ *  transition (resolve against `task.worktreePath ?? project.repoPath`). For
+ *  user-uploaded attachments `path` is absent — those live under the worktree's
+ *  `.cogni-uploads/<name>` instead. */
 export const commentAttachmentSchema = z.object({
   name: z.string(),
   size: z.number().int().min(0),
+  path: z.string().optional(),
 });
 export type CommentAttachment = z.infer<typeof commentAttachmentSchema>;
 

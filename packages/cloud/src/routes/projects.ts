@@ -24,6 +24,7 @@ import {
   createOrchestratorThread,
 } from "../db/threads.js";
 import { hosts as hostsTable } from "../db/schema.js";
+import { getComment } from "../db/task-comments.js";
 import { eq, and, isNull } from "drizzle-orm";
 import { artifactFileResponse, pathUnder } from "./artifact-file.js";
 import { relayUpload } from "./upload.js";
@@ -658,6 +659,42 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
     try {
       await deps.projectDomain.deleteUserComment(c.req.param("commentId"));
       return c.json({ ok: true });
+    } catch (err) {
+      const { status, body } = domainErrorResponse(err);
+      return c.json(body, status);
+    }
+  });
+
+  // ─── Comment attachment download/preview (产出物) ──────────────────────────
+  // Serve one file attached to a comment. The requested file MUST appear in the
+  // comment's own attachment list (allowlist) — we never read an arbitrary
+  // query path. Worker deliverables carry a repo-relative `path` (e.g.
+  // `deliverables/report.md`); user uploads resolve to `.cogni-uploads/<name>`.
+  // Both confine under `worktreePath ?? repoPath`, reusing the SP-4 read-file
+  // RPC + artifactFileResponse (previewable types render inline, else download).
+  app.get("/api/tasks/:taskId/comments/:commentId/file", async (c) => {
+    const { userId, tenantId } = c.get("claims");
+    const owned = await ownedTask(deps, c.req.param("taskId"), userId, tenantId);
+    if (!owned) return c.json({ error: "not found" }, 404);
+    if (!deps.projectDomain) return c.json({ error: "project domain unavailable" }, 503);
+    const comment = await getComment(deps.db, c.req.param("commentId"));
+    if (!comment || comment.taskId !== owned.task.id) return c.json({ error: "not found" }, 404);
+
+    const qPath = c.req.query("path");
+    const qName = c.req.query("name");
+    const att = (comment.attachments ?? []).find((a) =>
+      qPath ? a.path === qPath : qName ? a.name === qName && !a.path : false,
+    );
+    if (!att) return c.json({ error: "attachment not found" }, 404);
+    if (!owned.task.hostId) return c.json({ error: "task has no host" }, 409);
+
+    const base = owned.task.worktreePath ?? owned.project.repoPath;
+    const rel = att.path ?? `.cogni-uploads/${att.name}`;
+    const full = `${base}/${rel}`;
+    if (!pathUnder(base, full)) return c.json({ error: "path outside task" }, 403);
+    try {
+      const file = await deps.projectDomain.readFile(owned.task.hostId, full);
+      return artifactFileResponse(c, full, file);
     } catch (err) {
       const { status, body } = domainErrorResponse(err);
       return c.json(body, status);

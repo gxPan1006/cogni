@@ -23,6 +23,9 @@
   box-shadow: var(--shadow-2);
   transform: translateY(-1px);
 }
+.att-card--clickable { cursor: pointer; }
+.att-card--clickable:hover { border-color: var(--accent-ink); }
+.att-card--clickable:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 1px; }
 
 /* Typed thumbnail tile */
 .att-card__tile {

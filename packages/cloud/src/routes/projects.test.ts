@@ -3,8 +3,9 @@ import { makeTestDb } from "../db/test-db.js";
 import { findOrCreateUserByEmail } from "../db/users.js";
 import { createHost } from "../db/hosts.js";
 import { createAuthSession } from "../db/auth-sessions.js";
-import { createProject as dbCreateProject, createTask as dbCreateTask } from "../db/projects.js";
+import { createProject as dbCreateProject, createTask as dbCreateTask, updateTaskState as dbUpdateTaskState } from "../db/projects.js";
 import { createThread as dbCreateThread } from "../db/threads.js";
+import { insertComment as dbInsertComment } from "../db/task-comments.js";
 import { HostRouter } from "../host-router.js";
 import { ClientHub } from "../client-hub.js";
 import { ChatDomain } from "../domains/chat.js";
@@ -35,6 +36,7 @@ function makeProjectDomainMock(): {
     deleteProject: ReturnType<typeof vi.fn>;
     getTaskDiff: ReturnType<typeof vi.fn>;
     fsBrowse: ReturnType<typeof vi.fn>;
+    readFile: ReturnType<typeof vi.fn>;
     setProjectsRoot: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
   };
@@ -53,6 +55,7 @@ function makeProjectDomainMock(): {
     deleteProject: vi.fn(),
     getTaskDiff: vi.fn(),
     fsBrowse: vi.fn(),
+    readFile: vi.fn(),
     setProjectsRoot: vi.fn(),
     dispose: vi.fn(),
   };
@@ -499,6 +502,43 @@ describe("GET /api/tasks/:taskId", () => {
     const { task } = await makeProjectAndTask(db, bob, bobHost.hostId, "queued");
     const res = await req(`/api/tasks/${task.id}`);
     expect(res.status).toBe(404);
+    await close();
+  });
+});
+
+describe("GET /api/tasks/:taskId/comments/:commentId/file (产出物 download)", () => {
+  it("serves a worker deliverable resolved against the worktree, validated by the comment allowlist", async () => {
+    const { db, user, host, fns, req, close } = await setup();
+    const { task } = await makeProjectAndTask(db, user, host.hostId, "reviewing");
+    await dbUpdateTaskState(db, task.id, "reviewing", { hostId: host.hostId, worktreePath: "/wt/T-1" });
+    const comment = await dbInsertComment(db, {
+      taskId: task.id, author: "worker", body: "见报告", state: "reviewing",
+      attachments: [{ name: "report.md", size: 12, path: "deliverables/report.md" }],
+    });
+    fns.readFile.mockResolvedValue({
+      contentBase64: Buffer.from("# Report\n").toString("base64"), size: 9, truncated: false,
+    });
+
+    const res = await req(`/api/tasks/${task.id}/comments/${comment.id}/file?path=${encodeURIComponent("deliverables/report.md")}`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("# Report\n");
+    // Resolved against worktreePath (not repoPath) since the task is reviewing.
+    expect(fns.readFile).toHaveBeenCalledWith(host.hostId, "/wt/T-1/deliverables/report.md");
+    await close();
+  });
+
+  it("404s a path not present in the comment's attachment list (no arbitrary reads)", async () => {
+    const { db, user, host, fns, req, close } = await setup();
+    const { task } = await makeProjectAndTask(db, user, host.hostId, "reviewing");
+    await dbUpdateTaskState(db, task.id, "reviewing", { hostId: host.hostId, worktreePath: "/wt/T-1" });
+    const comment = await dbInsertComment(db, {
+      taskId: task.id, author: "worker", body: "见报告", state: "reviewing",
+      attachments: [{ name: "report.md", size: 12, path: "deliverables/report.md" }],
+    });
+
+    const res = await req(`/api/tasks/${task.id}/comments/${comment.id}/file?path=${encodeURIComponent("../../etc/passwd")}`);
+    expect(res.status).toBe(404);
+    expect(fns.readFile).not.toHaveBeenCalled();
     await close();
   });
 });
