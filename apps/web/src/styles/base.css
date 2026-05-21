@@ -214,12 +214,12 @@ html, body, #root { height: 100%; }
     box-shadow: var(--shadow-3);
     will-change: transform;
     /* The drawer is position:fixed, so it escapes the layout and sits flush to
-       the screen edges — under the notch/status bar (top), the home indicator
-       (bottom), and the curved left edge. Inset its content on all three so the
-       cogni wordmark (top) and the user/settings row (bottom) aren't clipped.
-       The drawer's own background fills the inset gaps. */
+       the screen edges — under the notch/status bar (top) and the curved left
+       edge. Inset top + left so the cogni wordmark clears the clock. The bottom
+       inset is applied inside the footer button (.sb__user) instead, so the
+       footer's background reaches the physical bottom edge (anchored) rather
+       than floating above a gap. */
     padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
     padding-left: env(safe-area-inset-left, 0px);
   }
   .layout > .sb.sb--open { transform: translateX(0); }
@@ -275,5 +275,14 @@ html, body, #root { height: 100%; }
     padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   }
   .composer { border-radius: var(--r-5); }
+
+  /* Sidebar account footer: extend its background to the physical bottom edge
+     while lifting the content above the home indicator, so it's anchored to the
+     bottom instead of floating over a gap. Soften the divider so it reads as
+     part of the rail, not a strip split off from it. */
+  .sb__user {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top-color: var(--line-soft);
+  }
 }
 @keyframes scrim-fade { from { opacity: 0; } }
