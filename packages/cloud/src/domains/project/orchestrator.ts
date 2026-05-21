@@ -65,7 +65,7 @@ import { HostRpcError, type HostRpcClient, type HostRpcLogger } from "./host-rpc
 import { evaluateAndApplyMergeGate } from "./merge-gate.js";
 import { transitionTask, StateMismatch } from "./lifecycle.js";
 import { gatherUnconsumedUserComments, markCommentsConsumed } from "../../db/task-comments.js";
-import { renderCommentsForRunner, commentAttachments } from "./comments.js";
+import { renderCommentsForRunner, commentAttachments, captureWorkerNote } from "./comments.js";
 
 const TICK_INTERVAL_MS = 5_000;
 const HOST_OFFLINE_THRESHOLD_MS = 60_000;
@@ -193,6 +193,20 @@ export class ProjectOrchestrator {
         });
         this.broadcastTask(updated, "state-changed");
         this.broadcastProject(project, "updated");
+        // Snapshot the runner's final assistant message into the feed as a
+        // "worker" handoff card (→ 完成 / → 待 Review). This MUST live here:
+        // the orchestrator tick is the live finalize path (ProjectDomain.
+        // handleRunnerDoneForTask is not wired), so without this no worker card
+        // is ever created on completion. Best-effort — never blocks the
+        // transition (captureWorkerNote swallows its own errors).
+        const note = await captureWorkerNote(
+          this.deps.db,
+          { taskId: task.id, state: next, threadId: task.executionThreadId },
+          this.deps.logger,
+        );
+        if (note) {
+          this.deps.clients.broadcastTask(note.taskId, { t: "task-comment", kind: "created", comment: note });
+        }
       } catch (err) {
         if (!(err instanceof StateMismatch)) {
           this.deps.logger?.warn?.(

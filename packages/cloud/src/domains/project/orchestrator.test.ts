@@ -3,7 +3,9 @@ import { eq } from "drizzle-orm";
 import { makeTestDb } from "../../db/test-db.js";
 import { findOrCreateUserByEmail } from "../../db/users.js";
 import { createHost, setHostStatus } from "../../db/hosts.js";
-import { createThread } from "../../db/threads.js";
+import { createThread, appendMessage } from "../../db/threads.js";
+import { openRunnerSession, setRunnerSessionStatus } from "../../db/sessions.js";
+import { listComments } from "../../db/task-comments.js";
 import { hosts as hostsTable } from "../../db/schema.js";
 import {
   createProject,
@@ -258,6 +260,36 @@ describe("ProjectOrchestrator reconcile", () => {
     const after = await getTask(f.db, f.task.id);
     expect(after?.state).toBe("done");
     expect(after?.completedAt).not.toBeNull();
+    await f.close();
+  });
+
+  it("captures a worker handoff comment when a running task finalizes to reviewing", async () => {
+    const f = await seedFixture({ mergePolicy: "require-review" });
+    await updateTaskState(f.db, f.task.id, "running", {
+      hostId: f.host.hostId,
+      worktreePath: "/r/.worktrees/T-1",
+      branchName: "task/t-1",
+      startedAt: new Date(),
+    });
+    // A completed runner session on the execution thread + the worker's final
+    // handoff message — this is what maybeFinalizeRunningTask reacts to.
+    const session = await openRunnerSession(f.db, {
+      threadId: f.thread.id, hostId: f.host.hostId, adapter: "claude-code",
+    });
+    await setRunnerSessionStatus(f.db, session.id, "completed");
+    await appendMessage(f.db, {
+      threadId: f.thread.id, role: "assistant",
+      content: "做了什么: 写了 cc-view 查看器\n交付物在哪: 当前分支",
+    });
+    f.setHandler(async (req) => req as never); // require-review needs no host RPC
+
+    await f.orchestrator.tick();
+
+    expect((await getTask(f.db, f.task.id))?.state).toBe("reviewing");
+    const worker = (await listComments(f.db, f.task.id)).find((c) => c.author === "worker");
+    expect(worker, "a worker handoff card should be created on finalize").toBeTruthy();
+    expect(worker!.state).toBe("reviewing");
+    expect(worker!.body).toContain("cc-view");
     await f.close();
   });
 
