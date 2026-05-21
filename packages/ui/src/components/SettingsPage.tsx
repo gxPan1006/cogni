@@ -14,6 +14,7 @@ import type { ApiClient, HostInfo } from "../transport/api.js";
 import { useIdentities } from "../hooks/useIdentities.js";
 import { useDevices } from "../hooks/useDevices.js";
 import { useHosts } from "../hooks/useHosts.js";
+import { useTheme } from "../hooks/useTheme.js";
 import { LoadingRows, LoadingState } from "./LoadingState.js";
 import "./settings.css";
 
@@ -29,8 +30,6 @@ export function SettingsPage({
   onClose?: () => void;
 }) {
   const [page, setPage] = useState<Page>("account");
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [accentHue, setAccentHue] = useState<number>(50);
 
   return (
     <div className="settings">
@@ -69,7 +68,7 @@ export function SettingsPage({
         {page === "account"   && <AccountPage api={api} user={user} />}
         {page === "devices"   && <DevicesPage api={api} />}
         {page === "hosts"     && <HostsPage api={api} />}
-        {page === "customize" && <CustomizePage theme={theme} onTheme={setTheme} accentHue={accentHue} onAccentHue={setAccentHue} />}
+        {page === "customize" && <CustomizePage />}
         {page === "about"     && <AboutPage />}
       </div>
     </div>
@@ -349,58 +348,32 @@ function HostProjectsRootRow({ api, host }: { api: ApiClient; host: HostInfo }) 
 
 /* ─── Customize ───────────────────────────────────────── */
 
-function CustomizePage({
-  theme, onTheme, accentHue, onAccentHue,
-}: {
-  theme: "light" | "dark";
-  onTheme: (v: "light" | "dark") => void;
-  accentHue: number;
-  onAccentHue: (h: number) => void;
-}) {
-  const accents = [
-    { id: 50,  name: "Clay" },
-    { id: 158, name: "Sage" },
-    { id: 270, name: "Indigo" },
-    { id: 28,  name: "Ember" },
-  ];
+function CustomizePage() {
+  const { pref, setPref } = useTheme();
+  const sub =
+    pref === "system" ? "跟随系统 · 随 macOS 外观切换"
+    : pref === "dark" ? "深色 · 适合低光环境"
+    : "浅色 · 适合白天";
   return (
     <>
-      <SectionHead title="外观" subtitle="应用的视觉调性。会跨设备同步。" />
+      <SectionHead title="外观" subtitle="应用的视觉调性。保存在本机。" />
 
       <div className="settings-card">
         <Row
-          icon={theme === "dark" ? Icon.moon : Icon.sun}
+          icon={pref === "dark" ? Icon.moon : Icon.sun}
           title="主题"
-          sub={theme === "dark" ? "深色 · 适合低光环境" : "浅色 · 适合白天"}
+          sub={sub}
           right={
             <div className="seg">
-              <button className={"seg__btn" + (theme === "light" ? " is-on" : "")} onClick={() => onTheme("light")}>浅</button>
-              <button className={"seg__btn" + (theme === "dark"  ? " is-on" : "")} onClick={() => onTheme("dark")}>深</button>
-              <button className="seg__btn">跟随系统</button>
-            </div>
-          }
-        />
-        <Row
-          icon={Icon.spark}
-          title="主色"
-          sub="用于激活态、发送按钮、host 在线 halo。"
-          right={
-            <div className="settings-card__swatches">
-              {accents.map((a) => (
-                <button
-                  key={a.id}
-                  className={"settings-card__swatch" + (accentHue === a.id ? " is-on" : "")}
-                  onClick={() => onAccentHue(a.id)}
-                  style={{ background: `oklch(60% 0.135 ${a.id})` }}
-                  title={a.name}
-                />
-              ))}
+              <button className={"seg__btn" + (pref === "light"  ? " is-on" : "")} onClick={() => setPref("light")}>浅</button>
+              <button className={"seg__btn" + (pref === "dark"   ? " is-on" : "")} onClick={() => setPref("dark")}>深</button>
+              <button className={"seg__btn" + (pref === "system" ? " is-on" : "")} onClick={() => setPref("system")}>跟随系统</button>
             </div>
           }
         />
       </div>
 
-      <SectionHead title="快捷键" subtitle="无论怎么调都不变。" />
+      <SectionHead title="快捷键" subtitle="全局快捷键速查。" />
       <div className="settings-card">
         {[
           ["新对话",              "⌘ N"],
