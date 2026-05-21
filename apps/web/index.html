@@ -15,7 +15,13 @@
     <meta name="theme-color" content="#faf8f3" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- black-translucent: the web view fills the whole screen *including*
+         behind the status bar, so the app's own background flows up behind the
+         clock/battery with no separate bar (the immersive look). Pairs with
+         viewport-fit=cover above + env(safe-area-inset-top) padding in CSS so
+         content clears the status bar. Status-bar text is rendered white,
+         which suits the dark theme. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Cogni" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

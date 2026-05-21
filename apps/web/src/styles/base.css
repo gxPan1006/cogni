@@ -229,9 +229,13 @@ html, body, #root { height: 100%; }
   .mobile-topbar {
     display: flex; align-items: center; gap: 8px;
     flex: 0 0 auto;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--line-soft);
-    background: var(--surface-2);
+    /* Blend into the status bar: same background as the page, no divider, and
+       pad the top by the safe-area inset so the title/☰ sit just below the
+       clock. With black-translucent the app bg now flows up behind the status
+       bar, so this bar reads as one continuous surface (the immersive look,
+       cf. the native Claude app) rather than a separate web "chrome" strip. */
+    padding: calc(6px + env(safe-area-inset-top, 0px)) 12px 6px;
+    background: var(--bg);
   }
 
   /* The page that fills the rest of .main: drop its hard height:100% (it now
