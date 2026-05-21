@@ -124,6 +124,7 @@ const fsBrowseSchema = z.object({
 /** Body of POST /api/tasks/:taskId/comments — an inert human note. */
 const commentBodySchema = z.object({
   body: z.string().min(1).max(8000),
+  parentCommentId: z.string().optional(),
   attachments: z.array(z.object({ name: z.string(), size: z.number().int().min(0) })).optional(),
 });
 
@@ -637,6 +638,7 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
         taskId: owned.task.id,
         userId,
         body: parsed.data.body,
+        ...(parsed.data.parentCommentId ? { parentCommentId: parsed.data.parentCommentId } : {}),
         ...(parsed.data.attachments && parsed.data.attachments.length > 0
           ? { attachments: parsed.data.attachments }
           : {}),

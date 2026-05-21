@@ -616,6 +616,7 @@ export class ProjectDomain {
     taskId: string;
     userId: string;
     body: string;
+    parentCommentId?: string | null;
     attachments?: CommentAttachment[];
   }): Promise<TaskComment> {
     const task = await dbGetTask(this.deps.db, input.taskId);
@@ -628,6 +629,7 @@ export class ProjectDomain {
       // note was written; it has no lifecycle effect.
       state: task.state,
       authorUserId: input.userId,
+      ...(input.parentCommentId ? { parentCommentId: input.parentCommentId } : {}),
       ...(input.attachments && input.attachments.length > 0 ? { attachments: input.attachments } : {}),
     });
     this.broadcastComment(comment, "created");

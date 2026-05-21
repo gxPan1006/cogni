@@ -235,6 +235,11 @@ export const project = {
     delete: "Delete",
     humanNote: "Human note",
     detailClose: "Close (Esc)",
+    reply: "Reply",
+    replyingTo: "Replying to: {{text}}",
+    cancelReply: "Cancel reply",
+    jumpToParent: "Jump to the replied card",
+    parentGone: "Original comment deleted",
     // worker handoff chips
     chipDone: "→ Done",
     chipReviewing: "→ In review",

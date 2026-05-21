@@ -14,7 +14,7 @@ import type { ApiClient } from "../transport/api.js";
 export interface UseTaskCommentsResult {
   comments: TaskComment[];
   loading: boolean;
-  add: (body: string, attachments?: { name: string; size: number }[]) => Promise<void>;
+  add: (body: string, attachments?: { name: string; size: number }[], parentCommentId?: string) => Promise<void>;
   remove: (commentId: string) => Promise<void>;
 }
 
@@ -62,10 +62,10 @@ export function useTaskComments(api: ApiClient, taskId: string): UseTaskComments
     return unsubscribe;
   }, [api, taskId]);
 
-  const add = useCallback(async (body: string, attachments?: { name: string; size: number }[]) => {
+  const add = useCallback(async (body: string, attachments?: { name: string; size: number }[], parentCommentId?: string) => {
     const trimmed = body.trim();
     if (!trimmed) return;
-    await api.addTaskComment(taskId, trimmed, attachments);
+    await api.addTaskComment(taskId, trimmed, attachments, parentCommentId);
   }, [api, taskId]);
 
   const remove = useCallback(async (commentId: string) => {

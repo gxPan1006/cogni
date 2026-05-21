@@ -25,6 +25,7 @@ function toComment(r: Row): TaskComment {
     consumedByRunId: r.consumedByRunId,
     authorUserId: r.authorUserId,
     createdAt: r.createdAt.toISOString(),
+    ...(r.parentCommentId ? { parentCommentId: r.parentCommentId } : {}),
     ...(attachments && attachments.length > 0 ? { attachments } : {}),
   };
 }
@@ -36,6 +37,7 @@ export interface InsertCommentInput {
   state: TaskComment["state"];
   runnerSessionId?: string | null;
   authorUserId?: string | null;
+  parentCommentId?: string | null;
   attachments?: CommentAttachment[];
 }
 
@@ -47,6 +49,7 @@ export async function insertComment(db: AnyDb, input: InsertCommentInput): Promi
     state: input.state,
     runnerSessionId: input.runnerSessionId ?? null,
     authorUserId: input.authorUserId ?? null,
+    parentCommentId: input.parentCommentId ?? null,
     attachmentsJson: input.attachments && input.attachments.length > 0 ? input.attachments : null,
   }).returning();
   return toComment(rows[0]!);

@@ -275,6 +275,10 @@ export interface TaskComment {
   consumedByRunId: string | null;
   authorUserId: string | null;
   createdAt: string;
+  /** The comment this one replies to (a card in the same feed), null/absent for
+   *  a top-level note. Optional so pre-feature rows + cached frames still parse.
+   *  Lets the UI show a "↩ replying to …" reference. */
+  parentCommentId?: string | null;
   /** Files the user attached to this note; staged on the host under the task's
    *  executionThreadId and materialized into the worktree on the next run. */
   attachments?: CommentAttachment[];
@@ -290,6 +294,7 @@ export const taskCommentSchema: z.ZodType<TaskComment> = z.object({
   consumedByRunId: z.string().nullable(),
   authorUserId: z.string().nullable(),
   createdAt: z.string(),
+  parentCommentId: z.string().nullable().optional(),
   attachments: z.array(commentAttachmentSchema).optional(),
 });
 

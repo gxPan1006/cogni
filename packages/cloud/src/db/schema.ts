@@ -247,6 +247,10 @@ export const taskComments = pgTable("task_comments", {
   runnerSessionId: uuid("runner_session_id").references(() => runnerSessions.id),
   consumedByRunId: uuid("consumed_by_run_id").references(() => taskRuns.id),
   authorUserId: uuid("author_user_id").references(() => users.id),
+  // Reply target: another comment in the same task's feed (or NULL for a
+  // top-level note). Plain column (no FK) — a dangling id after the parent is
+  // deleted is harmless: the UI just drops the "replying to" reference.
+  parentCommentId: uuid("parent_comment_id"),
   // [{name,size}] of files attached to a user note. NULL when none. Staged on
   // the host under the task's executionThreadId; materialized into the worktree
   // at the next dispatch (same pattern as messages.attachments_json).

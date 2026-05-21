@@ -444,10 +444,15 @@ export class ApiClient {
     taskId: string,
     body: string,
     attachments?: { name: string; size: number }[],
+    parentCommentId?: string,
   ): Promise<TaskComment> =>
     this.request(`${this.cloudUrl}/api/tasks/${taskId}/comments`, {
       method: "POST", headers: this.authHeaders(),
-      body: JSON.stringify(attachments && attachments.length > 0 ? { body, attachments } : { body }),
+      body: JSON.stringify({
+        body,
+        ...(parentCommentId ? { parentCommentId } : {}),
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
+      }),
     });
 
   /** Delete one's own un-consumed comment. */

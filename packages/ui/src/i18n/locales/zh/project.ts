@@ -235,6 +235,11 @@ export const project = {
     delete: "删除",
     humanNote: "人类备注",
     detailClose: "关闭 (Esc)",
+    reply: "回复",
+    replyingTo: "回复:{{text}}",
+    cancelReply: "取消回复",
+    jumpToParent: "跳到被回复的卡片",
+    parentGone: "原评论已删除",
     // worker handoff chips
     chipDone: "→ 完成",
     chipReviewing: "→ 待 Review",

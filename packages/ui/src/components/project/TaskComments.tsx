@@ -35,6 +35,12 @@ function stateChip(t: TFunction, state: string): string {
   return key ? t(key) : state;
 }
 
+/** Short single-line preview of a comment body, for reply references/banners. */
+function preview(body: string, n = 28): string {
+  const s = body.trim().replace(/\s+/g, " ");
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
 export function TaskComments({ api, taskId }: { api: ApiClient; taskId: string }) {
   const { t } = useTranslation();
   const { comments, loading, add, remove } = useTaskComments(api, taskId);
@@ -42,25 +48,46 @@ export function TaskComments({ api, taskId }: { api: ApiClient; taskId: string }
   const [draft, setDraft] = useState("");
   // Card opened into the full-markdown detail modal (null = closed).
   const [openComment, setOpenComment] = useState<TaskComment | null>(null);
+  // The card this draft is replying to (null = top-level note).
+  const [replyingTo, setReplyingTo] = useState<TaskComment | null>(null);
+  // Briefly highlights a card when its reply-reference is clicked.
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   // Reuse the chat upload pipeline: files stage on the task's host under its
   // executionThreadId; their names ride the comment and get materialized into
   // the worktree at the next run. (Upload 409s if the task hasn't started.)
   const uploads = useUploads((file, onProgress) => api.uploadTaskFile(taskId, file, onProgress));
 
+  const commentsById = new Map(comments.map((c) => [c.id, c]));
+
   const submit = () => {
     const text = draft.trim();
     if (!text || uploads.busy) return;
     const attachments = uploads.takeAttachments();
+    const parentId = replyingTo?.id;
     setDraft("");
     setAdding(false);
+    setReplyingTo(null);
     uploads.reset();
-    void add(text, attachments);
+    void add(text, attachments, parentId);
   };
 
   const cancel = () => {
     setDraft("");
     setAdding(false);
+    setReplyingTo(null);
     uploads.reset();
+  };
+
+  const startReply = (c: TaskComment) => {
+    setOpenComment(null);
+    setReplyingTo(c);
+    setAdding(true);
+  };
+
+  const jumpTo = (id: string) => {
+    setHighlightId(id);
+    document.getElementById(`tc-card-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => setHighlightId((cur) => (cur === id ? null : cur)), 1400);
   };
 
   return (
@@ -68,10 +95,27 @@ export function TaskComments({ api, taskId }: { api: ApiClient; taskId: string }
       <div className="tc__head">{t("project.comments.head")}</div>
       <div className="tc__grid">
         {comments.map((c) => (
-          <CommentCard key={c.id} comment={c} onDelete={() => void remove(c.id)} onOpen={() => setOpenComment(c)} />
+          <CommentCard
+            key={c.id}
+            comment={c}
+            parent={c.parentCommentId ? commentsById.get(c.parentCommentId) : undefined}
+            highlighted={highlightId === c.id}
+            onDelete={() => void remove(c.id)}
+            onOpen={() => setOpenComment(c)}
+            onReply={() => startReply(c)}
+            onJumpToParent={jumpTo}
+          />
         ))}
         {adding ? (
-          <CommentComposer draft={draft} setDraft={setDraft} onSubmit={submit} onCancel={cancel} uploads={uploads} />
+          <CommentComposer
+            draft={draft}
+            setDraft={setDraft}
+            onSubmit={submit}
+            onCancel={cancel}
+            uploads={uploads}
+            replyingTo={replyingTo}
+            onClearReply={() => setReplyingTo(null)}
+          />
         ) : (
           <button className="tc__card tc__card--add" onClick={() => setAdding(true)}>
             <span className="tc__add-plus">{Icon.plus}</span>
@@ -81,7 +125,14 @@ export function TaskComments({ api, taskId }: { api: ApiClient; taskId: string }
           </button>
         )}
       </div>
-      {openComment && <CommentDetailModal comment={openComment} onClose={() => setOpenComment(null)} />}
+      {openComment && (
+        <CommentDetailModal
+          comment={openComment}
+          parent={openComment.parentCommentId ? commentsById.get(openComment.parentCommentId) : undefined}
+          onClose={() => setOpenComment(null)}
+          onReply={() => startReply(openComment)}
+        />
+      )}
     </section>
   );
 }
@@ -94,13 +145,15 @@ export function TaskComments({ api, taskId }: { api: ApiClient; taskId: string }
  * task upload pipeline. Enter submits, Esc cancels; drag-drop also attaches.
  */
 function CommentComposer({
-  draft, setDraft, onSubmit, onCancel, uploads,
+  draft, setDraft, onSubmit, onCancel, uploads, replyingTo, onClearReply,
 }: {
   draft: string;
   setDraft: (v: string) => void;
   onSubmit: () => void;
   onCancel: () => void;
   uploads: UseUploads;
+  replyingTo: TaskComment | null;
+  onClearReply: () => void;
 }) {
   const { t } = useTranslation();
   const ref = useRef<HTMLTextAreaElement | null>(null);
@@ -121,6 +174,14 @@ function CommentComposer({
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files.length) uploads.add(e.dataTransfer.files); }}
     >
+      {replyingTo && (
+        <div className="tc__reply-banner">
+          <span className="tc__reply-banner-text">
+            ↩ {t("project.comments.replyingTo", { text: preview(replyingTo.body) })}
+          </span>
+          <button type="button" className="tc__reply-banner-x" onClick={onClearReply} aria-label={t("project.comments.cancelReply")}>{Icon.x}</button>
+        </div>
+      )}
       {uploads.items.length > 0 && (
         <div className="tc__compose-tray">
           {uploads.items.map((it) => (
@@ -191,12 +252,23 @@ function CommentComposer({
   );
 }
 
-function CommentCard({ comment, onDelete, onOpen }: { comment: TaskComment; onDelete: () => void; onOpen: () => void }) {
+function CommentCard({
+  comment, parent, highlighted, onDelete, onOpen, onReply, onJumpToParent,
+}: {
+  comment: TaskComment;
+  parent: TaskComment | undefined;
+  highlighted: boolean;
+  onDelete: () => void;
+  onOpen: () => void;
+  onReply: () => void;
+  onJumpToParent: (id: string) => void;
+}) {
   const { t } = useTranslation();
   const isWorker = comment.author === "worker";
   return (
     <div
-      className={"tc__card tc__card--clickable" + (isWorker ? " tc__card--worker" : " tc__card--user")}
+      id={`tc-card-${comment.id}`}
+      className={"tc__card tc__card--clickable" + (isWorker ? " tc__card--worker" : " tc__card--user") + (highlighted ? " tc__card--flash" : "")}
       role="button"
       tabIndex={0}
       onClick={onOpen}
@@ -211,16 +283,36 @@ function CommentCard({ comment, onDelete, onOpen }: { comment: TaskComment; onDe
           </span>
         )}
         {!isWorker && comment.consumedByRunId && <span className="tc__badge">{t("project.comments.delivered")}</span>}
-        {!isWorker && !comment.consumedByRunId && (
+        <div className="tc__card-actions">
           <button
-            className="tc__del"
-            title={t("project.comments.delete")}
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className="tc__reply-btn"
+            title={t("project.comments.reply")}
+            aria-label={t("project.comments.reply")}
+            onClick={(e) => { e.stopPropagation(); onReply(); }}
           >
-            {Icon.x}
+            ↩
           </button>
-        )}
+          {!isWorker && !comment.consumedByRunId && (
+            <button
+              className="tc__del"
+              title={t("project.comments.delete")}
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            >
+              {Icon.x}
+            </button>
+          )}
+        </div>
       </div>
+      {/* Reply reference — click to jump to + flash the parent card. */}
+      {comment.parentCommentId && (
+        <button
+          className="tc__reply-ref"
+          onClick={(e) => { e.stopPropagation(); onJumpToParent(comment.parentCommentId!); }}
+          title={t("project.comments.jumpToParent")}
+        >
+          ↩ {parent ? preview(parent.body, 20) : t("project.comments.parentGone")}
+        </button>
+      )}
       {/* Clamped preview — full markdown lives in the detail modal on click. */}
       <div className="tc__card-body tc__card-body--clamp"><Markdown text={comment.body} /></div>
       {comment.attachments && comment.attachments.length > 0 && (
@@ -241,7 +333,7 @@ function CommentCard({ comment, onDelete, onOpen }: { comment: TaskComment; onDe
  * its Escape listener captures + stops propagation so closing it doesn't also
  * close the parent task panel.
  */
-function CommentDetailModal({ comment, onClose }: { comment: TaskComment; onClose: () => void }) {
+function CommentDetailModal({ comment, parent, onClose, onReply }: { comment: TaskComment; parent: TaskComment | undefined; onClose: () => void; onReply: () => void }) {
   const { t } = useTranslation();
   const isWorker = comment.author === "worker";
   useEffect(() => {
@@ -263,8 +355,14 @@ function CommentDetailModal({ comment, onClose }: { comment: TaskComment; onClos
               : <span className="tcd__who-label">{t("project.comments.humanNote")}</span>}
             <time className="tcd__time">{formatAgo(comment.createdAt)}</time>
           </span>
-          <button className="td__icon-btn" onClick={onClose} title={t("project.comments.detailClose")} aria-label={t("project.comments.detailClose")}>{Icon.x}</button>
+          <span className="tcd__head-actions">
+            <button className="td__icon-btn" onClick={onReply} title={t("project.comments.reply")} aria-label={t("project.comments.reply")}>↩</button>
+            <button className="td__icon-btn" onClick={onClose} title={t("project.comments.detailClose")} aria-label={t("project.comments.detailClose")}>{Icon.x}</button>
+          </span>
         </div>
+        {comment.parentCommentId && (
+          <div className="tcd__reply-ref">↩ {parent ? preview(parent.body, 40) : t("project.comments.parentGone")}</div>
+        )}
         <div className="tcd__body"><Markdown text={comment.body} /></div>
         {comment.attachments && comment.attachments.length > 0 && (
           <div className="tcd__atts">

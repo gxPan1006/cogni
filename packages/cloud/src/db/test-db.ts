@@ -105,6 +105,7 @@ CREATE TABLE task_comments (
   runner_session_id uuid references runner_sessions(id),
   consumed_by_run_id uuid references task_runs(id),
   author_user_id uuid references users(id),
+  parent_comment_id uuid,
   attachments_json jsonb,
   created_at timestamp not null default now()
 );

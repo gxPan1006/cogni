@@ -290,6 +290,20 @@ describe("addUserComment / deleteUserComment", () => {
     await f.close();
   });
 
+  it("persists + round-trips a reply's parentCommentId", async () => {
+    const f = await seed();
+    const parent = await f.domain.addUserComment({ taskId: f.task.id, userId: f.user.id, body: "原始问题" });
+    const reply = await f.domain.addUserComment({
+      taskId: f.task.id, userId: f.user.id, body: "这是回复", parentCommentId: parent.id,
+    });
+    expect(reply.parentCommentId).toBe(parent.id);
+    const list = await listComments(f.db, f.task.id);
+    expect(list.find((x) => x.id === reply.id)!.parentCommentId).toBe(parent.id);
+    // top-level comment has no parentCommentId key
+    expect(list.find((x) => x.id === parent.id)!.parentCommentId).toBeUndefined();
+    await f.close();
+  });
+
   it("deleteUserComment removes an un-consumed user comment", async () => {
     const f = await seed();
     const c = await f.domain.addUserComment({ taskId: f.task.id, userId: f.user.id, body: "x" });
