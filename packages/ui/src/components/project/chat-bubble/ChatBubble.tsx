@@ -86,7 +86,14 @@ export function ChatBubble({
   const composerPlaceholder = scopePlaceholder(scope);
 
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<Pos | null>(loadPos);
+  // Clamp the persisted position into the *current* viewport at init: a pill
+  // dragged to the edge on a large window would otherwise restore off-screen on
+  // a smaller one (the resize handler below only fires on an actual resize, not
+  // on mount) — the "偶尔看不到浮泡" bug.
+  const [pos, setPos] = useState<Pos | null>(() => {
+    const p = loadPos();
+    return p ? clampCenter(p, window.innerWidth, window.innerHeight) : null;
+  });
   const [size, setSize] = useState<Size | null>(loadSize);
   const [dragging, setDragging] = useState(false);
   const [resizing, setResizing] = useState(false);

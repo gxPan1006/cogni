@@ -40,6 +40,10 @@
 .welcome__subtitle strong { color: var(--ink); font-weight: 500; }
 
 .welcome__composer-block { /* host the composer + chip row */ }
+/* The Composer carries 32px side padding for the conversation view; inside the
+   left-aligned welcome it must sit flush with the greeting / subtitle / chips,
+   which have no such gutter — otherwise the input + status pill look indented. */
+.welcome__composer-block .composer-region { padding: 0; }
 
 .welcome__chips {
   display: flex; flex-wrap: wrap; gap: 8px;
