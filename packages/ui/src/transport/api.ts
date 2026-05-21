@@ -100,6 +100,12 @@ export interface IdentityRow {
   sub: string;
 }
 
+export interface UserProfile {
+  email: string;
+  name: string | null;
+  avatar: string | null;
+}
+
 /**
  * Platform-agnostic transport. Desktop and web each construct one in their
  * own bootstrap (`apps/desktop/src/api.ts`, `apps/web/src/api.ts`) with a
@@ -256,6 +262,16 @@ export class ApiClient {
       `${this.cloudUrl}/api/identities/${kind}/${encodeURIComponent(sub)}`,
       { method: "DELETE", headers: this.authHeaders() },
     );
+
+  // ─── Profile (/api/me) ────────────────────────────────────────────────
+  getMe = (): Promise<UserProfile> =>
+    this.request(`${this.cloudUrl}/api/me`, { headers: this.authHeaders() });
+
+  /** Partial update — only the keys present are written. `null` clears a field. */
+  updateProfile = (patch: { name?: string | null; avatar?: string | null }): Promise<UserProfile> =>
+    this.request(`${this.cloudUrl}/api/me`, {
+      method: "PATCH", headers: this.authHeaders(), body: JSON.stringify(patch),
+    });
 
   // ─── Auth (magic-link) ────────────────────────────────────────────────
   /**
