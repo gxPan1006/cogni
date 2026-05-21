@@ -213,10 +213,14 @@ html, body, #root { height: 100%; }
     transition: transform 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
     box-shadow: var(--shadow-3);
     will-change: transform;
-    /* Drawer is fixed top:0 and (with black-translucent) extends behind the
-       status bar — pad its content down so the cogni wordmark clears the
-       clock instead of colliding with it. */
+    /* The drawer is position:fixed, so it escapes the layout and sits flush to
+       the screen edges — under the notch/status bar (top), the home indicator
+       (bottom), and the curved left edge. Inset its content on all three so the
+       cogni wordmark (top) and the user/settings row (bottom) aren't clipped.
+       The drawer's own background fills the inset gaps. */
     padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
   }
   .layout > .sb.sb--open { transform: translateX(0); }
 
@@ -240,6 +244,15 @@ html, body, #root { height: 100%; }
        cf. the native Claude app) rather than a separate web "chrome" strip. */
     padding: calc(6px + env(safe-area-inset-top, 0px)) 12px 6px;
     background: var(--bg);
+  }
+
+  /* Keep all main content (top bar, conversation, composer) inside the
+     horizontal safe area so nothing is clipped by a curved/notched side edge.
+     0 in portrait; non-zero in landscape or on edge-curved devices. The layout
+     background still bleeds to the physical edge behind these insets. */
+  .layout > .main {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 
   /* The page that fills the rest of .main: drop its hard height:100% (it now
