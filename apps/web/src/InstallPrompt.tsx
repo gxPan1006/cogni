@@ -47,11 +47,20 @@ function isIOSSafari(): boolean {
   return isIOS() && /safari/i.test(ua) && !/crios|fxios|edgios/i.test(ua);
 }
 
+function isIOSNonSafari(): boolean {
+  // Chrome/Edge/Firefox on iOS (CriOS/EdgiOS/FxiOS). They CANNOT add a PWA to
+  // the home screen — Apple only allows it from Safari — so we steer the user
+  // to Safari rather than showing an install affordance that can't work.
+  return isIOS() && /crios|fxios|edgios/i.test(navigator.userAgent);
+}
+
 export function InstallPrompt() {
   const { locale } = useLocale();
   const zh = locale === "zh";
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
-  const [showIOS, setShowIOS] = useState(false);
+  // iOS has no beforeinstallprompt: "safari" ⇒ show the add-to-home hint;
+  // "other" ⇒ a non-Safari iOS browser, steer the user to Safari.
+  const [iosMode, setIosMode] = useState<"safari" | "other" | null>(null);
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem(DISMISS_KEY) === "1";
@@ -69,8 +78,10 @@ export function InstallPrompt() {
     };
     window.addEventListener("beforeinstallprompt", onBIP);
 
-    // No beforeinstallprompt on iOS — show the manual hint there instead.
-    if (isIOSSafari()) setShowIOS(true);
+    // No beforeinstallprompt on iOS — show a manual hint (Safari) or steer to
+    // Safari (other iOS browsers, which can't install at all).
+    if (isIOSSafari()) setIosMode("safari");
+    else if (isIOSNonSafari()) setIosMode("other");
 
     // Hide once installed.
     const onInstalled = () => dismiss();
@@ -91,7 +102,7 @@ export function InstallPrompt() {
     }
     setDismissed(true);
     setDeferred(null);
-    setShowIOS(false);
+    setIosMode(null);
   }
 
   async function install() {
@@ -102,13 +113,18 @@ export function InstallPrompt() {
   }
 
   if (dismissed) return null;
-  if (!deferred && !showIOS) return null;
+  if (!deferred && !iosMode) return null;
 
   return (
     <div className="install-prompt" role="dialog" aria-live="polite">
       <div className="install-prompt__text">
         {deferred ? (
           zh ? "把 Cogni 装到主屏,像 app 一样用" : "Install Cogni to your home screen"
+        ) : iosMode === "other" ? (
+          // Non-Safari iOS browser: can't install here, point to Safari.
+          zh
+            ? "在 iPhone 上请用 Safari 打开本页,才能装到主屏 + 收通知"
+            : "On iPhone, open this page in Safari to install + get notifications"
         ) : (
           <>
             {zh ? "安装 Cogni:点 " : "Install Cogni: tap "}
