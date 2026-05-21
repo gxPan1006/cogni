@@ -9,11 +9,12 @@
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { taskComments, messages } from "./schema.js";
 import type { AnyDb } from "./users.js";
-import type { TaskComment } from "@cogni/contract";
+import type { TaskComment, CommentAttachment } from "@cogni/contract";
 
 type Row = typeof taskComments.$inferSelect;
 
 function toComment(r: Row): TaskComment {
+  const attachments = (r.attachmentsJson as CommentAttachment[] | null) ?? undefined;
   return {
     id: r.id,
     taskId: r.taskId,
@@ -24,6 +25,7 @@ function toComment(r: Row): TaskComment {
     consumedByRunId: r.consumedByRunId,
     authorUserId: r.authorUserId,
     createdAt: r.createdAt.toISOString(),
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
   };
 }
 
@@ -34,6 +36,7 @@ export interface InsertCommentInput {
   state: TaskComment["state"];
   runnerSessionId?: string | null;
   authorUserId?: string | null;
+  attachments?: CommentAttachment[];
 }
 
 export async function insertComment(db: AnyDb, input: InsertCommentInput): Promise<TaskComment> {
@@ -44,6 +47,7 @@ export async function insertComment(db: AnyDb, input: InsertCommentInput): Promi
     state: input.state,
     runnerSessionId: input.runnerSessionId ?? null,
     authorUserId: input.authorUserId ?? null,
+    attachmentsJson: input.attachments && input.attachments.length > 0 ? input.attachments : null,
   }).returning();
   return toComment(rows[0]!);
 }

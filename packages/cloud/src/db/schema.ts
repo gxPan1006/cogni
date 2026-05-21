@@ -242,6 +242,10 @@ export const taskComments = pgTable("task_comments", {
   runnerSessionId: uuid("runner_session_id").references(() => runnerSessions.id),
   consumedByRunId: uuid("consumed_by_run_id").references(() => taskRuns.id),
   authorUserId: uuid("author_user_id").references(() => users.id),
+  // [{name,size}] of files attached to a user note. NULL when none. Staged on
+  // the host under the task's executionThreadId; materialized into the worktree
+  // at the next dispatch (same pattern as messages.attachments_json).
+  attachmentsJson: jsonb("attachments_json"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => ({
   byTaskCreated: index("task_comments_task_created_idx").on(t.taskId, t.createdAt),

@@ -257,6 +257,14 @@ export const TASK_COMMENT_AUTHORS = ["worker", "user"] as const;
 export type TaskCommentAuthor = (typeof TASK_COMMENT_AUTHORS)[number];
 export const taskCommentAuthorSchema = z.enum(TASK_COMMENT_AUTHORS);
 
+/** File attached to a comment. Same shape as the chat `attachmentSchema`, but
+ *  defined here to avoid a project.ts ↔ protocol.ts import cycle. */
+export const commentAttachmentSchema = z.object({
+  name: z.string(),
+  size: z.number().int().min(0),
+});
+export type CommentAttachment = z.infer<typeof commentAttachmentSchema>;
+
 export interface TaskComment {
   id: string;
   taskId: string;
@@ -267,6 +275,9 @@ export interface TaskComment {
   consumedByRunId: string | null;
   authorUserId: string | null;
   createdAt: string;
+  /** Files the user attached to this note; staged on the host under the task's
+   *  executionThreadId and materialized into the worktree on the next run. */
+  attachments?: CommentAttachment[];
 }
 
 export const taskCommentSchema: z.ZodType<TaskComment> = z.object({
@@ -279,6 +290,7 @@ export const taskCommentSchema: z.ZodType<TaskComment> = z.object({
   consumedByRunId: z.string().nullable(),
   authorUserId: z.string().nullable(),
   createdAt: z.string(),
+  attachments: z.array(commentAttachmentSchema).optional(),
 });
 
 // ─── Event-kind unions used by WS push payloads ─────────────────────────────

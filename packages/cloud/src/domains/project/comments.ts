@@ -56,10 +56,21 @@ export async function captureWorkerNote(
   }
 }
 
-/** Render unconsumed user comments into a runner-context block, or null if none. */
+/** Render unconsumed user comments into a runner-context block, or null if none.
+ *  A comment's attachments are named as `./.cogni-uploads/<file>` (same path the
+ *  host materializes them to) so the worker knows where to read them. */
 export function renderCommentsForRunner(comments: TaskComment[]): string | null {
   if (comments.length === 0) return null;
   const lines = ["# 人类补充说明", "(以下是人类在上一次运行后追加的说明,请一并考虑)", ""];
-  for (const c of comments) lines.push(`- ${c.body.trim()}`);
+  for (const c of comments) {
+    lines.push(`- ${c.body.trim()}`);
+    for (const a of c.attachments ?? []) lines.push(`  - 附件: ./.cogni-uploads/${a.name}`);
+  }
   return lines.join("\n");
+}
+
+/** Flatten the attachment metadata across comments for the dispatch frame, so
+ *  the host materializes the staged files into the worktree before the run. */
+export function commentAttachments(comments: TaskComment[]): { name: string; size: number }[] {
+  return comments.flatMap((c) => c.attachments ?? []);
 }

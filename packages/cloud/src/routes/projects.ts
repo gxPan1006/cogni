@@ -122,7 +122,10 @@ const fsBrowseSchema = z.object({
 });
 
 /** Body of POST /api/tasks/:taskId/comments — an inert human note. */
-const commentBodySchema = z.object({ body: z.string().min(1).max(8000) });
+const commentBodySchema = z.object({
+  body: z.string().min(1).max(8000),
+  attachments: z.array(z.object({ name: z.string(), size: z.number().int().min(0) })).optional(),
+});
 
 /** Body of PATCH /api/tasks/:taskId/state — the kanban drag target column. */
 const moveStateSchema = z.object({ to: taskStateSchema });
@@ -634,6 +637,9 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
         taskId: owned.task.id,
         userId,
         body: parsed.data.body,
+        ...(parsed.data.attachments && parsed.data.attachments.length > 0
+          ? { attachments: parsed.data.attachments }
+          : {}),
       });
       return c.json(comment, 201);
     } catch (err) {

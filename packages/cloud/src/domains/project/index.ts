@@ -61,6 +61,7 @@ import type {
   TaskRun,
   TaskState,
   TaskComment,
+  CommentAttachment,
   FsBrowseResponse,
   ReadFileResponse,
   GitDiffSnapshotResponse,
@@ -71,7 +72,7 @@ import { HostRpcClient, HostRpcError, type HostRpcLogger } from "./host-rpc.js";
 import { transitionTask, StateMismatch } from "./lifecycle.js";
 import { evaluateAndApplyMergeGate } from "./merge-gate.js";
 import { ProjectOrchestrator } from "./orchestrator.js";
-import { captureWorkerNote, renderCommentsForRunner } from "./comments.js";
+import { captureWorkerNote, renderCommentsForRunner, commentAttachments } from "./comments.js";
 
 export interface ProjectDomainDeps {
   db: AnyDb;
@@ -247,6 +248,10 @@ export class ProjectDomain {
     const commentBlock = renderCommentsForRunner(unconsumed);
     const content = commentBlock ? `${input.content}\n\n${commentBlock}` : input.content;
 
+    // Materialize both the reply's own attachments AND any files attached to the
+    // folded-in comments (both were staged under this executionThreadId).
+    const attachments = [...(input.attachments ?? []), ...commentAttachments(unconsumed)];
+
     // Reuse SP-1's send pipeline: writes message to thread, opens/reuses
     // runner_session, sends dispatch frame to the host. This is the same
     // code path the chat UI uses; the runner's --resume keeps context.
@@ -255,7 +260,7 @@ export class ProjectDomain {
       threadId: task.executionThreadId,
       content,
       sourceClientId: input.sourceClientId,
-      ...(input.attachments && input.attachments.length > 0 ? { attachments: input.attachments } : {}),
+      ...(attachments.length > 0 ? { attachments } : {}),
     });
 
     // `replyToTask` reuses the existing run (no fresh task_runs row), so stamp
@@ -598,7 +603,12 @@ export class ProjectDomain {
    * task overview and it appears as a human card; it becomes runner input only
    * when the task is next (re)dispatched (orchestrator dispatch / replyToTask).
    */
-  async addUserComment(input: { taskId: string; userId: string; body: string }): Promise<TaskComment> {
+  async addUserComment(input: {
+    taskId: string;
+    userId: string;
+    body: string;
+    attachments?: CommentAttachment[];
+  }): Promise<TaskComment> {
     const task = await dbGetTask(this.deps.db, input.taskId);
     if (!task) throw new Error(`addUserComment: task ${input.taskId} not found`);
     const comment = await insertComment(this.deps.db, {
@@ -609,6 +619,7 @@ export class ProjectDomain {
       // note was written; it has no lifecycle effect.
       state: task.state,
       authorUserId: input.userId,
+      ...(input.attachments && input.attachments.length > 0 ? { attachments: input.attachments } : {}),
     });
     this.broadcastComment(comment, "created");
     return comment;

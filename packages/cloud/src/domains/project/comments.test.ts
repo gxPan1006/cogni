@@ -36,7 +36,7 @@ import type { HostRpcRequest, HostRpcResponse, TaskComment } from "@cogni/contra
  * records the `handleClientSend` calls (so we can assert the folded content
  * without a real runner).
  */
-const mk = (body: string): TaskComment => ({
+const mk = (body: string, attachments?: { name: string; size: number }[]): TaskComment => ({
   id: "c",
   taskId: "t",
   author: "user",
@@ -46,6 +46,7 @@ const mk = (body: string): TaskComment => ({
   consumedByRunId: null,
   authorUserId: "u",
   createdAt: "2026-05-21T00:00:00.000Z",
+  ...(attachments ? { attachments } : {}),
 });
 
 describe("renderCommentsForRunner", () => {
@@ -57,6 +58,23 @@ describe("renderCommentsForRunner", () => {
     expect(out).toContain("# 人类补充说明");
     expect(out).toContain("- 改成深色主题");
     expect(out).toContain("- 加音效");
+  });
+  it("names each comment's attachments at ./.cogni-uploads/<file>", () => {
+    const out = renderCommentsForRunner([mk("按这张图改", [{ name: "ref.png", size: 10 }])]);
+    expect(out).toContain("- 按这张图改");
+    expect(out).toContain("附件: ./.cogni-uploads/ref.png");
+  });
+});
+
+describe("commentAttachments", () => {
+  it("flattens attachment metadata across comments", async () => {
+    const { commentAttachments } = await import("./comments.js");
+    const out = commentAttachments([
+      mk("a", [{ name: "x.png", size: 1 }]),
+      mk("b"),
+      mk("c", [{ name: "y.pdf", size: 2 }]),
+    ]);
+    expect(out).toEqual([{ name: "x.png", size: 1 }, { name: "y.pdf", size: 2 }]);
   });
 });
 
@@ -84,10 +102,10 @@ async function seed() {
   const clients = new ClientHub();
 
   // Fake ChatDomain — only `handleClientSend` is exercised by replyToTask.
-  const sentSends: { content: string }[] = [];
+  const sentSends: { content: string; attachments?: { name: string; size: number }[] }[] = [];
   const chat = {
-    handleClientSend: vi.fn(async (input: { content: string }) => {
-      sentSends.push({ content: input.content });
+    handleClientSend: vi.fn(async (input: { content: string; attachments?: { name: string; size: number }[] }) => {
+      sentSends.push({ content: input.content, attachments: input.attachments });
     }),
   } as unknown as ChatDomain;
 
@@ -195,6 +213,30 @@ describe("comment injection at replyToTask", () => {
     await f.close();
   });
 
+  it("forwards a folded comment's attachments so the host materializes them", async () => {
+    const f = await seed();
+    await updateTaskState(f.db, f.task.id, "needs-input", {});
+    const session = await openRunnerSession(f.db, {
+      threadId: f.thread.id, hostId: f.host.hostId, adapter: "claude-code",
+    });
+    await createTaskRun(f.db, {
+      taskId: f.task.id, runnerSessionId: session.id, attemptNumber: 1, startedAt: new Date(),
+    });
+    await insertComment(f.db, {
+      taskId: f.task.id, author: "user", body: "按图改", state: "needs-input",
+      authorUserId: f.user.id, attachments: [{ name: "ref.png", size: 99 }],
+    });
+
+    await f.domain.replyToTask({
+      taskId: f.task.id, userId: f.user.id, content: "继续", sourceClientId: "test",
+    });
+
+    const last = f.sentSends.at(-1)!;
+    expect(last.content).toContain("./.cogni-uploads/ref.png");
+    expect(last.attachments).toEqual([{ name: "ref.png", size: 99 }]);
+    await f.close();
+  });
+
   it("leaves content unchanged when there are no comments", async () => {
     const f = await seed();
     await updateTaskState(f.db, f.task.id, "needs-input", {});
@@ -233,6 +275,18 @@ describe("addUserComment / deleteUserComment", () => {
       expect.objectContaining({ t: "task-comment", kind: "created" }),
     );
     expect(await listTaskRuns(f.db, f.task.id)).toEqual([]); // no run started
+    await f.close();
+  });
+
+  it("persists + round-trips comment attachments", async () => {
+    const f = await seed();
+    const c = await f.domain.addUserComment({
+      taskId: f.task.id, userId: f.user.id, body: "看这个",
+      attachments: [{ name: "spec.pdf", size: 1234 }],
+    });
+    expect(c.attachments).toEqual([{ name: "spec.pdf", size: 1234 }]);
+    const list = await listComments(f.db, f.task.id);
+    expect(list.find((x) => x.id === c.id)!.attachments).toEqual([{ name: "spec.pdf", size: 1234 }]);
     await f.close();
   });
 

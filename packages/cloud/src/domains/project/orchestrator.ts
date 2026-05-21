@@ -65,7 +65,7 @@ import { HostRpcError, type HostRpcClient, type HostRpcLogger } from "./host-rpc
 import { evaluateAndApplyMergeGate } from "./merge-gate.js";
 import { transitionTask, StateMismatch } from "./lifecycle.js";
 import { gatherUnconsumedUserComments, markCommentsConsumed } from "../../db/task-comments.js";
-import { renderCommentsForRunner } from "./comments.js";
+import { renderCommentsForRunner, commentAttachments } from "./comments.js";
 
 const TICK_INTERVAL_MS = 5_000;
 const HOST_OFFLINE_THRESHOLD_MS = 60_000;
@@ -448,6 +448,10 @@ export class ProjectOrchestrator {
       if (commentBlock) {
         messageParts.push("", commentBlock);
       }
+      // Files attached to the folded-in comments were staged on the host under
+      // this executionThreadId; carry their names so the host materializes them
+      // into the worktree cwd before the runner turn (same mechanism as chat).
+      const attachments = commentAttachments(unconsumed);
       const frame: CloudToHost = {
         t: "dispatch",
         sessionId: session.id,
@@ -459,6 +463,7 @@ export class ProjectOrchestrator {
         // worktree was created via gitWorktreeCreate above so the path is
         // guaranteed to exist on the host.
         workspacePath: worktreePath,
+        ...(attachments.length > 0 ? { attachments } : {}),
       };
       conn.send(frame);
     } catch (err) {

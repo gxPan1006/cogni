@@ -427,10 +427,17 @@ export class ApiClient {
       headers: this.authHeaders(),
     });
 
-  /** Post an inert human comment. No state transition, no runner contact. */
-  addTaskComment = (taskId: string, body: string): Promise<TaskComment> =>
+  /** Post an inert human comment. No state transition, no runner contact.
+   *  `attachments` (names already uploaded via {@link uploadTaskFile}) are
+   *  materialized into the worktree when the task is next dispatched. */
+  addTaskComment = (
+    taskId: string,
+    body: string,
+    attachments?: { name: string; size: number }[],
+  ): Promise<TaskComment> =>
     this.request(`${this.cloudUrl}/api/tasks/${taskId}/comments`, {
-      method: "POST", headers: this.authHeaders(), body: JSON.stringify({ body }),
+      method: "POST", headers: this.authHeaders(),
+      body: JSON.stringify(attachments && attachments.length > 0 ? { body, attachments } : { body }),
     });
 
   /** Delete one's own un-consumed comment. */

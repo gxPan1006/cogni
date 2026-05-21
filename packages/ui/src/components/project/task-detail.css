@@ -336,4 +336,67 @@
 .tc__card--add:hover { border-color: var(--accent); color: var(--accent); }
 .tc__add-plus { font-size: 22px; line-height: 1; display: inline-flex; }
 .tc__add-hint { font-size: 12px; }
-.tc__card--compose { min-height: auto; grid-column: 1 / -1; padding: 8px; }
+/* Inline composer: the card IS the box — no nested Composer card, no attach /
+   model affordances. Just a borderless textarea + a quiet send row. */
+.tc__card--compose {
+  min-height: auto;
+  grid-column: 1 / -1;
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.tc__compose-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  resize: none;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+  padding: 0;
+}
+.tc__compose-input::placeholder { color: var(--muted); }
+.tc__compose-tray { display: flex; flex-wrap: wrap; gap: 8px; }
+.tc__compose-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 10px;
+}
+.tc__compose-left { display: flex; align-items: center; gap: 10px; }
+.tc__compose-attach {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0;
+  border: 0; border-radius: var(--r-2); background: transparent;
+  color: var(--muted); cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.tc__compose-attach:hover { background: var(--bg-sunk); color: var(--ink); }
+.tc__compose-hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.tc__card-atts { display: flex; flex-wrap: wrap; gap: 8px; }
+.tc__compose-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-2);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+.tc__compose-send:hover:not(:disabled) { background: var(--accent); color: var(--bg); }
+.tc__compose-send:disabled { opacity: 0.4; cursor: default; }
