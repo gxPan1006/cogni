@@ -47,7 +47,7 @@ export function ChatPanel({
   onNew: () => void;
   onBack: () => void;
   onClose: () => void;
-  onResizeStart: (e: React.MouseEvent) => void;
+  onResizeStart: (e: React.PointerEvent) => void;
   onTitled: (id: string, title: string) => void;
 }) {
   const { t } = useTranslation();
@@ -55,7 +55,7 @@ export function ChatPanel({
     <div className="cb-panel" role="dialog" aria-label={t("chat.bubble.dialogLabel")}>
       <div
         className="cb-resize"
-        onMouseDown={onResizeStart}
+        onPointerDown={onResizeStart}
         title={t("chat.bubble.resizeTitle")}
         aria-label={t("chat.bubble.resizeAria")}
       />

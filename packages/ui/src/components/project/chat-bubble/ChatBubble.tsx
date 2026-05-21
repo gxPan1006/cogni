@@ -177,7 +177,10 @@ export function ChatBubble({
   );
 
   // ── Drag ──────────────────────────────────────────────────────────────
-  const onBubbleMouseDown = (e: React.MouseEvent) => {
+  // Pointer events (not mouse) so a finger drag works on mobile web / PWA:
+  // touch never synthesises continuous `mousemove`, so the old mouse-only
+  // handlers left the pill un-draggable on phones.
+  const onBubblePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     dragRef.current = {
@@ -190,7 +193,7 @@ export function ChatBubble({
   };
 
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
+    const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
       const dx = e.clientX - d.startX;
@@ -224,11 +227,13 @@ export function ChatBubble({
         window.addEventListener("click", swallow, true);
       }
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
   }, [dragging]);
 
@@ -245,7 +250,7 @@ export function ChatBubble({
   // The panel hangs upward from the pill, so its bottom edge is the anchor.
   // Doubling the horizontal delta makes the (re-centred) top-left corner track
   // the cursor 1:1; the upward height tracks 1:1 too.
-  const onResizeStart = useCallback((e: React.MouseEvent) => {
+  const onResizeStart = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
@@ -257,7 +262,7 @@ export function ChatBubble({
 
   useEffect(() => {
     if (!resizing) return;
-    const onMove = (e: MouseEvent) => {
+    const onMove = (e: PointerEvent) => {
       const r = resizeRef.current;
       if (!r) return;
       const dx = r.startX - e.clientX;
@@ -278,11 +283,13 @@ export function ChatBubble({
         return s;
       });
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
   }, [resizing, pos]);
 
@@ -348,7 +355,7 @@ export function ChatBubble({
       <div className="cb-bubble-wrap" style={bubbleStyle}>
         <button
           className={"cb-bubble" + (open ? " is-open" : "") + (dragging ? " is-dragging" : "")}
-          onMouseDown={onBubbleMouseDown}
+          onPointerDown={onBubblePointerDown}
           onClick={() => setOpen((o) => !o)}
           aria-label={open ? t("chat.bubble.collapse") : t("chat.bubble.open")}
           type="button"

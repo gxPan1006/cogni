@@ -60,6 +60,9 @@
   letter-spacing: -0.005em;
   user-select: none;
   -webkit-user-select: none;
+  /* Claim the touch as a drag gesture, not a page scroll, so the pill is
+     draggable on mobile web / PWA. */
+  touch-action: none;
 }
 .cb-bubble:hover {
   transform: translateY(-1px);
@@ -169,6 +172,7 @@
   height: 20px;
   z-index: 5;
   cursor: nwse-resize;
+  touch-action: none;
   border-top: 2px solid transparent;
   border-left: 2px solid transparent;
   border-top-left-radius: 18px;
