@@ -214,3 +214,6 @@
 }
 .settings__projroot .np__path { width: 100%; }
 .settings__projroot .input { flex: 1; }
+
+.settings-avatar-btn { background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; }
+.settings-avatar-btn:hover { opacity: 0.85; }

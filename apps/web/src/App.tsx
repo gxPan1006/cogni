@@ -33,7 +33,7 @@ import {
   ProjectsList, ProjectBoard, TaskDetail,
   NewProject, NewTask, ProjectSettings,
   useProjects, useProjectBoard, useGlobalShortcuts, useAutoHideScrollbars, Icon,
-  ChatBubble, useTranslation,
+  ChatBubble, useTranslation, useMe,
   type HostInfo, type ProjectListItem, type NewProjectDraft, type NewTaskDraft,
 } from "@cogni/ui";
 import { api, ApiError } from "./api.js";
@@ -229,12 +229,14 @@ function WebShell({ page }: { page: Page }) {
   );
   const hostName = primaryHost?.name;
 
+  const { profile } = useMe(api);
   const user = useMemo(() => {
     const claims = decodeJwt(token ?? "");
-    if (!claims?.email) return undefined;
-    const name = claims.email.split("@")[0] ?? claims.email;
-    return { name, email: claims.email };
-  }, [token]);
+    const email = profile?.email ?? claims?.email;
+    if (!email) return undefined;
+    const name = profile?.name ?? email.split("@")[0] ?? email;
+    return { name, email, avatar: profile?.avatar ?? null };
+  }, [token, profile]);
 
   // Delete a still-empty draft thread (local list + cloud). No-op once the ref
   // has been cleared by `onActivity`.

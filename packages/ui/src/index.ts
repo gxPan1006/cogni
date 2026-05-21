@@ -25,6 +25,7 @@ export { useThreadStream } from "./hooks/useThreadStream.js";
 export { useAuthCore } from "./hooks/useAuth-core.js";
 export { useDevices } from "./hooks/useDevices.js";
 export { useIdentities } from "./hooks/useIdentities.js";
+export { useMe } from "./hooks/useMe.js";
 export { useHosts } from "./hooks/useHosts.js";
 export { useGlobalShortcuts } from "./hooks/useGlobalShortcuts.js";
 export type { GlobalShortcutHandlers } from "./hooks/useGlobalShortcuts.js";
@@ -46,6 +47,7 @@ export { LogoMark } from "./components/LogoMark.js";
 export { HostFallbackCard } from "./components/HostFallbackCard.js";
 export { NoHostBanner } from "./components/NoHostBanner.js";
 export { SettingsPage } from "./components/SettingsPage.js";
+export { Avatar } from "./components/Avatar.js";
 
 // Lower-level chat building blocks (Conversation composes them; apps that
 // want to render messages outside of Conversation can use them directly)

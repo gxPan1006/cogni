@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import type { ThreadSummary } from "@cogni/contract";
 import { Icon } from "./icons.js";
 import { LogoMark } from "./LogoMark.js";
+import { Avatar } from "./Avatar.js";
 import "./sidebar.css";
 
 /**
@@ -64,7 +65,7 @@ export function Sidebar(props: {
   onLogout: () => void;
   onOpenSettings?: () => void;
   hosts?: { online: number; total: number };
-  user?: { name: string; email: string };
+  user?: { name: string; email: string; avatar?: string | null };
 
   /**
    * Mobile drawer state. On narrow viewports the rail is positioned off-canvas
@@ -88,7 +89,6 @@ export function Sidebar(props: {
 }) {
   const { t } = useTranslation();
   const user = props.user ?? { name: "Cogni", email: "" };
-  const initial = user.name.slice(0, 1).toUpperCase();
 
   const isChat = props.mode === "chat";
 
@@ -190,7 +190,7 @@ export function Sidebar(props: {
       )}
 
       <button className="sb__user" onClick={() => { props.onOpenSettings?.(); props.onNavigate?.(); }}>
-        <span className="sb__avatar">{initial}</span>
+        <Avatar name={user.name} avatar={user.avatar} size={26} className="sb__avatar" />
         <span className="sb__user-text">
           <span className="sb__user-name">{user.name}</span>
           {user.email && <span className="sb__user-email">{user.email}</span>}

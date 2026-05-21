@@ -8,11 +8,14 @@
  * `user` prop carries the display name + email until /api/me lands; pass it
  * down from whatever decoded the JWT (Shell.tsx on desktop, WebShell on web).
  */
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "./icons.js";
 import type { ApiClient, HostInfo } from "../transport/api.js";
 import { useIdentities } from "../hooks/useIdentities.js";
+import { useMe } from "../hooks/useMe.js";
+import { Avatar } from "./Avatar.js";
+import { AvatarCropper } from "./AvatarCropper.js";
 import { useDevices } from "../hooks/useDevices.js";
 import { useHosts } from "../hooks/useHosts.js";
 import { useTheme } from "../hooks/useTheme.js";
@@ -28,7 +31,7 @@ export function SettingsPage({
   onClose,
 }: {
   api: ApiClient;
-  user?: { name: string; email: string };
+  user?: { name: string; email: string; avatar?: string | null };
   onClose?: () => void;
 }) {
   const [page, setPage] = useState<Page>("account");
@@ -84,24 +87,100 @@ function AccountPage({
   api, user,
 }: {
   api: ApiClient;
-  user: { name: string; email: string };
+  user: { name: string; email: string; avatar?: string | null };
 }) {
   const { t } = useTranslation();
-  const initial = user.name.slice(0, 1).toUpperCase();
+  const { profile, update } = useMe(api);
   const { identities, loading, remove } = useIdentities(api);
   // Guard against locking yourself out — disable the last Disconnect button.
   const canRemove = identities.length > 1;
+
+  // Live values: prefer the freshly-fetched profile, fall back to the prop
+  // (JWT-derived) until /api/me resolves.
+  const displayName = profile?.name ?? user.name;
+  const avatar = profile?.avatar ?? user.avatar ?? null;
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(displayName);
+  const [error, setError] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const saveName = async () => {
+    const trimmed = draft.trim();
+    if (trimmed.length > 50) { setError(t("settings.account.nameTooLong")); return; }
+    setError(null);
+    await update({ name: trimmed });   // "" clears to email-prefix on the server
+    setEditing(false);
+  };
+
+  const pickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";   // allow re-picking the same file
+    if (!f) return;
+    if (!/^image\/(png|jpeg|webp)$/.test(f.type)) { setError(t("settings.account.avatarBadType")); return; }
+    setError(null);
+    setCropFile(f);
+  };
+
+  const saveAvatar = async (dataUrl: string) => {
+    setCropFile(null);
+    try {
+      await update({ avatar: dataUrl });
+    } catch {
+      setError(t("settings.account.avatarTooLarge"));
+    }
+  };
 
   return (
     <>
       <SectionHead title={t("settings.account.title")} subtitle={t("settings.account.subtitle")} />
       <div className="settings-card">
         <Row
-          icon={<span className="settings-bigchar">{initial}</span>}
-          title={user.name}
+          icon={
+            <button
+              className="settings-avatar-btn"
+              onClick={() => fileRef.current?.click()}
+              title={t("settings.account.changeAvatar")}
+            >
+              <Avatar name={displayName} avatar={avatar} size={32} />
+            </button>
+          }
+          title={
+            editing ? (
+              <input
+                className="settings-card__rename-input"
+                value={draft}
+                autoFocus
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void saveName();
+                  else if (e.key === "Escape") { setEditing(false); setError(null); }
+                }}
+              />
+            ) : displayName
+          }
           sub={`${user.email} · ${t("settings.account.tenantSuffix")}`}
-          right={<button className="btn btn-sm btn-ghost" disabled title={t("settings.account.renameDisabledTitle")}>{t("settings.account.rename")}</button>}
+          right={
+            editing ? (
+              <div className="settings-card__row-actions">
+                <button className="btn btn-sm" onClick={() => { void saveName(); }}>{t("settings.account.renameSave")}</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => { setEditing(false); setError(null); }}>{t("settings.account.renameCancel")}</button>
+              </div>
+            ) : (
+              <div className="settings-card__row-actions">
+                <button className="btn btn-sm btn-ghost" onClick={() => { setDraft(displayName); setEditing(true); }}>{t("settings.account.rename")}</button>
+                {avatar && (
+                  <button className="btn btn-sm btn-ghost" style={{ color: "var(--bad)" }} onClick={() => { void update({ avatar: null }); }}>
+                    {t("settings.account.removeAvatar")}
+                  </button>
+                )}
+              </div>
+            )
+          }
         />
+        {error && <div className="settings-card__foot" style={{ color: "var(--bad)" }}>{error}</div>}
+        <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={pickFile} />
       </div>
 
       <SectionHead title={t("settings.account.methodsTitle")} subtitle={t("settings.account.methodsSubtitle")} />
@@ -133,6 +212,10 @@ function AccountPage({
           <span>{t("settings.account.keepOneMethod")}</span>
         </div>
       </div>
+
+      {cropFile && (
+        <AvatarCropper file={cropFile} onConfirm={(url) => { void saveAvatar(url); }} onCancel={() => setCropFile(null)} />
+      )}
     </>
   );
 }

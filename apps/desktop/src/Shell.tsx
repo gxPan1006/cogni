@@ -38,6 +38,7 @@ import {
   ChatBubble,
   Icon,
   useTranslation,
+  useMe,
   type ProjectListItem, type NewProjectDraft, type NewTaskDraft,
 } from "@cogni/ui";
 
@@ -164,12 +165,15 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   );
   const hostName = primaryHost?.name;
 
-  // SP-2 will swap this for /api/me; for now decode the JWT we already have.
+  // First paint from the JWT email; /api/me overlays the real name/avatar.
+  const { profile } = useMe(api);
   const user = useMemo(() => {
     const claims = decodeJwt(token);
-    if (!claims?.email) return undefined;
-    return { name: claims.email.split("@")[0]!, email: claims.email };
-  }, [token]);
+    const email = profile?.email ?? claims?.email;
+    if (!email) return undefined;
+    const name = profile?.name ?? email.split("@")[0]!;
+    return { name, email, avatar: profile?.avatar ?? null };
+  }, [token, profile]);
 
   // Delete a still-empty draft thread (local list + cloud). No-op once the ref
   // has been cleared by `onActivity`.
