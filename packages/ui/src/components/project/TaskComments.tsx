@@ -31,6 +31,8 @@ export function TaskComments({ api, taskId }: { api: ApiClient; taskId: string }
   const { comments, loading, add, remove } = useTaskComments(api, taskId);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
+  // Card opened into the full-markdown detail modal (null = closed).
+  const [openComment, setOpenComment] = useState<TaskComment | null>(null);
   // Reuse the chat upload pipeline: files stage on the task's host under its
   // executionThreadId; their names ride the comment and get materialized into
   // the worktree at the next run. (Upload 409s if the task hasn't started.)
@@ -57,7 +59,7 @@ export function TaskComments({ api, taskId }: { api: ApiClient; taskId: string }
       <div className="tc__head">评论 · 交接说明</div>
       <div className="tc__grid">
         {comments.map((c) => (
-          <CommentCard key={c.id} comment={c} onDelete={() => void remove(c.id)} />
+          <CommentCard key={c.id} comment={c} onDelete={() => void remove(c.id)} onOpen={() => setOpenComment(c)} />
         ))}
         {adding ? (
           <CommentComposer draft={draft} setDraft={setDraft} onSubmit={submit} onCancel={cancel} uploads={uploads} />
@@ -70,6 +72,7 @@ export function TaskComments({ api, taskId }: { api: ApiClient; taskId: string }
           </button>
         )}
       </div>
+      {openComment && <CommentDetailModal comment={openComment} onClose={() => setOpenComment(null)} />}
     </section>
   );
 }
@@ -178,10 +181,17 @@ function CommentComposer({
   );
 }
 
-function CommentCard({ comment, onDelete }: { comment: TaskComment; onDelete: () => void }) {
+function CommentCard({ comment, onDelete, onOpen }: { comment: TaskComment; onDelete: () => void; onOpen: () => void }) {
   const isWorker = comment.author === "worker";
   return (
-    <div className={"tc__card" + (isWorker ? " tc__card--worker" : " tc__card--user")}>
+    <div
+      className={"tc__card tc__card--clickable" + (isWorker ? " tc__card--worker" : " tc__card--user")}
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
+      title="点击查看完整内容"
+    >
       <div className="tc__card-head">
         <span className="tc__avatar">{isWorker ? Icon.spark : Icon.user}</span>
         {isWorker && (
@@ -191,10 +201,17 @@ function CommentCard({ comment, onDelete }: { comment: TaskComment; onDelete: ()
         )}
         {!isWorker && comment.consumedByRunId && <span className="tc__badge">已交给 worker</span>}
         {!isWorker && !comment.consumedByRunId && (
-          <button className="tc__del" title="删除" onClick={onDelete}>{Icon.x}</button>
+          <button
+            className="tc__del"
+            title="删除"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          >
+            {Icon.x}
+          </button>
         )}
       </div>
-      <div className="tc__card-body"><Markdown text={comment.body} /></div>
+      {/* Clamped preview — full markdown lives in the detail modal on click. */}
+      <div className="tc__card-body tc__card-body--clamp"><Markdown text={comment.body} /></div>
       {comment.attachments && comment.attachments.length > 0 && (
         <div className="tc__card-atts">
           {comment.attachments.map((a) => (
@@ -203,6 +220,48 @@ function CommentCard({ comment, onDelete }: { comment: TaskComment; onDelete: ()
         </div>
       )}
       <time className="tc__time">{formatAgo(comment.createdAt)}</time>
+    </div>
+  );
+}
+
+/**
+ * Full-content modal for one comment — opens on card click, renders the body as
+ * Markdown (cards only show a clamped preview). Sits above the TaskDetail modal;
+ * its Escape listener captures + stops propagation so closing it doesn't also
+ * close the parent task panel.
+ */
+function CommentDetailModal({ comment, onClose }: { comment: TaskComment; onClose: () => void }) {
+  const isWorker = comment.author === "worker";
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); onClose(); }
+    };
+    document.addEventListener("keydown", onKey, true); // capture: preempt TaskDetail's Esc
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+
+  return (
+    <div className="tcd-scrim" onClick={onClose}>
+      <div className="tcd" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="tcd__head">
+          <span className="tcd__who">
+            <span className="tc__avatar">{isWorker ? Icon.spark : Icon.user}</span>
+            {isWorker
+              ? <span className="tc__chip" style={{ color: STATE_COLOR[comment.state] }}>{STATE_CHIP[comment.state] ?? comment.state}</span>
+              : <span className="tcd__who-label">人类备注</span>}
+            <time className="tcd__time">{formatAgo(comment.createdAt)}</time>
+          </span>
+          <button className="td__icon-btn" onClick={onClose} title="关闭 (Esc)" aria-label="关闭">{Icon.x}</button>
+        </div>
+        <div className="tcd__body"><Markdown text={comment.body} /></div>
+        {comment.attachments && comment.attachments.length > 0 && (
+          <div className="tcd__atts">
+            {comment.attachments.map((a) => (
+              <AttachmentCard key={a.name} name={a.name} size={a.size} status="done" />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
