@@ -1,0 +1,36 @@
+.avatar {
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: oklch(98% 0.01 80);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  line-height: 1;
+}
+img.avatar { background: var(--surface-2, transparent); }
+
+.cropper__backdrop {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  background: oklch(0% 0 0 / 0.5);
+}
+.cropper {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px; display: flex;
+  flex-direction: column; gap: 12px; align-items: stretch;
+}
+.cropper__title { font-weight: 600; font-size: 14px; }
+.cropper__viewport {
+  position: relative; overflow: hidden; border-radius: 50%;
+  touch-action: none; cursor: grab; user-select: none;
+  background: var(--surface-2, #0002);
+}
+.cropper__viewport:active { cursor: grabbing; }
+.cropper__img { position: absolute; top: 0; left: 0; max-width: none; pointer-events: none; }
+.cropper__ring { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 2px var(--accent) inset; pointer-events: none; }
+.cropper__zoom { width: 100%; }
+.cropper__actions { display: flex; justify-content: flex-end; gap: 8px; }
