@@ -151,8 +151,14 @@
   transition: background .12s, color .12s;
   width: 100%;
 }
-.sb-thread:hover     { background: var(--bg-sunk); color: var(--ink); }
 .sb-thread.is-active { background: var(--surface); box-shadow: var(--shadow-1); color: var(--ink); }
+/* Hover styling is gated to real-hover (pointer) devices. On touch, an iOS
+   :hover rule that reveals content makes the *first* tap a no-op (it just shows
+   the hover state) and forces a second tap to actually open the thread — see
+   the @media (hover: none) block below for the touch behavior. */
+@media (hover: hover) {
+  .sb-thread:hover { background: var(--bg-sunk); color: var(--ink); }
+}
 .sb-thread__title {
   flex: 1; min-width: 0;
   padding: 8px 10px;
@@ -171,10 +177,18 @@
   opacity: 0;
   transition: opacity .12s;
 }
-.sb-thread:hover .sb-thread__actions,
 .sb-thread.is-active .sb-thread__actions,
 .sb-thread.is-menu-open .sb-thread__actions,
 .sb-thread.is-editing .sb-thread__actions { opacity: 1; }
+@media (hover: hover) {
+  .sb-thread:hover .sb-thread__actions { opacity: 1; }
+}
+/* Touch devices have no hover, so reveal the actions outright — otherwise the
+   ⋮ menu would be unreachable, and gating the reveal also removes the iOS
+   first-tap-eaten-by-hover bug so a single tap opens the thread. */
+@media (hover: none) {
+  .sb-thread__actions { opacity: 1; }
+}
 .sb-thread__act {
   display: inline-flex; align-items: center; justify-content: center;
   width: 24px; height: 24px;
