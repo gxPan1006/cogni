@@ -8,26 +8,19 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig({
   plugins: [
     react(),
-    // PWA: makes the web app installable to the home screen (full-screen, own
-    // icon) on iOS 16.4+ / Android. Phase 1 = installable shell only; push
-    // notifications come later (needs cloud-side web-push + VAPID).
+    // SELF-DESTROYING service worker. The precaching SW caused recurring pain on
+    // iOS: Cloudflare cached sw.js (stale app), and a reload loop that the SW's
+    // own caching made impossible to push a fix into. `selfDestroying` ships a
+    // tiny SW that unregisters itself + clears all caches on every client that
+    // still has the old one — including a looping one, because it's tiny and
+    // activates instantly. Result: the app reverts to a plain web page (no SW,
+    // no offline cache, no update loop) that always loads fresh from the network.
+    // It stays installable to the home screen via the manifest below.
+    // NOTE: Web Push needs a service worker, so push is disabled while this is
+    // on. Re-introduce a real SW deliberately once the app is stable again.
     VitePWA({
-      // injectManifest: we hand-write the service worker (src/sw.ts) so it can
-      // host `push` / `notificationclick` handlers for Web Push. The plugin
-      // injects only the precache manifest into it. (generateSW can't host
-      // custom handlers.) The SW still self.skipWaiting()+clientsClaim() so a
-      // new deploy never pins users to a stale bundle — the web analogue of the
-      // "stale Cogni.app / orphaned process" trap in MEMORY.md.
-      strategies: "injectManifest",
-      srcDir: "src",
-      filename: "sw.ts",
+      selfDestroying: true,
       registerType: "autoUpdate",
-      includeAssets: ["favicon-16x16.png", "favicon-32x32.png", "apple-touch-icon.png"],
-      injectManifest: {
-        // Precache the build output. Cloud API/WS traffic (different origin) is
-        // never cached — the SW has no runtime caching routes for it.
-        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
-      },
       manifest: {
         name: "Cogni",
         short_name: "Cogni",
@@ -45,9 +38,6 @@ export default defineConfig({
           { src: "/pwa-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
-      // Let the SW work in `vite dev` so we can test install/offline locally
-      // without a production build.
-      devOptions: { enabled: true },
     }),
   ],
   server: { port: 5173, strictPort: true },
