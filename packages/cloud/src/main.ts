@@ -10,6 +10,7 @@ import { WorkspaceChatDomain } from "./domains/workspace-chat.js";
 // both alongside ChatDomain; createServer() (route mounting) is Track C.
 import { ProjectDomain } from "./domains/project/index.js";
 import { HostRpcClient } from "./domains/project/host-rpc.js";
+import { PushNotifier } from "./push/notifier.js";
 import { sendHostRpc } from "./routes/host-ws.js";
 import { createServer } from "./server.js";
 import { ConsoleTransport, ResendTransport, SmtpTransport, type EmailTransport } from "./email/transport.js";
@@ -37,8 +38,15 @@ const workspaceChat = new WorkspaceChatDomain(db, hosts, clients);
 // owns the reconcile orchestrator and starts it now so the loop ticks.
 // Disposed on shutdown so in-flight RPCs drain and reconcile timers stop.
 const hostRpc = new HostRpcClient({ sendHostRpc, logger });
+// Web Push (PWA notifications) — only when VAPID keys are configured. When
+// null, projectDomain.pushNotifier is undefined and task state changes simply
+// don't push (the WS path is unaffected).
+const pushNotifier = env.vapid
+  ? new PushNotifier({ db, vapid: env.vapid, logger })
+  : undefined;
+if (!env.vapid) logger.info({}, "VAPID not configured — Web Push disabled");
 const projectDomain = new ProjectDomain({
-  db, hostRpc, hostRouter: hosts, clients, chat, logger,
+  db, hostRpc, hostRouter: hosts, clients, chat, logger, pushNotifier,
 });
 // Product stance: project tasks should keep moving without surfacing a modal
 // clarification path. If a runner emits AskUserQuestion, ChatDomain records the
@@ -66,6 +74,7 @@ const { app, injectWebSocket } = createServer({
   magicLinkTtlMinutes: env.magicLinkTtlMinutes,
   publicUrl: env.publicUrl,
   webUrl: env.webUrl,
+  vapidPublicKey: env.vapid?.publicKey ?? null,
 });
 
 const server = serve({ fetch: app.fetch, port: env.port }, (info) =>

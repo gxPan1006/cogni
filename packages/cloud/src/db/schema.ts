@@ -75,6 +75,26 @@ export const authSessions = pgTable("auth_sessions", {
   revokedAt: timestamp("revoked_at"),
 });
 
+// Web Push subscriptions for PWA notifications (task done / needs-review /
+// failed). One row per browser push endpoint; the endpoint URL is the natural
+// unique key (a browser re-subscribing returns the same endpoint). Keys
+// (p256dh / auth) are required by the Web Push protocol to encrypt payloads.
+// Rows are pruned when the push service reports the endpoint gone (404/410).
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  // The subscribing device's UI language, so the cloud renders the
+  // notification text ("Task done" vs "任务完成") to match that device.
+  locale: text("locale").notNull().default("en"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  byUser: index("push_subscriptions_user_idx").on(t.userId),
+}));
+
 export const threads = pgTable("threads", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),

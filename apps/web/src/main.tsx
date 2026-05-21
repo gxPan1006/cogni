@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import "@cogni/ui"; // side-effect: init i18next (language) before first render
 import App from "./App.js";
+import { InstallPrompt } from "./InstallPrompt.js";
+import { NotificationsPrompt } from "./NotificationsPrompt.js";
 
 // Global stylesheet chain — order matters (matches apps/desktop):
 //   1. tokens (CSS variables — colors, type, radii, shadows; light + dark)
@@ -16,6 +18,8 @@ createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>
     <BrowserRouter>
       <App />
+      <InstallPrompt />
+      <NotificationsPrompt />
     </BrowserRouter>
   </StrictMode>,
 );

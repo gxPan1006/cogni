@@ -24,6 +24,16 @@ export interface Env {
   smtp: SmtpConfig | null;           // required when emailTransport === "smtp"
   emailFrom: string;                 // required when emailTransport ∈ {resend, smtp}
   magicLinkTtlMinutes: number;       // default 15
+  /** Web Push (PWA notifications). Null ⇒ push disabled; the app boots fine and
+   *  the /api/push routes 503. All three keys must be set together to enable. */
+  vapid: VapidConfig | null;
+}
+
+export interface VapidConfig {
+  publicKey: string;
+  privateKey: string;
+  /** mailto: or https: contact, per the Web Push spec (carried in the JWT). */
+  subject: string;
 }
 
 export function loadEnv(): Env {
@@ -80,6 +90,24 @@ export function loadEnv(): Env {
     throw new Error(`Invalid MAGIC_LINK_TTL_MIN: "${ttlRaw}" (1-60)`);
   }
 
+  // Web Push: enabled only when both keys are present. Subject defaults to a
+  // mailto built from WEB_URL's host so a partial config still has a valid
+  // contact. A public key without a private key (or vice versa) is a
+  // misconfiguration we surface loudly rather than silently disabling.
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY ?? null;
+  if (Boolean(vapidPublicKey) !== Boolean(vapidPrivateKey)) {
+    throw new Error("VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be set together (or both omitted)");
+  }
+  const vapid: VapidConfig | null =
+    vapidPublicKey && vapidPrivateKey
+      ? {
+          publicKey: vapidPublicKey,
+          privateKey: vapidPrivateKey,
+          subject: process.env.VAPID_SUBJECT ?? "mailto:admin@ai-cognit.com",
+        }
+      : null;
+
   return {
     databaseUrl: get("DATABASE_URL"),
     jwtSecret: get("JWT_SECRET"),
@@ -93,5 +121,6 @@ export function loadEnv(): Env {
     smtp,
     emailFrom,
     magicLinkTtlMinutes,
+    vapid,
   };
 }

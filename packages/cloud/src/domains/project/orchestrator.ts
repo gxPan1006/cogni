@@ -62,6 +62,7 @@ import type { ClientHub } from "../../client-hub.js";
 import type { HostRouter } from "../../host-router.js";
 import type { Project, ProjectTask, TaskState, TaskComment, CloudToHost } from "@cogni/contract";
 import { HostRpcError, type HostRpcClient, type HostRpcLogger } from "./host-rpc.js";
+import type { PushNotifier } from "../../push/notifier.js";
 import { evaluateAndApplyMergeGate } from "./merge-gate.js";
 import { transitionTask, StateMismatch } from "./lifecycle.js";
 import { gatherUnconsumedUserComments, markCommentsConsumed } from "../../db/task-comments.js";
@@ -80,6 +81,8 @@ export interface OrchestratorDeps {
   hostRouter: HostRouter;
   clients: ClientHub;
   logger?: HostRpcLogger;
+  /** Optional: Web Push on task state changes. Undefined ⇒ push disabled. */
+  pushNotifier?: PushNotifier;
 }
 
 const ACTIVE_STATES: TaskState[] = ["running", "needs-input", "reviewing"];
@@ -535,6 +538,10 @@ export class ProjectOrchestrator {
     // Project's view of the task also moves — board hooks subscribe to project,
     // not task, so push there too.
     this.deps.clients.broadcastProject(task.projectId, { t: "task-event", kind, task });
+    // This is the live "task finished" path (running → done/reviewing/failed on
+    // the reconcile tick). Fire a Web Push for those states; fire-and-forget,
+    // the notifier filters + never throws.
+    if (kind === "state-changed") void this.deps.pushNotifier?.notifyTaskStateChanged(task);
   }
 
   private broadcastProject(project: Project, kind: "created" | "updated" | "archived"): void {

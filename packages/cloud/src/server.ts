@@ -23,6 +23,7 @@ import { registerIdentitiesRoutes } from "./routes/identities.js";
 import { registerDevicesRoutes } from "./routes/devices.js";
 import { registerHostsRoutes } from "./routes/hosts.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
+import { registerPushRoutes } from "./routes/push.js";
 import { registerHealthRoutes } from "./routes/health.js";
 
 declare module "hono" {
@@ -57,6 +58,9 @@ export interface ServerDeps {
   /** SP-2: where the web SPA lives (https://chat.ai-cognit.com). Used to build
    * Google `redirect_uri` and magic-link URLs when the user came from web. */
   webUrl: string;
+  /** Web Push public VAPID key, served to clients so they can subscribe. Null
+   *  when push isn't configured — the /api/push routes 503. */
+  vapidPublicKey?: string | null;
 }
 
 export function createServer(deps: ServerDeps) {
@@ -110,6 +114,8 @@ export function createServer(deps: ServerDeps) {
   // SP-3 project domain REST routes + fs-browse passthrough. Same /api/*
   // Bearer middleware applies (registered by registerClientRoutes above).
   registerProjectsRoutes(app, deps);
+  // Web Push subscribe/unsubscribe + public-key. Same /api/* Bearer middleware.
+  registerPushRoutes(app, deps);
 
   return { app, injectWebSocket };
 }

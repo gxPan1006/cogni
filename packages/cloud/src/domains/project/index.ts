@@ -69,6 +69,7 @@ import type {
 } from "@cogni/contract";
 import type { ChatDomain } from "../chat.js";
 import { HostRpcClient, HostRpcError, type HostRpcLogger } from "./host-rpc.js";
+import type { PushNotifier } from "../../push/notifier.js";
 import { transitionTask, StateMismatch } from "./lifecycle.js";
 import { evaluateAndApplyMergeGate } from "./merge-gate.js";
 import { ProjectOrchestrator } from "./orchestrator.js";
@@ -81,6 +82,9 @@ export interface ProjectDomainDeps {
   clients: ClientHub;
   chat: ChatDomain;
   logger?: HostRpcLogger;
+  /** Optional: when set, task state changes (done/reviewing/failed) also fire a
+   *  Web Push to the owner's installed PWAs. Undefined ⇒ push disabled. */
+  pushNotifier?: PushNotifier;
 }
 
 export class ProjectDomain {
@@ -93,6 +97,7 @@ export class ProjectDomain {
       hostRouter: deps.hostRouter,
       clients: deps.clients,
       logger: deps.logger,
+      pushNotifier: deps.pushNotifier,
     });
   }
 
@@ -742,6 +747,9 @@ export class ProjectDomain {
   private broadcastTask(task: ProjectTask, kind: "created" | "updated" | "deleted" | "state-changed"): void {
     this.deps.clients.broadcastTask(task.id, { t: "task-event", kind, task });
     this.deps.clients.broadcastProject(task.projectId, { t: "task-event", kind, task });
+    // Web Push for the states worth interrupting the user about. Fire-and-forget;
+    // the notifier filters states + never throws (see push/notifier.ts).
+    if (kind === "state-changed") void this.deps.pushNotifier?.notifyTaskStateChanged(task);
   }
 
   /** Comments only fan out to per-task subscribers — the board never renders them. */

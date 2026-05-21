@@ -1,0 +1,88 @@
+/* PWA install nudge — a slim bar pinned to the bottom on mobile. Uses the
+   shared design tokens so it matches light/dark automatically, and respects
+   the iOS home-indicator safe area. */
+.install-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* A fixed element sizes to its content unless given an explicit width, which
+     made the bar shrink-wrap into a tall narrow column. Pin it to the viewport
+     width (minus gutters) so the copy lays out on one or two clean lines. */
+  width: calc(100vw - 24px);
+  max-width: 560px;
+  padding: 10px 12px 10px 16px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  font-size: 14px;
+  line-height: 1.35;
+  animation: install-prompt-in 0.22s ease-out;
+}
+
+@keyframes install-prompt-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.install-prompt__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.install-prompt__share {
+  vertical-align: -3px;
+  margin: 0 1px;
+}
+
+.install-prompt__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.install-prompt__cta {
+  appearance: none;
+  border: none;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.install-prompt__cta:hover {
+  opacity: 0.9;
+}
+
+.install-prompt__close {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.install-prompt__close:hover {
+  background: var(--bg-sunk);
+  color: var(--ink);
+}

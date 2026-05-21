@@ -8,5 +8,7 @@
     "types": ["vite/client"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "//": "sw.ts is a service worker (webworker lib, __WB_MANIFEST). vite-plugin-pwa builds it separately; excluding it keeps the app's DOM-lib tsc from choking on SW globals.",
+  "exclude": ["src/sw.ts"]
 }

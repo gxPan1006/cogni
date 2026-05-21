@@ -115,6 +115,10 @@ thread_id uniqueness + adds `closed_at`, creates `auth_sessions` table, adds
 `hosts.removed_at`). Run it **once** before restarting cogni-cloud with the
 SP-2 code.
 
+Web Push added `migrate-2026-05-21-push-subscriptions.ts` (creates the
+`push_subscriptions` table). Run it **once** before restarting cogni-cloud on
+the push build — without it, `POST /api/push/subscribe` 500s.
+
 ### Rotate JWT_SECRET
 
 Invalidates all existing JWTs (every user has to log in again).
@@ -287,9 +291,20 @@ SMTP_USER=us@ai-cognit.com
 SMTP_PASSWORD=<your-password>
 EMAIL_FROM=Cogni <us@ai-cognit.com>
 MAGIC_LINK_TTL_MIN=15
+
+# Web Push (PWA notifications). Generate once, offline, then paste:
+#   pnpm --filter @cogni/cloud exec node -e "console.log(require('web-push').generateVAPIDKeys())"
+# Omit all three to disable push (the /api/push routes 503; app boots fine).
+VAPID_PUBLIC_KEY=<base64url public key>
+VAPID_PRIVATE_KEY=<base64url private key>
+VAPID_SUBJECT=mailto:admin@ai-cognit.com
 ```
 
 No `SMTP_TLS_SERVERNAME` — that's only for the dev-via-tunnel scenario.
+
+The VAPID public key is rotatable, but rotating it invalidates every stored
+push subscription (browsers re-subscribe against the new key on next visit), so
+treat it like `JWT_SECRET`: generate once and keep it stable.
 
 `WEB_URL` defaults to `https://chat.ai-cognit.com` if unset, so this var is
 only strictly required when serving a non-default web origin (staging, etc).
