@@ -16,7 +16,7 @@
   width: 760px; max-width: 100%;
   /* Fixed height so switching tabs (主页面 / 执行记录 / 文件) never resizes the
      modal — the active tab's body scrolls inside .td__scroll instead. */
-  height: min(760px, calc(100vh - 64px));
+  height: min(760px, calc(100dvh - 64px));
   z-index: 101;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -283,7 +283,7 @@
    On a phone the modal fills the viewport edge-to-edge with tighter padding. */
 @media (max-width: 768px) {
   .td-scrim { padding: 12px; }
-  .td { width: 100%; max-width: 100%; max-height: calc(100vh - 24px); }
+  .td { width: 100%; max-width: 100%; max-height: calc(100dvh - 24px); }
   .td__head { padding: 14px 16px 16px; }
   .td__scroll { padding: 16px 16px 24px; }
 }
@@ -412,7 +412,7 @@
 .tcd {
   position: relative;
   width: 560px; max-width: 100%;
-  max-height: calc(100vh - 96px);
+  max-height: calc(100dvh - 96px);
   z-index: 201;
   background: var(--surface);
   border: 1px solid var(--line);

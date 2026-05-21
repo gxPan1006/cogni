@@ -159,6 +159,13 @@ html, body, #root { height: 100%; }
 .layout {
   display: flex;
   height: 100vh;
+  /* Mobile browsers (Chrome/Safari) shrink the visible viewport when the
+     address bar / toolbar is shown, but `100vh` keeps measuring the *largest*
+     viewport — so the layout overflows and the top bar + bottom input get
+     clipped off-screen. `100dvh` tracks the real visible height as the
+     toolbars slide in/out. Kept after the `100vh` line as a progressive
+     upgrade (older engines ignore the unit they don't understand). */
+  height: 100dvh;
   background: var(--bg);
   overflow: hidden;
 }

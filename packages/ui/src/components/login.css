@@ -3,6 +3,7 @@
 .login {
   display: flex;
   height: 100vh;
+  height: 100dvh; /* track real visible height on mobile (see base.css .layout) */
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
@@ -217,7 +218,7 @@
    fit a phone, so the decorative panel drops away and the form card takes the
    full width, centered. 16px input avoids the iOS focus-zoom. */
 @media (max-width: 768px) {
-  .login { flex-direction: column; height: 100vh; }
+  .login { flex-direction: column; height: 100vh; height: 100dvh; }
   .login__aside { display: none; }
   .login__form-col {
     flex: 1;
