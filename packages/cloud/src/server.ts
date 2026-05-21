@@ -20,6 +20,7 @@ import { registerPasswordRoutes } from "./routes/password.js";
 import { registerHostWs } from "./routes/host-ws.js";
 import { registerClientRoutes } from "./routes/client.js";
 import { registerIdentitiesRoutes } from "./routes/identities.js";
+import { registerProfileRoutes } from "./routes/profile.js";
 import { registerDevicesRoutes } from "./routes/devices.js";
 import { registerHostsRoutes } from "./routes/hosts.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
@@ -109,6 +110,7 @@ export function createServer(deps: ServerDeps) {
   // SP-2 settings routes — must come AFTER registerClientRoutes so they share
   // its `/api/*` Bearer + auth_session revocation middleware.
   registerIdentitiesRoutes(app, deps);
+  registerProfileRoutes(app, deps);          // GET/PATCH /api/me — same /api/* Bearer middleware
   registerDevicesRoutes(app, deps);
   registerHostsRoutes(app, deps);
   // SP-3 project domain REST routes + fs-browse passthrough. Same /api/*

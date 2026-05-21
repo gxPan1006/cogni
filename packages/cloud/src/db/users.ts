@@ -54,3 +54,33 @@ export async function setUserPassword(
 ): Promise<void> {
   await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
 }
+
+export interface UserProfile { email: string; name: string | null; avatar: string | null; }
+
+/** Read the profile fields (email + editable name/avatar) for a user. */
+export async function getUserProfile(
+  db: AnyDb, userId: string,
+): Promise<UserProfile | undefined> {
+  const rows = await db
+    .select({ email: users.email, name: users.name, avatar: users.avatar })
+    .from(users).where(eq(users.id, userId)).limit(1);
+  const u = rows[0];
+  if (!u) return undefined;
+  return { email: u.email, name: u.name, avatar: u.avatar };
+}
+
+/**
+ * Partial update of name/avatar. Only the keys present in `fields` are written
+ * (so PATCHing just the name leaves the avatar untouched). `null` clears a
+ * field back to its default (email-prefix name / letter avatar).
+ */
+export async function setUserProfile(
+  db: AnyDb, userId: string,
+  fields: { name?: string | null; avatar?: string | null },
+): Promise<void> {
+  const patch: { name?: string | null; avatar?: string | null } = {};
+  if ("name" in fields) patch.name = fields.name ?? null;
+  if ("avatar" in fields) patch.avatar = fields.avatar ?? null;
+  if (Object.keys(patch).length === 0) return;
+  await db.update(users).set(patch).where(eq(users.id, userId));
+}

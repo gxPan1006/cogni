@@ -16,6 +16,11 @@ export const users = pgTable("users", {
   // user log in with a password"; the matching `password` identity row only
   // mirrors it for the settings "linked methods" list.
   passwordHash: text("password_hash"),
+  // Editable display name. Null → client falls back to the email local-part.
+  name: text("name"),
+  // Avatar as a `data:image/<png|jpeg|webp>;base64,…` URL. Null → letter circle.
+  // Stored inline (no object storage); a 256px cropped+compressed image is small.
+  avatar: text("avatar"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
