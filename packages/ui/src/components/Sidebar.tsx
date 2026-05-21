@@ -78,11 +78,41 @@ export function Sidebar(props: {
    * renaming/deleting in place does NOT fire it — the user stays in the rail.
    */
   onNavigate?: () => void;
+  /**
+   * Collapse the rail (desktop). When provided, a panel-toggle button shows in
+   * the header; the host also binds ⌘\ to it. The actual hide is CSS driven by
+   * `.layout.is-sb-collapsed` on the host side.
+   */
+  onToggleCollapse?: () => void;
 }) {
   const user = props.user ?? { name: "Cogni", email: "" };
   const initial = user.name.slice(0, 1).toUpperCase();
 
   const isChat = props.mode === "chat";
+
+  // Live filter for the rail. ⌘K (handled below) focuses this input; typing
+  // narrows the thread / project list in place.
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const searchRef = useRef<HTMLInputElement>(null);
+  const filteredThreads = q
+    ? props.threads.filter((t) => t.title.toLowerCase().includes(q))
+    : props.threads;
+  const filteredProjects = q
+    ? (props.projects ?? []).filter((p) => p.name.toLowerCase().includes(q))
+    : props.projects;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
   // Wrap navigating actions so the mobile drawer closes on its way to the
   // destination. No-op on desktop (onNavigate just clears already-false state).
   const goThenClose = (fn: () => void) => () => { fn(); props.onNavigate?.(); };
@@ -96,6 +126,16 @@ export function Sidebar(props: {
     <aside className={"sb" + (props.open ? " sb--open" : "")}>
       <div className="sb__head">
         <Wordmark size={22} />
+        {props.onToggleCollapse && (
+          <button
+            className="sb__collapse"
+            onClick={props.onToggleCollapse}
+            title="折叠侧边栏 (⌘\)"
+            aria-label="折叠侧边栏"
+          >
+            {Icon.panel}
+          </button>
+        )}
       </div>
 
       <div className="sb__modewrap">
@@ -111,8 +151,21 @@ export function Sidebar(props: {
 
       <div className="sb__search">
         <span className="sb__search-icon">{Icon.search}</span>
-        <input className="sb__search-input" placeholder={searchHint} />
-        <span className="sb__search-kbd">⌘K</span>
+        <input
+          ref={searchRef}
+          className="sb__search-input"
+          placeholder={searchHint}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Escape") { setQuery(""); e.currentTarget.blur(); } }}
+        />
+        {q ? (
+          <button className="sb__search-clear" onClick={() => { setQuery(""); searchRef.current?.focus(); }} title="清除" aria-label="清除搜索">
+            {Icon.x}
+          </button>
+        ) : (
+          <span className="sb__search-kbd">⌘K</span>
+        )}
       </div>
 
       <button className="sb__new" onClick={newAction}>
@@ -123,8 +176,8 @@ export function Sidebar(props: {
 
       <div className="sb__body">
         {isChat
-          ? <ChatLists {...props} onSelect={selectThread} />
-          : <ProjectLists {...props} onSelectProject={selectProject} onPrefetchProject={props.onPrefetchProject} />}
+          ? <ChatLists {...props} threads={filteredThreads} searching={q.length > 0} onSelect={selectThread} />
+          : <ProjectLists {...props} projects={filteredProjects} searching={q.length > 0} onSelectProject={selectProject} onPrefetchProject={props.onPrefetchProject} />}
       </div>
 
       {props.hosts && (
@@ -155,6 +208,7 @@ function ChatLists(props: {
   onRenameThread?: (id: string, title: string) => void;
   onDeleteThread?: (id: string) => void;
   onPrefetch?: (id: string) => void;
+  searching?: boolean;
 }) {
   // Only one row is in rename / delete-confirm mode (or has its ⋮ menu open) at
   // a time; keeping that state here (not per-row) means switching threads or
@@ -207,7 +261,7 @@ function ChatLists(props: {
       <section className="sb__section">
         <div className="sb__section-head">RECENTS</div>
         <div className="sb__section-body">
-          {rest.length > 0 ? rest.map(row) : <div className="sb__empty">还没有对话</div>}
+          {rest.length > 0 ? rest.map(row) : <div className="sb__empty">{props.searching ? "没有匹配的对话" : "还没有对话"}</div>}
         </div>
       </section>
     </>
@@ -386,6 +440,7 @@ function ProjectLists(props: {
   activeProjectId?: string | null;
   onSelectProject?: (id: string) => void;
   onPrefetchProject?: (id: string) => void;
+  searching?: boolean;
 }) {
   const list = props.projects ?? [];
   const pinned   = list.filter((p) => p.pinned && !p.archived);
@@ -413,7 +468,7 @@ function ProjectLists(props: {
             ? active.map((p) => (
                 <ProjectButton key={p.id} project={p} active={p.id === props.activeProjectId} onClick={() => props.onSelectProject?.(p.id)} onPrefetch={() => onPrefetch(p.id)} />
               ))
-            : <div className="sb__empty">还没有项目</div>}
+            : <div className="sb__empty">{props.searching ? "没有匹配的项目" : "还没有项目"}</div>}
         </div>
       </section>
 

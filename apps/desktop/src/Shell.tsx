@@ -34,8 +34,9 @@ import {
   Sidebar, Conversation, Welcome, SettingsPage,
   ProjectsList, ProjectBoard, TaskDetail,
   NewProject, NewTask, ProjectSettings,
-  useProjects, useProjectBoard,
+  useProjects, useProjectBoard, useGlobalShortcuts,
   ChatBubble,
+  Icon,
   type ProjectListItem, type NewProjectDraft, type NewTaskDraft,
 } from "@cogni/ui";
 
@@ -79,6 +80,7 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
   }, [focusedTaskId, board.tasks]);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const handleApiError = (e: unknown) => {
     if (e instanceof ApiError && e.status === 401) onLogout();
@@ -297,18 +299,35 @@ export function Shell({ token, onLogout }: { token: string; onLogout: () => void
     }
   };
 
+  const switchMode = (m: "chat" | "project") => {
+    setMode(m);
+    if (m === "chat") setPage("chat");
+    else setPage(activeProjectId ? "project" : "projects");
+  };
+
+  useGlobalShortcuts({
+    onNewChat: () => { void newChat(); },
+    onToggleSidebar: () => setSidebarCollapsed((c) => !c),
+    onToggleMode: () => switchMode(mode === "chat" ? "project" : "chat"),
+    onOpenSettings: () => setPage("settings"),
+  });
+
   return (
-    <div className="layout">
+    <div className={"layout" + (sidebarCollapsed ? " is-sb-collapsed" : "")}>
+      {sidebarCollapsed && (
+        <button
+          className="sb-expand"
+          title="展开侧边栏 (⌘\)"
+          aria-label="展开侧边栏"
+          onClick={() => setSidebarCollapsed(false)}
+        >
+          {Icon.panel}
+        </button>
+      )}
       <Sidebar
         mode={mode}
-        onMode={(m) => {
-          setMode(m);
-          if (m === "chat") {
-            setPage(activeThreadId ? "chat" : "chat");
-          } else {
-            setPage(activeProjectId ? "project" : "projects");
-          }
-        }}
+        onMode={switchMode}
+        onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
         threads={threads}
         activeThreadId={activeThreadId}
         onSelect={(id) => { setActiveThreadId(id); setMode("chat"); setPage("chat"); }}

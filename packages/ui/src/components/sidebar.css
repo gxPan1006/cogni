@@ -8,7 +8,51 @@
   height: 100%; min-height: 0;
 }
 
-.sb__head { padding: 18px 18px 12px; }
+/* ── Desktop collapse (⌘\) ──────────────────────
+   Slide the rail off to the left and let .main grow to fill its width. Scoped
+   to desktop; on mobile the rail is already off-canvas (see base.css), so the
+   collapse class is a no-op there. */
+@media (min-width: 769px) {
+  .layout > .sb {
+    transition: margin-left .22s cubic-bezier(0.2, 0.7, 0.3, 1), opacity .15s ease;
+  }
+  .layout.is-sb-collapsed > .sb {
+    margin-left: -280px;
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+/* Floating "expand" tab, shown by the shell only while collapsed. */
+.sb-expand {
+  position: fixed;
+  top: 14px; left: 12px;
+  z-index: 40;
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface); color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.sb-expand:hover { background: var(--bg-sunk); color: var(--ink); }
+
+.sb__head {
+  padding: 18px 18px 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.sb__collapse {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; background: transparent;
+  border-radius: var(--r-2);
+  color: var(--muted); cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.sb__collapse:hover { background: var(--bg-sunk); color: var(--ink); }
 .sb__wordmark { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
 .sb__wordmark-mark { display: block; flex-shrink: 0; }
 .sb__wordmark-text {
@@ -57,6 +101,17 @@
 }
 .sb__search-input::placeholder { color: var(--muted-2); }
 .sb__search-kbd { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); opacity: 0.7; }
+.sb__search-clear {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0;
+  border: 0; background: transparent;
+  border-radius: var(--r-full);
+  color: var(--muted); cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.sb__search-clear:hover { background: var(--line-soft); color: var(--ink); }
+.sb__search-clear svg { width: 13px; height: 13px; }
 
 .sb__new {
   display: flex; align-items: center; gap: 10px;

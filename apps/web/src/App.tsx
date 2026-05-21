@@ -32,7 +32,7 @@ import {
   Login, Sidebar, Conversation, Welcome, SettingsPage,
   ProjectsList, ProjectBoard, TaskDetail,
   NewProject, NewTask, ProjectSettings,
-  useProjects, useProjectBoard, Icon,
+  useProjects, useProjectBoard, useGlobalShortcuts, Icon,
   ChatBubble,
   type HostInfo, type ProjectListItem, type NewProjectDraft, type NewTaskDraft,
 } from "@cogni/ui";
@@ -113,6 +113,7 @@ function WebShell({ page }: { page: Page }) {
   // ☰ button in the top bar slides it in. Any route change (picking a thread /
   // project, opening settings) auto-closes it so the destination is visible.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   useEffect(() => {
     setSidebarOpen(false);
   }, [params.threadId, params.projectId, page]);
@@ -350,11 +351,29 @@ function WebShell({ page }: { page: Page }) {
     : params.threadId ? (threads.find((t) => t.id === params.threadId)?.title ?? "对话")
     : "对话";
 
+  useGlobalShortcuts({
+    onNewChat: () => { void newChat(); },
+    onToggleSidebar: () => setSidebarCollapsed((c) => !c),
+    onToggleMode: () => nav(mode === "chat" ? "/projects" : "/chat"),
+    onOpenSettings: () => nav("/settings"),
+  });
+
   return (
-    <div className="layout">
+    <div className={"layout" + (sidebarCollapsed ? " is-sb-collapsed" : "")}>
+      {sidebarCollapsed && (
+        <button
+          className="sb-expand"
+          title="展开侧边栏 (⌘\)"
+          aria-label="展开侧边栏"
+          onClick={() => setSidebarCollapsed(false)}
+        >
+          {Icon.panel}
+        </button>
+      )}
       <Sidebar
         open={sidebarOpen}
         onNavigate={() => setSidebarOpen(false)}
+        onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
         mode={mode}
         onMode={(m) => nav(m === "chat" ? "/chat" : "/projects")}
         threads={threads}

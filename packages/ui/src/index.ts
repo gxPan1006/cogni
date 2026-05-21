@@ -16,6 +16,8 @@ export { useAuthCore } from "./hooks/useAuth-core.js";
 export { useDevices } from "./hooks/useDevices.js";
 export { useIdentities } from "./hooks/useIdentities.js";
 export { useHosts } from "./hooks/useHosts.js";
+export { useGlobalShortcuts } from "./hooks/useGlobalShortcuts.js";
+export type { GlobalShortcutHandlers } from "./hooks/useGlobalShortcuts.js";
 export { useProjects, applyProjectEvent } from "./hooks/useProjects.js";
 export { useProjectBoard, applyTaskEvent } from "./hooks/useProjectBoard.js";
 export { useTaskDetail } from "./hooks/useTaskDetail.js";
