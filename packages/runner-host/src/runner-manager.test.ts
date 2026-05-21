@@ -14,6 +14,7 @@ function fakeAdapter(events: RunnerEvent[]): RunnerAdapter {
   return {
     id: "claude-code",
     capabilities: ["streaming"],
+    commands: ["clear", "branch"],
     startSession: vi.fn(async () => make(null)),
     resumeSession: vi.fn(async (id: string) => make(id)),
   };
@@ -108,6 +109,7 @@ describe("RunnerManager", () => {
     const codex: RunnerAdapter = {
       id: "codex",
       capabilities: ["streaming", "tool-events"],
+      commands: ["clear"],
       startSession: async () => ({ runnerSessionId: null, async *send() {}, async close() {} }),
       resumeSession: async () => ({ runnerSessionId: null, async *send() {}, async close() {} }),
     };
@@ -115,6 +117,31 @@ describe("RunnerManager", () => {
     const caps = mgr.capabilities();
     expect(caps.adapters.sort()).toEqual(["claude-code", "codex"]);
     expect(caps.capabilities.sort()).toEqual(["streaming", "tool-events"]);
+    // Per-adapter commands are surfaced separately (the composer "/" menu).
+    expect(caps.adapterCommands).toEqual({ "claude-code": ["clear", "branch"], codex: ["clear"] });
+  });
+
+  it("interrupt() pokes the live session handle's interrupt and is a no-op for unknown sessions", async () => {
+    const mgr = new RunnerManager();
+    let interrupts = 0;
+    const adapter: RunnerAdapter = {
+      id: "claude-code",
+      capabilities: ["streaming"],
+      commands: [],
+      startSession: async () => ({
+        runnerSessionId: null,
+        async *send() { yield { type: "text", text: "hi" } as const; yield { type: "done" } as const; },
+        interrupt() { interrupts += 1; },
+        async close() {},
+      }),
+      resumeSession: async () => { throw new Error("unused"); },
+    };
+    mgr.register(adapter);
+    expect(() => mgr.interrupt("no-such-session")).not.toThrow(); // no live handle
+    // Run a turn so a handle is cached, then interrupt that session.
+    await mgr.dispatch({ sessionId: "s1", threadId: "t1", adapter: "claude-code", runnerSessionId: null, message: "hi" }, () => {});
+    mgr.interrupt("s1");
+    expect(interrupts).toBe(1);
   });
 });
 

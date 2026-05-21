@@ -52,6 +52,7 @@ export const chat = {
     disconnected: "与服务器的连接已断开,正在重连…",
     hostOfflineWaiting: "离线 · 等待上线",
     noHostOnline: "没有在线的 Cogni 桌面端",
+    contextCleared: "上下文已清空",
   },
   composer: {
     placeholderDisabled: "等待重连…",
@@ -61,7 +62,15 @@ export const chat = {
     attachAria: "Attach file",
     send: "发送 (Enter)",
     sendAria: "Send message",
+    stop: "停止",
+    stopAria: "停止生成",
     runningOn: "RUNNING ON",
+    commands: {
+      clear: "清空对话",
+      clearHint: "重置上下文,保留聊天记录",
+      branch: "从此处分叉",
+      branchHint: "复制对话到一条新分支",
+    },
   },
   welcome: {
     greeting: "今天想做点什么?",

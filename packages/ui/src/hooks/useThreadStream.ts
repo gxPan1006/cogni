@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { MessageView, RunnerEvent, CloudToClient } from "@cogni/contract";
+import type { MessageView, RunnerEvent, CloudToClient, RunnerCommandId } from "@cogni/contract";
 import type { ApiClient } from "../transport/api.js";
 import { buildTimeline, isAwaitingProgress } from "../components/chat-timeline.js";
 
@@ -65,6 +65,10 @@ export function useThreadStream(api: ApiClient, threadId: string) {
   // "reply never came back" state. Drives the failure card + retry button so a
   // lost dispatch doesn't spin "• • •" forever.
   const [stalled, setStalled] = useState(false);
+  // Runner commands available for this thread's adapter (the composer "/" menu).
+  // Pushed by the cloud as a `thread-commands` frame on subscribe; empty until
+  // it arrives (and reset on thread switch) so a stale menu never shows.
+  const [commands, setCommands] = useState<RunnerCommandId[]>([]);
   // Bumped by `retry()` to force the subscription effect to tear down and
   // re-run — a fresh getThread + re-subscribe that replays anything the cloud
   // has past our lastSeq (recovers frames dropped by a flaky connection).
@@ -91,11 +95,22 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     threadIdRef.current = threadId;
     const seededMsgs = api.cache.get<MessageView[]>(`thread:${threadId}`) ?? [];
     const seededEv = api.cache.get<{ events: RunnerEvent[]; lastSeq: number }>(`events:${threadId}`);
+    // Only trust a cached event position (which makes the subscription skip the
+    // message snapshot via lastSeq>0) when we ALSO have the cached messages to
+    // render. The `thread:` (messages) and `events:` caches are written by
+    // different paths (prefetchThread warms only messages; the live/flush path
+    // warms only events) so they can disagree. If events are seeded but messages
+    // aren't, seeding lastSeq>0 tells the cloud "I already have the history" →
+    // it skips the snapshot → buildTimeline renders every turn as an orphan
+    // (assistant output only, ALL user bubbles dropped). Force a full cold
+    // catchup instead so the snapshot is re-sent. (The "首轮用户消息消失" bug.)
+    const haveMsgs = seededMsgs.length > 0;
     setMessages(seededMsgs);
-    setEvents(seededEv?.events ?? []);
-    // Show the loading skeleton only when there's no cached snapshot to paint.
-    setLoading(seededMsgs.length === 0 && (seededEv?.events.length ?? 0) === 0);
-    lastSeqRef.current = seededEv?.lastSeq ?? 0;
+    setEvents(haveMsgs ? seededEv?.events ?? [] : []);
+    setCommands([]);
+    // No cached messages → show the loading skeleton until the snapshot lands.
+    setLoading(!haveMsgs);
+    lastSeqRef.current = haveMsgs ? seededEv?.lastSeq ?? 0 : 0;
     caughtUpRef.current = false;
     replayBufferRef.current = [];
   }
@@ -235,6 +250,8 @@ export function useThreadStream(api: ApiClient, threadId: string) {
                 return next;
               });
             }
+          } else if (msg.t === "thread-commands") {
+            if (msg.threadId === threadId) setCommands(msg.commands);
           } else if (msg.t === "host-status") {
             setHostOnline(msg.online);
           } else if (msg.t === "host-meta") {
@@ -311,6 +328,15 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     () => isAwaitingProgress(buildTimeline(messages, events)),
     [messages, events],
   );
+
+  // Whether a turn is currently in flight — drives the composer's ↑→■ toggle.
+  // True from the moment a user message is sent (awaiting its reply) through the
+  // whole streaming/tool-running reply, until the turn's `done`/`error` lands.
+  const turnInFlight = useMemo(() => {
+    const { rows, awaitingReply } = buildTimeline(messages, events);
+    const last = rows[rows.length - 1];
+    return awaitingReply || (last?.kind === "assistant" && last.streaming);
+  }, [messages, events]);
   useEffect(() => {
     setStalled(false);
     if (!awaitingProgress || !connected || !hostOnline) return;
@@ -362,6 +388,19 @@ export function useThreadStream(api: ApiClient, threadId: string) {
 
   const dismissNoHost = () => setPendingNoHost(null);
 
+  // Stop the in-flight turn (composer ■). The runner ends the turn and its
+  // `done` flows back, flipping `turnInFlight` false → the button returns to ↑.
+  const stop = () => {
+    api.wsClient.stop(threadId);
+  };
+
+  // Run a runner command from the composer "/" menu. clear/branch are handled
+  // cloud-side; their effects arrive as normal frames (a system divider message
+  // for clear, a thread-created for branch).
+  const runCommand = (command: RunnerCommandId) => {
+    api.wsClient.threadCommand(threadId, command);
+  };
+
   // Prewarm hint: the user focused the composer / is about to type. Tells the
   // cloud to spawn the runner process now so the first token isn't gated on the
   // ~1.9s CLI cold start. Best-effort + idempotent cloud-side; no-op while the
@@ -385,5 +424,9 @@ export function useThreadStream(api: ApiClient, threadId: string) {
     pendingNoHost,
     resolveFallback,
     dismissNoHost,
+    commands,
+    turnInFlight,
+    stop,
+    runCommand,
   };
 }

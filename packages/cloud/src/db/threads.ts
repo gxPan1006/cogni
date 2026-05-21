@@ -186,6 +186,23 @@ export async function getThreadKind(db: AnyDb, threadId: string): Promise<string
 }
 
 /**
+ * Fetch the fields `/branch` needs to clone a thread: the owner + tenant (for
+ * the new thread row) and the current title (the branch title derives from it).
+ * Null if the thread is missing or soft-deleted.
+ */
+export async function getThreadForBranch(
+  db: AnyDb,
+  threadId: string,
+): Promise<{ userId: string; tenantId: string; title: string } | null> {
+  const [row] = await db
+    .select({ userId: threads.userId, tenantId: threads.tenantId, title: threads.title })
+    .from(threads)
+    .where(and(eq(threads.id, threadId), isNull(threads.deletedAt)))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
  * Workspace-level orchestrator thread — one per user, not referenced by any
  * project. Idempotent: reuses the existing (non-deleted) workspace thread for
  * the user, otherwise creates one with kind='workspace'.

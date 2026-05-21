@@ -8,6 +8,7 @@ import { openRunnerSession, getCurrentActiveSession } from "../db/sessions.js";
 import { HostRouter } from "../host-router.js";
 import { ClientHub } from "../client-hub.js";
 import { ChatDomain } from "./chat.js";
+import { THREAD_CLEARED_MARKER } from "@cogni/contract";
 
 describe("ChatDomain (SP-2 state machine)", () => {
   it("no-host-online: replies to source conn + does NOT persist message + no runner_session", async () => {
@@ -334,6 +335,106 @@ describe("ChatDomain (SP-2 state machine)", () => {
     await chat.handleClientPrewarm({ userId: u.id, threadId: thread.id });
 
     expect(await getCurrentActiveSession(db, thread.id)).toBeNull();
+    await close();
+  });
+});
+
+describe("ChatDomain — runner commands + stop", () => {
+  async function setup() {
+    const { db, close } = await makeTestDb();
+    const u = await findOrCreateUserByEmail(db, "a@x.com");
+    const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
+    const reg = await createHost(db, { userId: u.id, tenantId: u.tenantId, name: "Mac" });
+    const hub = new ClientHub();
+    const clientSend = vi.fn();
+    hub.register({ clientId: "c1", userId: u.id, send: clientSend });
+    hub.subscribe("c1", thread.id);
+    const router = new HostRouter();
+    const hostSend = vi.fn();
+    router.register({
+      hostId: reg.hostId, userId: u.id, send: hostSend,
+      adapterCommands: { "claude-code": ["clear", "branch"] },
+    });
+    const chat = new ChatDomain(db, router, hub);
+    return { db, close, u, thread, hub, clientSend, hostSend, chat, hostId: reg.hostId };
+  }
+
+  it("commandsForThread returns the online host's adapter commands (empty when offline)", async () => {
+    const { db, close, u, chat } = await setup();
+    expect(chat.commandsForThread(u.id)).toEqual(["clear", "branch"]);
+    // A different user with no host sees no commands.
+    const other = await findOrCreateUserByEmail(db, "b@x.com");
+    expect(chat.commandsForThread(other.id)).toEqual([]);
+    await close();
+  });
+
+  it("stop routes an interrupt to the host running a live session", async () => {
+    const { close, u, thread, chat, hostSend } = await setup();
+    await chat.handleClientSend({ userId: u.id, threadId: thread.id, content: "hi", sourceClientId: "c1" });
+    const sessionId = hostSend.mock.calls[0]![0].sessionId;
+    hostSend.mockClear();
+    await chat.handleStop({ userId: u.id, threadId: thread.id });
+    expect(hostSend).toHaveBeenCalledWith({ t: "interrupt", sessionId });
+    await close();
+  });
+
+  it("stop is a no-op when no turn is running", async () => {
+    const { close, u, thread, chat, hostSend } = await setup();
+    await chat.handleStop({ userId: u.id, threadId: thread.id });
+    expect(hostSend).not.toHaveBeenCalled();
+    await close();
+  });
+
+  it("clear closes the session and appends a context-cleared divider", async () => {
+    const { db, close, u, thread, chat, hostSend, clientSend } = await setup();
+    await chat.handleClientSend({ userId: u.id, threadId: thread.id, content: "hi", sourceClientId: "c1" });
+    const sessionId = hostSend.mock.calls[0]![0].sessionId;
+    await chat.handleHostEvent(sessionId, { type: "session-id", id: "claude-1" });
+    await chat.handleHostEvent(sessionId, { type: "done" });
+
+    await chat.handleThreadCommand({ userId: u.id, threadId: thread.id, command: "clear", sourceClientId: "c1" });
+
+    // Session is closed → next send cold-starts a fresh session (runnerSessionId null).
+    expect(await getCurrentActiveSession(db, thread.id)).toBeNull();
+    // A system divider message was broadcast + persisted.
+    const cleared = clientSend.mock.calls.map((c) => c[0]).find(
+      (m) => m.t === "message" && m.role === "system" && m.content === THREAD_CLEARED_MARKER,
+    );
+    expect(cleared).toBeTruthy();
+    hostSend.mockClear();
+    await chat.handleClientSend({ userId: u.id, threadId: thread.id, content: "fresh", sourceClientId: "c1" });
+    expect(hostSend.mock.calls[0]![0]).toMatchObject({ runnerSessionId: null, message: "fresh" });
+    await close();
+  });
+
+  it("branch clones the transcript into a new thread and forks the parent session on first dispatch", async () => {
+    const { db, close, u, thread, chat, hostSend, clientSend, hub } = await setup();
+    // publishThreadCreated only reaches list-subscribed clients.
+    hub.subscribeList("c1");
+    await chat.handleClientSend({ userId: u.id, threadId: thread.id, content: "hello", sourceClientId: "c1" });
+    const parentSessionId = hostSend.mock.calls[0]![0].sessionId;
+    await chat.handleHostEvent(parentSessionId, { type: "session-id", id: "claude-parent" });
+    await chat.handleHostEvent(parentSessionId, { type: "text", text: "hi there" });
+    await chat.handleHostEvent(parentSessionId, { type: "done" });
+
+    await chat.handleThreadCommand({ userId: u.id, threadId: thread.id, command: "branch", sourceClientId: "c1" });
+
+    // A thread-created was published for the branch.
+    const created = clientSend.mock.calls.map((c) => c[0]).find((m) => m.t === "thread-created");
+    expect(created).toBeTruthy();
+    const branchId = created!.thread.id;
+    expect(created!.thread.title).toContain("分支");
+
+    // Branch inherited the transcript.
+    const detail = await getThreadDetail(db, branchId);
+    expect(detail?.messages.map((m) => `${m.role}:${m.content}`)).toEqual(["user:hello", "assistant:hi there"]);
+
+    // First message on the branch forks the parent runner session.
+    hostSend.mockClear();
+    await chat.handleClientSend({ userId: u.id, threadId: branchId, content: "diverge", sourceClientId: "c1" });
+    expect(hostSend.mock.calls[0]![0]).toMatchObject({
+      forkFromRunnerSessionId: "claude-parent", message: "diverge",
+    });
     await close();
   });
 });

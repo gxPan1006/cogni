@@ -311,6 +311,13 @@ export function registerClientRoutes(
                 }
                 deps.clients.subscribe(clientId, msg.threadId);
                 await streamCatchup(deps, clientId, msg.threadId, msg.lastSeq ?? 0);
+                // Tell the client which "/" commands this thread's runner
+                // supports so the composer renders the right menu.
+                deps.clients.sendToConn(clientId, {
+                  t: "thread-commands",
+                  threadId: msg.threadId,
+                  commands: deps.chat.commandsForThread(claims.userId),
+                });
               } else if (msg.t === "unsubscribe-thread") {
                 deps.clients.unsubscribeThread(clientId, msg.threadId);
               } else if (msg.t === "prewarm") {
@@ -333,6 +340,17 @@ export function registerClientRoutes(
                   pendingMessageId: msg.pendingMessageId,
                   action: msg.action,
                   targetHostId: msg.targetHostId ?? null,
+                  sourceClientId: clientId,
+                });
+              } else if (msg.t === "stop") {
+                if (!(await threadBelongsToUser(deps.db, msg.threadId, claims.userId))) return;
+                await deps.chat.handleStop({ userId: claims.userId, threadId: msg.threadId });
+              } else if (msg.t === "thread-command") {
+                if (!(await threadBelongsToUser(deps.db, msg.threadId, claims.userId))) return;
+                await deps.chat.handleThreadCommand({
+                  userId: claims.userId,
+                  threadId: msg.threadId,
+                  command: msg.command,
                   sourceClientId: clientId,
                 });
               }

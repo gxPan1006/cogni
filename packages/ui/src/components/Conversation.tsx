@@ -23,7 +23,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ApiClient } from "../transport/api.js";
-import { CHAT_MODELS, DEFAULT_CHAT_MODEL } from "@cogni/contract";
+import { CHAT_MODELS, DEFAULT_CHAT_MODEL, THREAD_CLEARED_MARKER } from "@cogni/contract";
 import { useThreadStream } from "../hooks/useThreadStream.js";
 import { useUploads } from "../hooks/useUploads.js";
 import { Composer, type ComposerStatus } from "./Composer.js";
@@ -68,6 +68,7 @@ export function Conversation({
   const {
     messages, events, loading, hostOnline, connected, send, prewarm, stalled, retry,
     pendingFallback, pendingNoHost, resolveFallback,
+    commands, turnInFlight, stop, runCommand,
   } = useThreadStream(api, threadId);
   const [draft, setDraft] = useState("");
   const [model, setModel] = useState<string>(initialModel ?? DEFAULT_CHAT_MODEL);
@@ -148,9 +149,13 @@ export function Conversation({
           {rows.map((row) => {
             if (row.kind === "user") return <UserMessage key={row.key} text={row.text} attachments={row.attachments} />;
             if (row.kind === "system") {
+              // The cloud writes a sentinel for the `/clear` divider; localize it.
+              const isCleared = row.text === THREAD_CLEARED_MARKER;
               return (
                 <div key={row.key} className="msg msg--aux">
-                  <div className="conversation__system">{row.text}</div>
+                  <div className={"conversation__system" + (isCleared ? " conversation__system--divider" : "")}>
+                    {isCleared ? t("chat.conversation.contextCleared") : row.text}
+                  </div>
                 </div>
               );
             }
@@ -209,6 +214,10 @@ export function Conversation({
         models={CHAT_MODELS}
         model={model}
         onModelChange={setModel}
+        streaming={turnInFlight}
+        onStop={stop}
+        commands={commands}
+        onRunCommand={runCommand}
       />
     </div>
   );

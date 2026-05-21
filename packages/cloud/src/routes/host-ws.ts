@@ -37,8 +37,62 @@ const inFlightRpc = new Map<
   }
 >();
 const hostConns = new Map<string, (msg: CloudToHost) => void>();
+// (hostId → force-close fn) so the staleness reaper can tear down a half-open
+// socket whose `onClose` will never fire on its own (sleeping laptop).
+const hostClose = new Map<string, () => void>();
 
 const DEFAULT_RPC_TIMEOUT_MS = 5 * 60 * 1000;
+
+// ─── Host liveness reaping ──────────────────────────────────────────────────
+//
+// The runner-host sends an app-level `{ t: "heartbeat" }` every
+// HOST_HEARTBEAT_INTERVAL_MS (runner-host/src/registry.ts HEARTBEAT_MS). When a
+// laptop sleeps, the OS freezes that interval and the TCP socket goes half-open
+// — no FIN/RST, so the cloud's WS `onClose` never fires and the host would
+// otherwise look "online" forever. We refresh `lastSeen` on every inbound frame
+// and a periodic reaper evicts hosts silent for HOST_STALE_MS (~3 missed
+// heartbeats), force-closing the dead socket and broadcasting offline so client
+// presence (the "running on my computer" badge) flips correctly.
+const HOST_HEARTBEAT_INTERVAL_MS = 20_000;
+const HOST_STALE_MS = 3 * HOST_HEARTBEAT_INTERVAL_MS; // 60s
+const REAPER_INTERVAL_MS = 15_000;
+
+/**
+ * Transition a host to offline: drop it from the registries, fail its in-flight
+ * RPCs, persist offline status, and broadcast the offline event to the owning
+ * user's clients. Idempotent — the per-host broadcast only fires on the first
+ * call (when the host was still registered), so the `onClose` and reaper paths
+ * can both run for the same host without double-broadcasting.
+ */
+async function goHostOffline(deps: ServerDeps, hostId: string, userId: string): Promise<void> {
+  const wasRegistered = !!deps.hosts.getHostByIdForUser(userId, hostId);
+  deps.hosts.unregister(hostId);
+  hostConns.delete(hostId);
+  hostClose.delete(hostId);
+  for (const [rpcId, entry] of inFlightRpc) {
+    if (entry.hostId !== hostId) continue;
+    clearTimeout(entry.timer);
+    inFlightRpc.delete(rpcId);
+    entry.reject({ code: "host-offline", message: "host disconnected" });
+  }
+  await setHostStatus(deps.db, hostId, "offline");
+  if (!wasRegistered) return; // a prior path already broadcast offline
+  deps.clients.sendToUser(userId, { t: "host-status", online: false });
+  // SP-2: precise per-host offline event so settings UIs and Conversation's
+  // fallback card recompute live. Re-fetch the name in case of mid-session rename.
+  const row = await deps.db
+    .select({ name: hostsTable.name })
+    .from(hostsTable)
+    .where(eq(hostsTable.id, hostId))
+    .limit(1);
+  deps.clients.publishHostMeta(userId, {
+    hostId,
+    name: row[0]?.name ?? "Unknown",
+    status: "offline",
+    lastSeen: new Date().toISOString(),
+  });
+  logger.info({ hostId }, "runner host disconnected");
+}
 
 /**
  * Send a typed RPC to a connected host and await its response.
@@ -96,6 +150,7 @@ export function _resetHostRpcRegistry(): void {
   for (const entry of inFlightRpc.values()) clearTimeout(entry.timer);
   inFlightRpc.clear();
   hostConns.clear();
+  hostClose.clear();
 }
 
 /**
@@ -103,6 +158,20 @@ export function _resetHostRpcRegistry(): void {
  * must be `register`; thereafter `event` / `session-update` / `heartbeat`.
  */
 export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, deps: ServerDeps): void {
+  // Liveness reaper: evict hosts that stopped heartbeating (e.g. laptop slept
+  // → half-open socket that never fires `close`). `unref` so it never keeps the
+  // process — or a vitest worker — alive.
+  const reaper = setInterval(() => {
+    for (const { hostId, userId } of deps.hosts.getStaleEntries(HOST_STALE_MS)) {
+      logger.warn({ hostId }, "host heartbeat stale; reaping (half-open socket?)");
+      hostClose.get(hostId)?.(); // best-effort: tear down the dead socket
+      void goHostOffline(deps, hostId, userId).catch((err) =>
+        logger.warn({ err: String(err), hostId }, "host reaper goHostOffline failed"),
+      );
+    }
+  }, REAPER_INTERVAL_MS);
+  reaper.unref?.();
+
   app.get(
     "/host/ws",
     upgradeWebSocket((c) => {
@@ -168,12 +237,25 @@ export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, de
                   hostId: host.id,
                   userId: host.userId,
                   send: (m: CloudToHost) => ws.send(JSON.stringify(m)),
+                  ...(msg.adapterCommands ? { adapterCommands: msg.adapterCommands } : {}),
                 });
                 // SP-3: also pin (hostId → send-fn) for sendHostRpc, which is
                 // called from the orchestrator where the userId-scoped HostRouter
                 // lookup isn't conveniently in scope. Same shape as HostRouter's
                 // send-fn but a separate map so we don't widen HostRouter's API.
                 hostConns.set(host.id, (m: CloudToHost) => ws.send(JSON.stringify(m)));
+                // Force-close handle for the reaper: a half-open socket won't
+                // honor a graceful close handshake, so prefer the ws library's
+                // `terminate()` (destroys immediately, fires `close` → onClose).
+                hostClose.set(host.id, () => {
+                  try {
+                    const raw = (ws as { raw?: { terminate?: () => void } }).raw;
+                    if (raw?.terminate) raw.terminate();
+                    else ws.close(1001, "stale");
+                  } catch {
+                    /* socket already gone */
+                  }
+                });
                 ws.send(JSON.stringify({ t: "registered" } satisfies CloudToHost));
                 // SP-1 broadcast kept for desktop clients pre-upgrade; SP-2
                 // host-meta is the precise per-host event new clients prefer.
@@ -188,6 +270,9 @@ export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, de
                 return;
               }
               if (!hostId) return; // ignore anything before register
+              // Any frame proves the host is alive — refresh its liveness clock
+              // so the reaper doesn't evict an actively-working host.
+              deps.hosts.touch(hostId);
 
               if (msg.t === "heartbeat") {
                 await setHostStatus(deps.db, hostId, "online");
@@ -219,34 +304,15 @@ export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, de
         },
         async onClose() {
           try {
-            if (hostId) {
+            // SP-3: goHostOffline also drops the hostConns pin + fails in-flight
+            // RPCs so callers don't hang for the full 5min timeout once the WS
+            // is gone. Shared with the staleness reaper below.
+            if (hostId && userId) await goHostOffline(deps, hostId, userId);
+            else if (hostId) {
               deps.hosts.unregister(hostId);
-              // SP-3: also drop the hostConns pin + fail any in-flight RPCs
-              // bound to this host so callers don't hang for the full 5min
-              // timeout when we already know the WS is gone.
               hostConns.delete(hostId);
-              for (const [rpcId, entry] of inFlightRpc) {
-                if (entry.hostId !== hostId) continue;
-                clearTimeout(entry.timer);
-                inFlightRpc.delete(rpcId);
-                entry.reject({ code: "host-offline", message: "host disconnected" });
-              }
+              hostClose.delete(hostId);
               await setHostStatus(deps.db, hostId, "offline");
-              if (userId) {
-                deps.clients.sendToUser(userId, { t: "host-status", online: false });
-                // SP-2: publish a precise per-host offline event so settings UIs
-                // and Conversation's fallback card recompute live. Re-fetch the
-                // name in case it was renamed mid-connection.
-                const row = await deps.db.select({ name: hostsTable.name })
-                  .from(hostsTable).where(eq(hostsTable.id, hostId)).limit(1);
-                deps.clients.publishHostMeta(userId, {
-                  hostId,
-                  name: row[0]?.name ?? "Unknown",
-                  status: "offline",
-                  lastSeen: new Date().toISOString(),
-                });
-              }
-              logger.info({ hostId }, "runner host disconnected");
             }
           } catch (err) {
             logger.warn({ err: String(err), hostId }, "host-ws onClose failed");

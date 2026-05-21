@@ -26,6 +26,7 @@
 import type {
   RunnerAdapter,
   RunnerCapability,
+  RunnerCommandId,
   RunnerEvent,
   RunnerSessionHandle,
   StartSessionOpts,
@@ -36,6 +37,10 @@ const CAPABILITIES: RunnerCapability[] = ["streaming", "tool-events"];
 
 class CodexSession implements RunnerSessionHandle {
   private _runnerSessionId: string | null = null;
+  // The live turn's iterator, held so `interrupt()` can `.return()` it —
+  // which runs the runner generator's `finally` (kills the codex child) and
+  // ends the `for await` loop, yielding a clean terminal `done` below.
+  private activeIterator: AsyncIterator<string> | null = null;
   constructor(
     private readonly runner: CodexRunner,
     private readonly cwd: string,
@@ -47,9 +52,13 @@ class CodexSession implements RunnerSessionHandle {
 
   async *send(message: string): AsyncIterable<RunnerEvent> {
     let sawTerminal = false;
+    const iterator = this.runner({ cwd: this.cwd, message })[Symbol.asyncIterator]();
+    this.activeIterator = iterator;
     try {
-      for await (const line of this.runner({ cwd: this.cwd, message })) {
-        for (const event of translateCodexLine(line)) {
+      while (true) {
+        const next = await iterator.next();
+        if (next.done) break;
+        for (const event of translateCodexLine(next.value)) {
           if (event.type === "session-id") this._runnerSessionId = event.id;
           if (event.type === "done" || event.type === "error") sawTerminal = true;
           yield event;
@@ -61,8 +70,18 @@ class CodexSession implements RunnerSessionHandle {
       // path still fires.
       yield { type: "error", code: "codex_spawn_failed", message: String(e) };
       return;
+    } finally {
+      this.activeIterator = null;
     }
+    // Reaching here without a codex-emitted terminal means either a normal
+    // stdout end or a user stop (interrupt closed the iterator): either way
+    // the turn is over, so present a clean `done`.
     if (!sawTerminal) yield { type: "done" };
+  }
+
+  /** Stop the in-flight turn by closing the codex stdout iterator. */
+  interrupt(): void {
+    void this.activeIterator?.return?.(undefined);
   }
 
   async close(): Promise<void> {
@@ -74,6 +93,9 @@ class CodexSession implements RunnerSessionHandle {
 export class CodexAdapter implements RunnerAdapter {
   readonly id = "codex" as const;
   readonly capabilities = CAPABILITIES;
+  // Codex can reset context but cannot fork a session (no `--fork-session`),
+  // so it advertises clear only — branch stays claude-code-specific.
+  readonly commands: readonly RunnerCommandId[] = ["clear"];
   constructor(private readonly runner: CodexRunner = defaultCodexRunner) {}
 
   async startSession(opts: StartSessionOpts): Promise<RunnerSessionHandle> {

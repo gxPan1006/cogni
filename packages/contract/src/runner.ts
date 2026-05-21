@@ -11,6 +11,26 @@ export const RUNNER_CAPABILITIES = [
 ] as const;
 export type RunnerCapability = (typeof RUNNER_CAPABILITIES)[number];
 
+/**
+ * Runner-scoped chat commands — the "slash commands" surfaced in the composer.
+ *
+ * These are SEMANTIC ids, not literal slash strings: each adapter maps the id
+ * to its own implementation, and the names a runner exposes in its native TUI
+ * (Claude Code's `/clear`, `/branch`; Codex's own set) don't have to match. The
+ * cloud + UI only ever speak these ids, so adding a runner means declaring its
+ * supported ids on its adapter — no cloud/UI change.
+ *
+ *   - "clear"  reset the thread's runner context (keeps scrollback; next turn
+ *              starts a fresh session). Implemented cloud-side, not dispatched.
+ *   - "branch" fork the conversation into a new thread inheriting context up to
+ *              this point (Claude Code: `--fork-session`).
+ *
+ * NOTE: rewind is intentionally absent — it depends on a checkpoint story not
+ * yet wired through the `--print` runner. Reserve the id when that lands.
+ */
+export const RUNNER_COMMAND_IDS = ["clear", "branch"] as const;
+export type RunnerCommandId = (typeof RUNNER_COMMAND_IDS)[number];
+
 export const runnerEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("session-id"), id: z.string() }),
   z.object({ type: z.literal("text"), text: z.string() }),
@@ -36,6 +56,12 @@ export interface StartSessionOpts {
   appendSystemPrompt?: string;
   /** Chat model id (a CHAT_MODELS id). Passed as `--model <id>`; absent ⇒ CLI default. */
   model?: string;
+  /**
+   * Branch: when resuming, fork the session instead of continuing it (Claude
+   * Code `--fork-session`). The resumed id becomes the parent; the runner
+   * assigns a new session id for this fork. Only meaningful on `resumeSession`.
+   */
+  fork?: boolean;
 }
 
 export interface RunnerSessionHandle {
@@ -55,6 +81,16 @@ export interface RunnerSessionHandle {
    * spawn lazily per turn don't implement it.
    */
   warmup?(): Promise<void>;
+  /**
+   * Stop the in-flight turn (the composer's ↑→■ button). Best-effort and
+   * idempotent: the adapter ends the current turn as gracefully as it can
+   * (Claude Code sends a stream-json `control_request` interrupt; falling back
+   * to killing the process, which the next dispatch `--resume`s). After an
+   * interrupt the live `send()` iterator is expected to terminate with a `done`
+   * (or `error`) event like any other turn boundary. Adapters that can't
+   * interrupt mid-turn omit it; the manager then no-ops.
+   */
+  interrupt?(): void;
   /** Idempotent; resolves once the underlying runner process has exited. */
   close(): Promise<void>;
 }
@@ -62,6 +98,12 @@ export interface RunnerSessionHandle {
 export interface RunnerAdapter {
   readonly id: string;
   readonly capabilities: readonly RunnerCapability[];
+  /**
+   * Chat commands this runner exposes in the composer. Declared per-adapter so
+   * the cloud aggregates them into the `register` frame and the UI renders the
+   * right "/" menu for whichever adapter a thread uses. Empty ⇒ no slash menu.
+   */
+  readonly commands: readonly RunnerCommandId[];
   startSession(opts: StartSessionOpts): Promise<RunnerSessionHandle>;
   resumeSession(runnerSessionId: string, opts: StartSessionOpts): Promise<RunnerSessionHandle>;
 }

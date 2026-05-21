@@ -76,6 +76,7 @@ export function connectToCloud(
         // narrowing cast is safe — known type-narrowing seam.
         capabilities: caps.capabilities as RunnerCapability[],
         adapters: caps.adapters,
+        adapterCommands: caps.adapterCommands,
         version: VERSION,
         projectsRoot: pr.root,
         projectsRootLocked: pr.locked,
@@ -87,17 +88,24 @@ export function connectToCloud(
     });
 
     ws.on("message", (data) => {
+      let raw: unknown;
+      try {
+        raw = JSON.parse(String(data));
+      } catch {
+        return; // non-JSON frame — ignore
+      }
+      const parsed = cloudToHostSchema.safeParse(raw);
+      if (!parsed.success) return;
+      const msg = parsed.data;
+      // Stop bypasses the serialized chain: a dispatch in flight holds
+      // `processing` until its turn ends, but interrupt must reach the live
+      // session NOW to actually stop that turn. It only pokes the handle.
+      if (msg.t === "interrupt") {
+        manager.interrupt(msg.sessionId);
+        return;
+      }
       processing = processing
         .then(async () => {
-          let raw: unknown;
-          try {
-            raw = JSON.parse(String(data));
-          } catch {
-            return; // non-JSON frame — ignore
-          }
-          const parsed = cloudToHostSchema.safeParse(raw);
-          if (!parsed.success) return;
-          const msg = parsed.data;
           if (msg.t === "dispatch") {
             await handleDispatch(manager, msg, send);
           } else if (msg.t === "prewarm") {

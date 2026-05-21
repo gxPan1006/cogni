@@ -28,6 +28,40 @@ describe("CodexAdapter — capability surface", () => {
     expect(adapter.capabilities).not.toContain("session-resume");
     expect(adapter.capabilities).not.toContain("permission-prompt");
   });
+
+  it("advertises only the clear command — codex can't fork a session", () => {
+    const adapter = new CodexAdapter(fakeRunner([]));
+    expect(adapter.commands).toEqual(["clear"]);
+    expect(adapter.commands).not.toContain("branch");
+  });
+});
+
+describe("CodexAdapter — interrupt", () => {
+  it("closes the live stdout iterator and ends the turn with a clean done", async () => {
+    // A runner that hangs after one line until the consumer stops iterating.
+    // interrupt() must `.return()` the iterator, running its `finally`, so the
+    // turn ends without a codex terminal event → adapter synthesises `done`.
+    let cleanedUp = false;
+    const hangingRunner: CodexRunner = async function* () {
+      try {
+        yield JSON.stringify({ type: "thread.started", thread_id: "codex-int-1" });
+        // Block forever — only `.return()` (interrupt) ends this.
+        await new Promise<void>(() => {});
+      } finally {
+        cleanedUp = true;
+      }
+    };
+    const adapter = new CodexAdapter(hangingRunner);
+    const session = await adapter.startSession({ cwd: "/tmp/x" });
+    const out: RunnerEvent[] = [];
+    const iter = session.send("hi")[Symbol.asyncIterator]();
+    out.push((await iter.next()).value as RunnerEvent); // session-id, then it blocks
+    session.interrupt!();
+    let r = await iter.next();
+    while (!r.done) { out.push(r.value); r = await iter.next(); }
+    expect(out.map((e) => e.type)).toEqual(["session-id", "done"]);
+    expect(cleanedUp).toBe(true);
+  });
 });
 
 describe("CodexAdapter — resumeSession", () => {

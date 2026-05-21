@@ -1,7 +1,7 @@
 import * as readline from "node:readline";
 import { execa } from "execa";
 import type {
-  RunnerAdapter, RunnerCapability, RunnerEvent, RunnerSessionHandle, StartSessionOpts,
+  RunnerAdapter, RunnerCapability, RunnerCommandId, RunnerEvent, RunnerSessionHandle, StartSessionOpts,
 } from "@cogni/contract";
 
 /**
@@ -16,6 +16,13 @@ import type {
 export interface ClaudeProcess {
   /** Write one NDJSON line (a stream-json user message) to the process stdin. */
   write(line: string): void;
+  /**
+   * Ask the running turn to stop, by writing a stream-json `control_request`
+   * interrupt to stdin. The CLI ends the turn (emitting a terminal `result`)
+   * without killing the process, so the next turn stays warm. Best-effort:
+   * if the CLI doesn't honour it, the session's fallback timer kills instead.
+   */
+  interrupt(): void;
   /** Register a callback for each non-empty stdout line. */
   onLine(cb: (line: string) => void): void;
   /** Register a callback fired once when the process exits. */
@@ -32,6 +39,8 @@ export type ClaudeProcessFactory = (params: {
   mcpConfigPath?: string;
   allowedTools?: string[];
   model?: string;
+  /** Branch: resume `resumeId` with `--fork-session` so this run diverges. */
+  fork?: boolean;
 }) => ClaudeProcess;
 
 const CAPABILITIES: RunnerCapability[] = ["streaming", "session-resume", "tool-events"];
@@ -64,7 +73,7 @@ const CAPABILITIES: RunnerCapability[] = ["streaming", "session-resume", "tool-e
  * Readable we drive with `readline`; stderr stays buffered so a non-zero exit
  * can report a useful message. stdin stays a pipe we write turns into.
  */
-export const defaultClaudeProcessFactory: ClaudeProcessFactory = ({ cwd, resumeId, appendSystemPrompt, mcpConfigPath, allowedTools, model }) => {
+export const defaultClaudeProcessFactory: ClaudeProcessFactory = ({ cwd, resumeId, appendSystemPrompt, mcpConfigPath, allowedTools, model, fork }) => {
   const args = [
     "--print",
     "--input-format", "stream-json",
@@ -79,6 +88,9 @@ export const defaultClaudeProcessFactory: ClaudeProcessFactory = ({ cwd, resumeI
   // `--resume` is only used to reattach a session after a host/process restart
   // (the cache miss path). Within a live process, turns continue natively.
   if (resumeId) args.push("--resume", resumeId);
+  // Branch (`/branch`): fork the resumed session so the new thread diverges
+  // instead of mutating the parent's transcript. Only valid alongside --resume.
+  if (resumeId && fork) args.push("--fork-session");
   // SP-4: orchestrator dispatches mount the cogni stdio MCP server and restrict
   // the runner to its tools. Claude Code takes one comma-joined `--allowed-tools`.
   if (appendSystemPrompt) args.push("--append-system-prompt", appendSystemPrompt);
@@ -107,11 +119,25 @@ export const defaultClaudeProcessFactory: ClaudeProcessFactory = ({ cwd, resumeI
 
   return {
     write: (line) => { proc.stdin?.write(line); },
+    interrupt: () => {
+      // stream-json control protocol: a control_request with subtype
+      // "interrupt" tells the CLI to stop the current turn gracefully.
+      proc.stdin?.write(
+        JSON.stringify({ type: "control_request", request_id: `int_${Date.now()}`, request: { subtype: "interrupt" } }) + "\n",
+      );
+    },
     onLine: (cb) => { lineCbs.push(cb); },
     onExit: (cb) => { exitCbs.push(cb); },
     kill: () => { proc.kill(); },
   };
 };
+
+/**
+ * If a graceful `control_request` interrupt doesn't end the turn within this
+ * window, the session force-kills the process. The next dispatch `--resume`s a
+ * fresh one, so killing only costs a cold start — never session continuity.
+ */
+const INTERRUPT_FALLBACK_MS = 2000;
 
 class ClaudeCodeSession implements RunnerSessionHandle {
   private _runnerSessionId: string | null;
@@ -124,12 +150,18 @@ class ClaudeCodeSession implements RunnerSessionHandle {
   // ignored — at the start of the next turn.
   private buffer: string[] = [];
   private waiter: ((line: string | null) => void) | null = null;
+  // Stop-button bookkeeping. `turnSeq` increments per `send()`; `turnActive`
+  // gates interrupt() to the live turn; `interruptedTurn` marks the turn whose
+  // terminal `error` should read as a clean `done` (a user stop, not a fault).
+  private turnSeq = 0;
+  private turnActive = false;
+  private interruptedTurn = -1;
 
   constructor(
     private readonly factory: ClaudeProcessFactory,
     private readonly cwd: string,
     resumeId: string | null,
-    private readonly opts: { appendSystemPrompt?: string; mcpConfigPath?: string; allowedTools?: string[]; model?: string } = {},
+    private readonly opts: { appendSystemPrompt?: string; mcpConfigPath?: string; allowedTools?: string[]; model?: string; fork?: boolean } = {},
   ) {
     this._runnerSessionId = resumeId;
   }
@@ -152,6 +184,7 @@ class ClaudeCodeSession implements RunnerSessionHandle {
       mcpConfigPath: this.opts.mcpConfigPath,
       allowedTools: this.opts.allowedTools,
       model: this.opts.model,
+      fork: this.opts.fork,
     });
     this.proc.onLine((l) => this.deliver(l));
     this.proc.onExit((info) => {
@@ -195,22 +228,49 @@ class ClaudeCodeSession implements RunnerSessionHandle {
     this.proc!.write(
       JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: message }] } }) + "\n",
     );
-    while (true) {
-      const line = await this.nextLine();
-      if (line === null) {
-        // Process exited before this turn produced a terminal `result`.
-        yield { type: "error", code: "claude_exited", message: this.exitInfo?.stderr || "claude process exited" };
-        return;
-      }
-      for (const event of translateLine(line)) {
-        if (event.type === "session-id") this._runnerSessionId = event.id;
-        if (event.type === "done" || event.type === "error") {
-          yield event;
-          return; // turn boundary — leave the process running for the next turn
+    this.turnSeq++;
+    this.turnActive = true;
+    try {
+      while (true) {
+        const line = await this.nextLine();
+        if (line === null) {
+          // Process exited before this turn produced a terminal `result`. If the
+          // user pressed stop (fallback kill fired), surface a clean `done`.
+          yield this.interruptedTurn === this.turnSeq
+            ? { type: "done" }
+            : { type: "error", code: "claude_exited", message: this.exitInfo?.stderr || "claude process exited" };
+          return;
         }
-        yield event;
+        for (const event of translateLine(line)) {
+          if (event.type === "session-id") this._runnerSessionId = event.id;
+          if (event.type === "done" || event.type === "error") {
+            // A user-initiated stop ends the turn via an `error`-coded result;
+            // present it as a normal turn boundary, not a fault.
+            yield event.type === "error" && this.interruptedTurn === this.turnSeq
+              ? { type: "done" }
+              : event;
+            return; // turn boundary — leave the process running for the next turn
+          }
+          yield event;
+        }
       }
+    } finally {
+      this.turnActive = false;
     }
+  }
+
+  /** Stop the in-flight turn (composer ■). No-op when no turn is running. */
+  interrupt(): void {
+    if (!this.proc || this._closed || !this.turnActive) return;
+    this.interruptedTurn = this.turnSeq;
+    this.proc.interrupt();
+    const turnAtInterrupt = this.turnSeq;
+    setTimeout(() => {
+      // Graceful interrupt didn't land — force-kill the still-running turn.
+      if (!this._closed && this.turnActive && this.turnSeq === turnAtInterrupt) {
+        this.proc?.kill();
+      }
+    }, INTERRUPT_FALLBACK_MS);
   }
 
   async close(): Promise<void> {
@@ -223,6 +283,9 @@ class ClaudeCodeSession implements RunnerSessionHandle {
 export class ClaudeCodeAdapter implements RunnerAdapter {
   readonly id = "claude-code";
   readonly capabilities = CAPABILITIES;
+  // Composer "/" menu for claude-code threads. clear = reset context;
+  // branch = fork the conversation into a new thread (`--fork-session`).
+  readonly commands: readonly RunnerCommandId[] = ["clear", "branch"];
   constructor(private readonly factory: ClaudeProcessFactory = defaultClaudeProcessFactory) {}
 
   async startSession(opts: StartSessionOpts): Promise<RunnerSessionHandle> {
@@ -239,6 +302,7 @@ export class ClaudeCodeAdapter implements RunnerAdapter {
       mcpConfigPath: opts.mcpConfigPath,
       allowedTools: opts.allowedTools,
       model: opts.model,
+      ...(opts.fork ? { fork: true } : {}),
     });
   }
 }

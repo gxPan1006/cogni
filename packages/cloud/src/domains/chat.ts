@@ -1,8 +1,12 @@
-import type { RunnerEvent, SessionStatus } from "@cogni/contract";
+import type { RunnerCommandId, RunnerEvent, SessionStatus } from "@cogni/contract";
+import { THREAD_CLEARED_MARKER } from "@cogni/contract";
 import { randomUUID } from "node:crypto";
 import { inArray, and, eq } from "drizzle-orm";
 import type { AnyDb } from "../db/users.js";
-import { appendMessage, touchThread, updateThreadTitle, getFirstTurnIfDefaultTitle } from "../db/threads.js";
+import {
+  appendMessage, touchThread, updateThreadTitle, getFirstTurnIfDefaultTitle,
+  createThread, getThreadDetail, getThreadForBranch,
+} from "../db/threads.js";
 import {
   getRunnerSessionById, setRunnerSessionId, setRunnerSessionStatus, appendEvent,
   getLatestSessionForThread, openRunnerSession, closeRunnerSession,
@@ -83,6 +87,12 @@ export class ChatDomain {
   /** sessionId → accumulated assistant text for the in-flight turn. */
   private accumulating = new Map<string, string>();
   private pendingFallbacks = new Map<string, PendingFallback>();
+  /**
+   * Branch: new (branched) sessionId → the parent runner-session id to fork.
+   * Consumed on that session's first dispatch (sent as `forkFromRunnerSessionId`
+   * so the host resumes the parent with `--fork-session`), then deleted.
+   */
+  private pendingForks = new Map<string, string>();
 
   /**
    * Optional hook for experiments that want AskUserQuestion to pause a task.
@@ -289,6 +299,106 @@ export class ChatDomain {
     await setRunnerSessionStatus(this.db, sessionId, status);
   }
 
+  /**
+   * Composer commands available for a thread, derived from the live host's
+   * declared `adapterCommands` for the chat adapter. Empty when no host is
+   * online (you can't run a command without a runner anyway) → UI hides the
+   * "/" menu. Sent on subscribe-thread.
+   */
+  commandsForThread(userId: string): RunnerCommandId[] {
+    for (const h of this.hosts.getOnlineHostsForUser(userId)) {
+      const cmds = h.adapterCommands?.[ADAPTER];
+      if (cmds) return cmds;
+    }
+    return [];
+  }
+
+  /**
+   * Stop the in-flight turn (composer ■). Routes an `interrupt` to the host
+   * running the thread's live session. No-op if nothing is running or the host
+   * is gone — the turn will end on its own.
+   */
+  async handleStop(input: { userId: string; threadId: string }): Promise<void> {
+    const latest = await getLatestSessionForThread(this.db, input.threadId);
+    if (!latest || latest.status !== "running" || !latest.hostId) return;
+    const conn = this.hosts.getHostByIdForUser(input.userId, latest.hostId);
+    conn?.send({ t: "interrupt", sessionId: latest.id });
+  }
+
+  /** Dispatch a runner command from the composer "/" menu. */
+  async handleThreadCommand(input: {
+    userId: string; threadId: string; command: RunnerCommandId; sourceClientId: string;
+  }): Promise<void> {
+    if (input.command === "clear") return this.handleClear(input);
+    if (input.command === "branch") return this.handleBranch(input);
+  }
+
+  /**
+   * `/clear` — reset the thread's runner context. Stops any in-flight turn,
+   * closes the current session (so the next message cold-starts a fresh Claude
+   * Code session with no prior context), and appends a system divider message
+   * the timeline renders as "context cleared". History/scrollback is preserved.
+   */
+  private async handleClear(input: { userId: string; threadId: string }): Promise<void> {
+    const latest = await getLatestSessionForThread(this.db, input.threadId);
+    if (latest && latest.status !== "closed") {
+      if (latest.status === "running" && latest.hostId) {
+        this.hosts.getHostByIdForUser(input.userId, latest.hostId)?.send({ t: "interrupt", sessionId: latest.id });
+      }
+      await closeRunnerSession(this.db, latest.id);
+    }
+    const msg = await appendMessage(this.db, {
+      threadId: input.threadId, role: "system", content: THREAD_CLEARED_MARKER,
+    });
+    await touchThread(this.db, input.threadId);
+    this.clients.broadcast(input.threadId, {
+      t: "message", threadId: input.threadId, messageId: msg.id, role: "system",
+      content: msg.content, createdAt: msg.createdAt,
+    });
+  }
+
+  /**
+   * `/branch` — fork the conversation into a new thread inheriting context up
+   * to now. Clones the transcript into a fresh thread and, when the parent has
+   * a live runner session, arms a fork so the branched thread's first message
+   * resumes the parent session with `--fork-session` (the model keeps context;
+   * the two threads then diverge). The original thread is untouched.
+   */
+  private async handleBranch(input: { userId: string; threadId: string }): Promise<void> {
+    const meta = await getThreadForBranch(this.db, input.threadId);
+    const detail = await getThreadDetail(this.db, input.threadId);
+    if (!meta || !detail || meta.userId !== input.userId) return;
+
+    const branch = await createThread(this.db, {
+      userId: input.userId,
+      tenantId: meta.tenantId,
+      title: `${meta.title} · 分支`,
+    });
+    // Clone the transcript so the branched thread reads continuously. Skip the
+    // system "context cleared" dividers — they're not conversation content.
+    for (const m of detail.messages) {
+      if (m.role === "system" && m.content === THREAD_CLEARED_MARKER) continue;
+      await appendMessage(this.db, {
+        threadId: branch.id, role: m.role, content: m.content,
+        ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
+      });
+    }
+
+    // Arm a runner-session fork when the parent has one to fork from and a host
+    // to run it. Without these the branch is transcript-only (fresh context on
+    // its first turn) — still a valid divergence point.
+    const parentSession = await getLatestSessionForThread(this.db, input.threadId);
+    const hostId = parentSession?.hostId ?? this.hosts.getOnlineHostsForUser(input.userId)[0]?.hostId ?? null;
+    if (hostId && parentSession?.runnerSessionId) {
+      const session = await openRunnerSession(this.db, { threadId: branch.id, hostId, adapter: ADAPTER });
+      this.pendingForks.set(session.id, parentSession.runnerSessionId);
+    }
+
+    this.clients.publishThreadCreated(input.userId, {
+      id: branch.id, title: branch.title, updatedAt: branch.updatedAt,
+    });
+  }
+
   // --- private ---
 
   private async persistAndDispatch(p: {
@@ -324,6 +434,9 @@ export class ChatDomain {
       this.clients.sendToUser(p.userId, { t: "host-status", online: false });
       return;
     }
+    // Branch: a freshly branched session forks the parent on its first dispatch.
+    const forkFrom = this.pendingForks.get(session.id);
+    if (forkFrom) this.pendingForks.delete(session.id);
     try {
       conn.send({
         t: "dispatch",
@@ -334,6 +447,7 @@ export class ChatDomain {
         message: withAttachmentPreamble(p.content, p.attachments),
         ...(p.attachments && p.attachments.length > 0 ? { attachments: p.attachments } : {}),
         ...(p.model ? { model: p.model } : {}),
+        ...(forkFrom ? { forkFromRunnerSessionId: forkFrom } : {}),
       });
     } catch {
       await setRunnerSessionStatus(this.db, session.id, "failed");

@@ -36,7 +36,7 @@
  *     subscribers; future list-level consumers can attach their own
  *     listener via `onUserFrame()` (not yet exposed — add when needed).
  */
-import type { CloudToClient } from "@cogni/contract";
+import type { CloudToClient, RunnerCommandId } from "@cogni/contract";
 
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 15_000;
@@ -135,6 +135,10 @@ export interface WsClient {
     action: "switch" | "cancel",
     targetHostId?: string,
   ): boolean;
+  /** Stop the in-flight turn on a thread (composer ■). */
+  stop(threadId: string): boolean;
+  /** Run a runner command from the composer "/" menu (clear / branch). */
+  threadCommand(threadId: string, command: RunnerCommandId): boolean;
   /** Closes the connection permanently and stops the reconnect loop. */
   close(): void;
 }
@@ -452,6 +456,14 @@ export function createWsClient(buildUrl: () => string): WsClient {
         action,
         targetHostId,
       });
+    },
+
+    stop(threadId) {
+      return sendFrame({ t: "stop", threadId });
+    },
+
+    threadCommand(threadId, command) {
+      return sendFrame({ t: "thread-command", threadId, command });
     },
 
     close() {

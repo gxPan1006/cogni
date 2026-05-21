@@ -52,6 +52,7 @@ export const chat = {
     disconnected: "Connection to the server was lost, reconnecting…",
     hostOfflineWaiting: "Offline · waiting to come online",
     noHostOnline: "No Cogni desktop app online",
+    contextCleared: "Context cleared",
   },
   composer: {
     placeholderDisabled: "Waiting to reconnect…",
@@ -61,7 +62,15 @@ export const chat = {
     attachAria: "Attach file",
     send: "Send (Enter)",
     sendAria: "Send message",
+    stop: "Stop",
+    stopAria: "Stop generating",
     runningOn: "RUNNING ON",
+    commands: {
+      clear: "Clear conversation",
+      clearHint: "Reset context, keep the transcript",
+      branch: "Branch from here",
+      branchHint: "Fork the conversation into a new thread",
+    },
   },
   welcome: {
     greeting: "What would you like to do today?",

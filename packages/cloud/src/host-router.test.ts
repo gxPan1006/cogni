@@ -58,4 +58,47 @@ describe("HostRouter", () => {
     r.unregister("h1");
     expect(r.getOnlineHostsForUser("u1").map((h) => h.hostId)).toEqual(["h2"]);
   });
+
+  describe("liveness (heartbeat-staleness reaping)", () => {
+    it("register stamps lastSeen, so a fresh host is not stale", () => {
+      const r = new HostRouter();
+      r.register({ hostId: "h1", userId: "u1", send: () => {} }, 1_000);
+      // 30s later, threshold 60s → still fresh
+      expect(r.getStaleHosts(60_000, 31_000)).toEqual([]);
+    });
+
+    it("getStaleHosts returns hosts whose last frame is older than the threshold", () => {
+      const r = new HostRouter();
+      r.register({ hostId: "h1", userId: "u1", send: () => {} }, 1_000);
+      // 61s later, threshold 60s → stale
+      expect(r.getStaleHosts(60_000, 62_000)).toEqual(["h1"]);
+    });
+
+    it("touch refreshes lastSeen so a host that keeps beating never goes stale", () => {
+      const r = new HostRouter();
+      r.register({ hostId: "h1", userId: "u1", send: () => {} }, 1_000);
+      r.touch("h1", 40_000); // heartbeat at 40s
+      expect(r.getStaleHosts(60_000, 62_000)).toEqual([]); // 62-40 = 22s < 60s
+      expect(r.getStaleHosts(60_000, 101_000)).toEqual(["h1"]); // 101-40 = 61s
+    });
+
+    it("touch on an unknown host is a no-op (does not resurrect it)", () => {
+      const r = new HostRouter();
+      r.touch("ghost", 5_000);
+      expect(r.getStaleHosts(60_000, 100_000)).toEqual([]);
+    });
+
+    it("unregister clears liveness tracking", () => {
+      const r = new HostRouter();
+      r.register({ hostId: "h1", userId: "u1", send: () => {} }, 1_000);
+      r.unregister("h1");
+      expect(r.getStaleHosts(60_000, 999_000)).toEqual([]);
+    });
+
+    it("getStaleHosts reports the userId so the reaper can broadcast offline", () => {
+      const r = new HostRouter();
+      r.register({ hostId: "h1", userId: "u1", send: () => {} }, 1_000);
+      expect(r.getStaleEntries(60_000, 62_000)).toEqual([{ hostId: "h1", userId: "u1" }]);
+    });
+  });
 });

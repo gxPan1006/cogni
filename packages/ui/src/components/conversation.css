@@ -50,6 +50,19 @@
   color: var(--muted);
   font-style: italic;
 }
+/* `/clear` divider: a centered label flanked by hairlines. */
+.conversation__system--divider {
+  display: flex; align-items: center; gap: 12px;
+  font-style: normal;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.conversation__system--divider::before,
+.conversation__system--divider::after {
+  content: ""; flex: 1; height: 1px; background: var(--line);
+}
 
 .conversation__error {
   padding: 10px 14px;

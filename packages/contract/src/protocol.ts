@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { runnerEventSchema, RUNNER_CAPABILITIES } from "./runner.js";
+import { runnerEventSchema, RUNNER_CAPABILITIES, RUNNER_COMMAND_IDS } from "./runner.js";
 import {
   projectSchema,
   projectTaskSchema,
@@ -11,6 +11,15 @@ import { hostRpcRequestSchema, hostRpcResponseSchema } from "./host-protocol.js"
 
 export const sessionStatusSchema = z.enum(["running", "completed", "failed"]);
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
+
+/**
+ * Content of the system-role message the cloud appends when a thread's context
+ * is cleared (the `/clear` command). The timeline renders a system message with
+ * exactly this content as a centered "context cleared" divider; the i18n label
+ * lives in the UI. Users only ever author user-role messages, so matching on
+ * role + this sentinel can't collide with real content.
+ */
+export const THREAD_CLEARED_MARKER = "cogni:context-cleared";
 
 /** Lightweight attachment metadata carried on send/dispatch/message frames. */
 export const attachmentSchema = z.object({
@@ -51,6 +60,13 @@ export const hostToCloudSchema = z.discriminatedUnion("t", [
     hostId: z.string(),
     capabilities: z.array(z.enum(RUNNER_CAPABILITIES)),
     adapters: z.array(z.string()),
+    /**
+     * Per-adapter chat commands (the composer "/" menu), keyed by adapter id.
+     * The flat `capabilities`/`adapters` fields stay for backward compat; this
+     * is additive + optional so an old host that omits it simply surfaces no
+     * slash menu. Cloud relays the active thread's set to clients.
+     */
+    adapterCommands: z.record(z.array(z.enum(RUNNER_COMMAND_IDS))).optional(),
     version: z.string(),
     /** SP-4: host's configured projects-root (absolute, ~-expanded). Optional for old hosts. */
     projectsRoot: z.string().optional(),
@@ -118,6 +134,14 @@ export const cloudToHostSchema = z.discriminatedUnion("t", [
      * passes it as `claude --model <id>`; absent ⇒ the CLI's default model.
      */
     model: z.string().optional(),
+    /**
+     * Branch (`/branch`): fork an existing runner session into this one. Set
+     * only on the FIRST dispatch of a branched thread — the host resumes this
+     * parent runner-session id with `--fork-session`, producing a fresh forked
+     * id (captured via the next `session-id` event) so the two threads diverge
+     * without clobbering each other's history. Absent for ordinary dispatches.
+     */
+    forkFromRunnerSessionId: z.string().optional(),
   }),
   // Prewarm: spawn the runner process for `sessionId` ahead of the first
   // dispatch so its ~1.9s CLI cold start is paid while the user is still
@@ -139,6 +163,11 @@ export const cloudToHostSchema = z.discriminatedUnion("t", [
     rpcId: z.string(),
     request: hostRpcRequestSchema,
   }),
+  // Stop the in-flight turn for `sessionId` (the composer ■ button). The host
+  // calls the live handle's `interrupt()`; the runner ends the turn with a
+  // terminal event like any other turn boundary. No-op if the session has no
+  // live handle (turn already finished).
+  z.object({ t: z.literal("interrupt"), sessionId: z.string() }),
 ]);
 export type CloudToHost = z.infer<typeof cloudToHostSchema>;
 
@@ -188,6 +217,15 @@ export const clientToCloudSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("unsubscribe-project"), projectId: z.string() }),
   z.object({ t: z.literal("subscribe-task"), taskId: z.string() }),
   z.object({ t: z.literal("unsubscribe-task"), taskId: z.string() }),
+  // Runner-scoped chat command from the composer "/" menu. `command` is a
+  // semantic RunnerCommandId the thread's adapter declared as supported; the
+  // cloud handles it (clear: reset context + divider; branch: fork to a new
+  // thread). Sending an id the adapter didn't advertise is ignored cloud-side.
+  z.object({ t: z.literal("thread-command"), threadId: z.string(), command: z.enum(RUNNER_COMMAND_IDS) }),
+  // Stop the in-flight turn on `threadId` (composer ■ button). The cloud routes
+  // an `interrupt` to the host running the thread's live session. No-op if no
+  // turn is in flight.
+  z.object({ t: z.literal("stop"), threadId: z.string() }),
 ]);
 export type ClientToCloud = z.infer<typeof clientToCloudSchema>;
 
@@ -218,6 +256,11 @@ export const cloudToClientSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("catchup-complete"), threadId: z.string(), latestSeq: z.number() }),
   z.object({ t: z.literal("catchup-too-long"), threadId: z.string(), latestSeq: z.number() }),
   z.object({ t: z.literal("thread-meta"), threadId: z.string(), title: z.string(), lastMsgAt: z.string() }),
+  // Runner commands available for this thread, derived from its adapter's
+  // declared `commands` (relayed from the host `register` frame). Sent on
+  // thread subscribe so the composer renders the right "/" menu; empty array ⇒
+  // hide the menu (e.g. adapter offline or declares none).
+  z.object({ t: z.literal("thread-commands"), threadId: z.string(), commands: z.array(z.enum(RUNNER_COMMAND_IDS)) }),
   z.object({
     t: z.literal("thread-created"),
     thread: z.object({ id: z.string(), title: z.string(), updatedAt: z.string() }),

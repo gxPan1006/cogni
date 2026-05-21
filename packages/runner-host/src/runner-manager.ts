@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import type { RunnerAdapter, RunnerEvent, RunnerSessionHandle, StartSessionOpts } from "@cogni/contract";
+import type { RunnerAdapter, RunnerCommandId, RunnerEvent, RunnerSessionHandle, StartSessionOpts } from "@cogni/contract";
 import { threadScratchDir } from "./config.js";
 import { ensureCogniMcpConfig, COGNI_ALLOWED_TOOLS } from "./mcp/mcp-config.js";
 import { materializeUploads } from "./uploads.js";
@@ -37,6 +37,12 @@ export interface DispatchInput {
   attachments?: { name: string }[];
   /** Chat model id (a CHAT_MODELS id) → `claude --model <id>`. Absent ⇒ CLI default. */
   model?: string;
+  /**
+   * Branch: fork this parent runner-session id (`--fork-session`) when first
+   * spawning the handle, instead of resuming `runnerSessionId`. Set only on a
+   * branched thread's first dispatch.
+   */
+  forkFromRunnerSessionId?: string;
 }
 
 /**
@@ -75,10 +81,25 @@ export class RunnerManager {
     this.adapters.set(adapter.id, adapter);
   }
 
-  capabilities(): { adapters: string[]; capabilities: string[] } {
+  capabilities(): { adapters: string[]; capabilities: string[]; adapterCommands: Record<string, RunnerCommandId[]> } {
     const caps = new Set<string>();
-    for (const a of this.adapters.values()) for (const c of a.capabilities) caps.add(c);
-    return { adapters: [...this.adapters.keys()], capabilities: [...caps] };
+    const adapterCommands: Record<string, RunnerCommandId[]> = {};
+    for (const a of this.adapters.values()) {
+      for (const c of a.capabilities) caps.add(c);
+      adapterCommands[a.id] = [...a.commands];
+    }
+    return { adapters: [...this.adapters.keys()], capabilities: [...caps], adapterCommands };
+  }
+
+  /**
+   * Stop the in-flight turn for `sessionId` (cloud `interrupt` → composer ■).
+   * Best-effort: no-op if there's no live handle (turn already finished) or the
+   * adapter can't interrupt mid-turn. The handle's own `send()` iterator then
+   * terminates with a `done` like any turn boundary, so the cloud's normal
+   * session-update path fires — no extra cleanup here.
+   */
+  interrupt(sessionId: string): void {
+    this.sessions.get(sessionId)?.interrupt?.();
   }
 
   /**
@@ -127,6 +148,8 @@ export class RunnerManager {
           ...(input.model ? { model: input.model } : {}),
         }
       : { cwd, ...(input.model ? { model: input.model } : {}) };
+    // Branch: the first dispatch of a branched thread forks the parent session.
+    if (input.forkFromRunnerSessionId) opts.fork = true;
 
     const handle = await this.getOrCreateHandle(input, adapter, opts);
     try {
@@ -187,8 +210,10 @@ export class RunnerManager {
       this.touch(input.sessionId, cached);
       return cached;
     }
-    const handle = input.runnerSessionId
-      ? await adapter.resumeSession(input.runnerSessionId, opts)
+    // Branch forks the parent session id; otherwise resume our own (if any).
+    const resumeId = input.forkFromRunnerSessionId ?? input.runnerSessionId;
+    const handle = resumeId
+      ? await adapter.resumeSession(resumeId, opts)
       : await adapter.startSession(opts);
     this.cacheSet(input.sessionId, handle);
     return handle;

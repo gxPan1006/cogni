@@ -9,7 +9,7 @@ import type { RunnerEvent } from "@cogni/contract";
  * assertable; `params` captures the spawn args.
  */
 function fakeFactory(turns: string[][]) {
-  const state = { spawns: 0, params: [] as Array<Parameters<ClaudeProcessFactory>[0]>, written: [] as string[], killed: 0 };
+  const state = { spawns: 0, params: [] as Array<Parameters<ClaudeProcessFactory>[0]>, written: [] as string[], killed: 0, interrupts: 0 };
   let turnIdx = 0;
   const factory: ClaudeProcessFactory = (p) => {
     state.spawns += 1;
@@ -23,6 +23,7 @@ function fakeFactory(turns: string[][]) {
         turnIdx += 1;
         queueMicrotask(() => { for (const l of lines) for (const cb of lineCbs) cb(l); });
       },
+      interrupt: () => { state.interrupts += 1; },
       onLine: (cb) => { lineCbs.push(cb); },
       onExit: (cb) => { exitCbs.push(cb); },
       kill: () => { state.killed += 1; },
@@ -57,11 +58,46 @@ function turnLines(text: string, opts: { withTool?: boolean } = {}): string[] {
 }
 
 describe("ClaudeCodeAdapter", () => {
-  it("declares its id and capabilities", () => {
+  it("declares its id, capabilities, and composer commands", () => {
     const { factory } = fakeFactory([]);
     const a = new ClaudeCodeAdapter(factory);
     expect(a.id).toBe("claude-code");
     expect(a.capabilities).toEqual(["streaming", "session-resume", "tool-events"]);
+    expect(a.commands).toEqual(["clear", "branch"]);
+  });
+
+  it("interrupt() pokes the live process and the turn-ending error reads as a clean done", async () => {
+    // Manual factory: the turn stays open until we feed a result line, so we
+    // can interrupt mid-turn deterministically (no fallback timer involved).
+    let lineCb: ((l: string) => void) | null = null;
+    const written: string[] = [];
+    const factory: ClaudeProcessFactory = () => ({
+      write: (l) => { written.push(l); },
+      interrupt: () => { written.push("__interrupt__"); },
+      onLine: (cb) => { lineCb = cb; },
+      onExit: () => {},
+      kill: () => {},
+    });
+    const adapter = new ClaudeCodeAdapter(factory);
+    const session = await adapter.startSession({ cwd: "/tmp/x" });
+    const iter = session.send("hi")[Symbol.asyncIterator]();
+    const first = iter.next(); // starts the turn (turnActive = true)
+    session.interrupt!();
+    expect(written).toContain("__interrupt__");
+    // The CLI ends the interrupted turn with an error-coded result; the adapter
+    // coerces it to `done` so a user stop never surfaces as a fault.
+    queueMicrotask(() => lineCb!(JSON.stringify({ type: "result", subtype: "interrupted", result: "stopped" })));
+    expect((await first).value).toEqual({ type: "done" });
+  });
+
+  it("interrupt() is a no-op when no turn is in flight", async () => {
+    const { factory, state } = fakeFactory([turnLines("ok")]);
+    const adapter = new ClaudeCodeAdapter(factory);
+    const session = await adapter.startSession({ cwd: "/tmp/x" });
+    session.interrupt!(); // before any send → process not even spawned
+    await collect(session.send("hi"));
+    session.interrupt!(); // after the turn already finished
+    expect(state.interrupts).toBe(0);
   });
 
   it("translates a full streaming turn into RunnerEvents (text from deltas, tools from blocks)", async () => {
@@ -123,6 +159,7 @@ describe("ClaudeCodeAdapter", () => {
       emitExit = (i) => { for (const cb of exitCbs) cb(i); };
       return {
         write: () => {},
+        interrupt: () => {},
         onLine: () => {},
         onExit: (cb) => { exitCbs.push(cb); },
         kill: () => {},

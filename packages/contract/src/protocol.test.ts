@@ -58,6 +58,18 @@ describe("protocol schemas", () => {
       t: "register", hostId: "h1", capabilities: ["streaming"], adapters: ["claude-code"], version: "0.0.0",
     }).success).toBe(true);
   });
+  it("accepts host register with adapterCommands", () => {
+    expect(hostToCloudSchema.safeParse({
+      t: "register", hostId: "h1", capabilities: ["streaming"], adapters: ["claude-code", "codex"],
+      adapterCommands: { "claude-code": ["clear", "branch"], codex: ["clear"] }, version: "0.0.0",
+    }).success).toBe(true);
+  });
+  it("rejects host register with an unknown command id", () => {
+    expect(hostToCloudSchema.safeParse({
+      t: "register", hostId: "h1", capabilities: ["streaming"], adapters: ["claude-code"],
+      adapterCommands: { "claude-code": ["rewind"] }, version: "0.0.0",
+    }).success).toBe(false);
+  });
 
   // cloudToHostSchema variants
   it("parses a cloud registered message", () => {
@@ -73,6 +85,9 @@ describe("protocol schemas", () => {
       t: "dispatch", sessionId: "s1", adapter: "claude-code", runnerSessionId: null, message: "hi",
     }).success).toBe(false);
   });
+  it("parses a cloud interrupt message", () => {
+    expect(cloudToHostSchema.safeParse({ t: "interrupt", sessionId: "s1" }).success).toBe(true);
+  });
 
   // clientToCloudSchema variants
   it("parses a client subscribe message", () => {
@@ -80,6 +95,16 @@ describe("protocol schemas", () => {
   });
   it("rejects client send missing text", () => {
     expect(clientToCloudSchema.safeParse({ t: "send", threadId: "t1" }).success).toBe(false);
+  });
+  it("parses a client thread-command message", () => {
+    expect(clientToCloudSchema.safeParse({ t: "thread-command", threadId: "t1", command: "clear" }).success).toBe(true);
+    expect(clientToCloudSchema.safeParse({ t: "thread-command", threadId: "t1", command: "branch" }).success).toBe(true);
+  });
+  it("rejects a client thread-command with an unknown command", () => {
+    expect(clientToCloudSchema.safeParse({ t: "thread-command", threadId: "t1", command: "nope" }).success).toBe(false);
+  });
+  it("parses a client stop message", () => {
+    expect(clientToCloudSchema.safeParse({ t: "stop", threadId: "t1" }).success).toBe(true);
   });
 
   // cloudToClientSchema variants
@@ -90,6 +115,10 @@ describe("protocol schemas", () => {
   });
   it("parses a cloud→client host-status online", () => {
     expect(cloudToClientSchema.safeParse({ t: "host-status", online: true }).success).toBe(true);
+  });
+  it("parses a cloud→client thread-commands message", () => {
+    expect(cloudToClientSchema.safeParse({ t: "thread-commands", threadId: "t1", commands: ["clear", "branch"] }).success).toBe(true);
+    expect(cloudToClientSchema.safeParse({ t: "thread-commands", threadId: "t1", commands: [] }).success).toBe(true);
   });
   it("parses a cloud→client error", () => {
     expect(cloudToClientSchema.safeParse({ t: "error", message: "something went wrong" }).success).toBe(true);
