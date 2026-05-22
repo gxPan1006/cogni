@@ -135,20 +135,30 @@ ssh prod-cognit 'sudo -u cogni bash -c "cd /opt/cogni && pnpm --filter web build
 ## 阶段 4 — 核验网页端在最新（交付前必做）
 
 别只说"发完了"，拿证据。注意 MEMORY.md 的 stale-process 陷阱。
-**API 在 cloud.ai-cognit.com，不是 chat.ai-cognit.com**（后者是 SPA 静态站，未匹配 GET 兜底回
-index.html 给 200、POST 给 405 —— 拿它探活会误判，必须打 cloud.* 才准）。
+
+> ⚠️ **不要用 `curl /api/me` 的状态码探路由是否上线**（2026-05-22 踩过）：`/api/*` 的 Bearer
+> 中间件对**任何**无 token / 坏 token 的 `/api/*` 请求都先返 **401**，根本走不到路由匹配——
+> 所以 `curl /api/me` 返 401 既可能是"路由已注册要鉴权"，也可能是"路由根本不存在"，**无法区分**
+> （亲测 `curl /api/definitely-not-a-route` 也返 401）。要可靠判断路由是否真上线，**grep prod 的
+> dist**（下面第 2 步），而不是看 HTTP 码。
 
 ```sh
 # 1. 云服务活着
 ssh prod-cognit 'sudo systemctl is-active cogni-cloud'             # active
 
-# 2. 本次新增的 API 路由真上线了（无 token 期望 401=已注册要鉴权，而非 404=没这路由）
-curl -s -o /dev/null -w "%{http_code}\n" https://cloud.ai-cognit.com/api/me   # 期望 401（非 404）
+# 2. 本次新增的 API 路由真编进 dist 且注册进 server（可靠判据，不是看 HTTP 码）
+#    例：本次加了 routes/profile.ts + registerProfileRoutes
+ssh prod-cognit 'grep -rc "registerProfileRoutes" /opt/cogni/packages/cloud/dist/server.js'       # >0
+ssh prod-cognit 'grep -rc "/api/me" /opt/cogni/packages/cloud/dist/routes/profile.js'             # >0
 
-# 3. SPA 是新构建（仅当 3d 发过 web）：对比线上资产 hash 和本地刚 build 的
+# 3. SPA 是新构建（仅当 3d 发过 web）：对比线上资产 hash 和 prod 刚 build 的 dist
+LIVE=$(curl -s https://chat.ai-cognit.com | grep -o 'assets/index-[A-Za-z0-9_-]*\.js' | head -1)
+echo "$LIVE"                                                       # 线上 hash
+ssh prod-cognit "ls /var/www/chat/assets/$(basename "$LIVE")"      # 存在 = 一致
+# 进一步确认 bundle 真含本次新代码（grep 新符号）：
+curl -s "https://chat.ai-cognit.com/$LIVE" | grep -o -e "/api/me" -e "<本次新增的某 UI 符号>" | sort -u
+
 curl -sI https://chat.ai-cognit.com | head -1                     # 200
-curl -s https://chat.ai-cognit.com | grep -o 'assets/index-[A-Za-z0-9_-]*\.js'   # 线上 hash
-ls apps/web/dist/assets/index-*.js                                # 本地 hash，一致才算 web 真更新
 ```
 
 **commit 一致**：local HEAD == origin/main == prod HEAD。
