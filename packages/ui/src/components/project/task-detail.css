@@ -303,8 +303,13 @@
   font-family: var(--font-mono); font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
 }
-.td-desc { font-size: 13.5px; line-height: 1.6; color: var(--ink-2); }
-.td-desc--empty { color: var(--muted); font-style: italic; }
+.td-desc {
+  font-size: 13.5px; line-height: 1.6; color: var(--ink-2);
+  /* Cap a long description so it never dominates the column — scroll inside. */
+  max-height: 260px; overflow-y: auto; overscroll-behavior: contain;
+  padding-right: 4px;
+}
+.td-desc--empty { color: var(--muted); font-style: italic; max-height: none; }
 .td-desc > :first-child { margin-top: 0; }
 .td-desc > :last-child { margin-bottom: 0; }
 

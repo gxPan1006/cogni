@@ -230,7 +230,7 @@ export function TaskDetail({
                 <section className="td-sec">
                   <div className="td-sec__h">{t("project.task.secDescription")}</div>
                   {task.description
-                    ? <div className="td-desc"><Markdown text={task.description} /></div>
+                    ? <div className="td-desc"><Markdown text={unescapeNewlines(task.description)} /></div>
                     : <div className="td-desc td-desc--empty">{t("project.task.noDescription")}</div>}
                 </section>
 
@@ -550,6 +550,19 @@ function formatAgo(iso: string): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+/**
+ * Descriptions can arrive with escaped "\n" / "\r\n" / "\t" literals (e.g. a
+ * task created from a JSON-encoded spec where newlines were double-escaped)
+ * rather than real control chars — Markdown then renders the literal "\n" as
+ * text. Unescape them so `marked` sees real newlines (\n\n → paragraph break).
+ */
+function unescapeNewlines(text: string): string {
+  return text
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t");
 }
 
 /** HH:MM from an epoch-ms timestamp, for timeline rows. */
