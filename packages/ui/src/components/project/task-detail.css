@@ -13,7 +13,7 @@
 
 .td {
   position: relative;
-  width: 760px; max-width: 100%;
+  width: 900px; max-width: 100%;
   /* Fixed height so switching tabs (主页面 / 执行记录 / 文件) never resizes the
      modal — the active tab's body scrolls inside .td__scroll instead. */
   height: min(760px, calc(100dvh - 64px));
@@ -279,13 +279,121 @@
   letter-spacing: 0.04em;
 }
 
+/* ── V1 two-pane overview ──────────────────────
+   Left column = content (description / activity / file changes / comments),
+   right column = action buttons + metadata. The sidebar sticks to the top of
+   the scroll area so the action buttons stay reachable on long tasks. */
+.td-pane {
+  display: grid;
+  grid-template-columns: 1fr 232px;
+  gap: 24px;
+  align-items: start;
+}
+.td-pane__main { min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.td-pane__main .tc { margin-top: 0; }
+.td-pane__side { display: flex; flex-direction: column; gap: 18px; position: sticky; top: 0; }
+
+.td-side-actions { display: flex; flex-direction: column; }
+.td-side-actions .td-actions { flex-direction: column; align-items: stretch; gap: 8px; width: 100%; }
+.td-side-actions .btn { width: 100%; justify-content: center; }
+
+/* Section heading shared by description / activity / file changes. */
+.td-sec { display: flex; flex-direction: column; gap: 10px; }
+.td-sec__h {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+}
+.td-desc { font-size: 13.5px; line-height: 1.6; color: var(--ink-2); }
+.td-desc--empty { color: var(--muted); font-style: italic; }
+.td-desc > :first-child { margin-top: 0; }
+.td-desc > :last-child { margin-bottom: 0; }
+
+.td-files-link {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--bg-sunk); border: 1px solid var(--line-soft);
+  border-radius: var(--r-2); color: var(--ink-2);
+  font: inherit; font-size: 12.5px; padding: 7px 11px; cursor: pointer;
+  transition: border-color .12s, color .12s;
+}
+.td-files-link:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Activity timeline (replaces stepper) ───────── */
+.td-tl { position: relative; list-style: none; margin: 0; padding: 0 0 0 22px; }
+.td-tl::before { content: ""; position: absolute; left: 4px; top: 7px; bottom: 7px; width: 2px; background: var(--line-soft); }
+.td-tl__item { position: relative; display: flex; flex-direction: column; gap: 3px; padding-bottom: 14px; }
+.td-tl__item:last-child { padding-bottom: 2px; }
+.td-tl__item::before {
+  content: ""; position: absolute; left: -22px; top: 4px;
+  width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box;
+  background: var(--surface); border: 2px solid var(--muted-2);
+}
+.td-tl__item--live::before {
+  border-color: var(--accent); background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  animation: td-stepper-pulse 1.6s ease-in-out infinite;
+}
+.td-tl__item--good::before { border-color: var(--good); background: var(--good); }
+.td-tl__item--bad::before  { border-color: var(--bad);  background: var(--bad); }
+.td-tl__when { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.td-tl__body { min-width: 0; }
+.td-tl__what { font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+.td-tl__item--live .td-tl__what { color: var(--ink); font-weight: 600; }
+.td-tl__item--bad .td-tl__what { color: var(--bad); }
+.td-tl__detail {
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);
+  margin-top: 5px; white-space: pre-wrap; line-height: 1.5;
+  background: var(--bg-sunk); border: 1px solid var(--line-soft);
+  border-radius: var(--r-2); padding: 7px 9px;
+}
+.td-tl__empty { font-size: 13px; color: var(--muted); }
+
+/* ── Metadata sidebar ──────────────────────────── */
+.td-meta { margin: 0; display: flex; flex-direction: column; }
+.td-meta__row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--line-soft);
+}
+.td-meta__row:last-child { border-bottom: 0; }
+.td-meta__k { margin: 0; font-size: 12px; color: var(--muted); flex: 0 0 auto; }
+.td-meta__v {
+  margin: 0; font-size: 12.5px; color: var(--ink-2);
+  display: flex; align-items: center; gap: 6px; justify-content: flex-end;
+  flex-wrap: wrap; min-width: 0; text-align: right;
+}
+.td-meta__none { color: var(--muted-2); }
+.td-meta__mono { font-family: var(--font-mono); font-size: 11px; word-break: break-all; }
+.td-meta__host { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; }
+.td-labels { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.td-label {
+  font-size: 10.5px; color: var(--ink-2);
+  background: var(--bg-sunk); border: 1px solid var(--line-soft);
+  border-radius: var(--r-full); padding: 1px 7px;
+}
+
+/* Priority glyph */
+.td-prio { display: inline-flex; align-items: center; gap: 6px; }
+.td-prio__bars { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+.td-prio__bars i { width: 2.5px; border-radius: 1px; background: var(--muted-2); display: block; }
+.td-prio__bars i:nth-child(1) { height: 4px; }
+.td-prio__bars i:nth-child(2) { height: 7px; }
+.td-prio__bars i:nth-child(3) { height: 10px; }
+.td-prio__bars[data-level="1"] i:nth-child(1),
+.td-prio__bars[data-level="2"] i:nth-child(-n+2),
+.td-prio__bars[data-level="3"] i:nth-child(-n+3),
+.td-prio__bars[data-level="4"] i { background: var(--ink-2); }
+.td-prio--urgent .td-prio__bars i { background: var(--bad); }
+
 /* ── Mobile / narrow viewport ──────────────────
-   On a phone the modal fills the viewport edge-to-edge with tighter padding. */
+   On a phone the modal fills the viewport edge-to-edge with tighter padding,
+   and the two-pane overview collapses to a single column (sidebar below). */
 @media (max-width: 768px) {
   .td-scrim { padding: 12px; }
   .td { width: 100%; max-width: 100%; max-height: calc(100dvh - 24px); }
   .td__head { padding: 14px 16px 16px; }
   .td__scroll { padding: 16px 16px 24px; }
+  .td-pane { grid-template-columns: 1fr; }
+  .td-pane__side { position: static; }
 }
 
 /* ── Comment feed (主页面) ──────────────────────

@@ -23,7 +23,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import type { ProjectTask, TaskState, Project } from "@cogni/contract";
+import type { ProjectTask, TaskRun, TaskExitReason, Priority, Project } from "@cogni/contract";
 import type { ApiClient, HostInfo } from "../../transport/api.js";
 import { useTaskDetail, type UseTaskDetailResult } from "../../hooks/useTaskDetail.js";
 import { useThreadStream } from "../../hooks/useThreadStream.js";
@@ -41,20 +41,28 @@ import { LoadingRows, LoadingState } from "../LoadingState.js";
 import "../conversation.css";
 import "./task-detail.css";
 
-// Stepper steps, keyed by state. Labels are translated at render time via the
-// `labelKey` so switching language updates instantly (the stepper's labels
-// differ slightly from the generic STATE_LABEL — e.g. "Review" / "完成").
-const STEPPER: { state: TaskState; labelKey: string }[] = [
-  { state: "queued",      labelKey: "project.task.stepQueued" },
-  { state: "running",     labelKey: "project.task.stepRunning" },
-  { state: "needs-input", labelKey: "project.task.stepNeedsInput" },
-  { state: "reviewing",   labelKey: "project.task.stepReviewing" },
-  { state: "done",        labelKey: "project.task.stepDone" },
-];
+// Priority → { label key, fill level (0–4 bars lit) }. Mirrors the Linear
+// numeric scale documented on `Priority` (0=none, 1=urgent … 4=low) — urgent
+// fills all bars in red, the rest fill bottom-up.
+const PRIO_META: Record<Priority, { key: string; level: number }> = {
+  0: { key: "prioNone",   level: 0 },
+  1: { key: "prioUrgent", level: 4 },
+  2: { key: "prioHigh",   level: 3 },
+  3: { key: "prioMedium", level: 2 },
+  4: { key: "prioLow",    level: 1 },
+};
 
-/** Translate a TaskState to its drawer-card label at render time. */
-function drawerStateLabel(t: TFunction, state: TaskState): string {
-  return t(`project.state.${state}`);
+/** Translate a TaskRun exit reason to its timeline label. */
+function exitReasonLabel(t: TFunction, r: TaskExitReason | null): string {
+  switch (r) {
+    case "failed":                 return t("project.task.exitFailed");
+    case "timeout":                return t("project.task.exitTimeout");
+    case "host-disconnect":        return t("project.task.exitHostDisconnect");
+    case "cancelled":              return t("project.task.exitCancelled");
+    case "business-clarification": return t("project.task.exitBusinessClarification");
+    case "done":
+    default:                       return t("project.task.exitDone");
+  }
 }
 
 export function TaskDetail({
@@ -200,27 +208,56 @@ export function TaskDetail({
             <div className="td-card td-card--empty">{t("project.task.notFoundBody")}</div>
           )}
 
-          {/* 主页面: status stepper, activity card, needs-input, actions. */}
+          {/* 主页面: two-pane — content (description / activity / files / comments)
+              on the left, action buttons + metadata sidebar on the right. */}
           {task && activeTab === "overview" && (
-            <>
-              <Stepper currentState={task.state} />
-              <ActivityCard task={task} />
-              {task.state === "needs-input" && (
-                <div className="td-needs">
-                  <div className="td-needs__head">
-                    <span className="td-needs__icon">{Icon.shield}</span>
-                    <span className="td-needs__label">{t("project.task.needsInputLabel")}</span>
+            <div className="td-pane">
+              <div className="td-pane__main">
+                {task.state === "needs-input" && (
+                  <div className="td-needs">
+                    <div className="td-needs__head">
+                      <span className="td-needs__icon">{Icon.shield}</span>
+                      <span className="td-needs__label">{t("project.task.needsInputLabel")}</span>
+                    </div>
+                    {task.needsInputWhat && <div className="td-needs__body">{task.needsInputWhat}</div>}
+                    <TaskReply api={api} taskId={taskId} reply={detail.reply} />
+                    <div className="td-needs__actions">
+                      <button className="btn btn-sm" onClick={() => { void detail.cancel(); }}>{t("project.task.cancelTask")}</button>
+                    </div>
                   </div>
-                  {task.needsInputWhat && <div className="td-needs__body">{task.needsInputWhat}</div>}
-                  <TaskReply api={api} taskId={taskId} reply={detail.reply} />
-                  <div className="td-needs__actions">
-                    <button className="btn btn-sm" onClick={() => { void detail.cancel(); }}>{t("project.task.cancelTask")}</button>
-                  </div>
+                )}
+
+                <section className="td-sec">
+                  <div className="td-sec__h">{t("project.task.secDescription")}</div>
+                  {task.description
+                    ? <div className="td-desc"><Markdown text={task.description} /></div>
+                    : <div className="td-desc td-desc--empty">{t("project.task.noDescription")}</div>}
+                </section>
+
+                <section className="td-sec">
+                  <div className="td-sec__h">{t("project.task.secActivity")}</div>
+                  <TaskTimeline task={task} runs={detail.runs} />
+                </section>
+
+                {hasFiles && (
+                  <section className="td-sec">
+                    <div className="td-sec__h">{t("project.task.secFileChanges")}</div>
+                    <button type="button" className="td-files-link" onClick={() => setTab("files")}>
+                      {Icon.folder}{t("project.task.viewFiles")}
+                    </button>
+                  </section>
+                )}
+
+                <TaskComments api={api} taskId={taskId} />
+              </div>
+
+              <aside className="td-pane__side">
+                <div className="td-side-actions">
+                  <Actions task={task} onAccept={detail.accept} onReject={detail.reject} onRetry={detail.retry} onCancel={detail.cancel} />
                 </div>
-              )}
-              <Actions task={task} onAccept={detail.accept} onReject={detail.reject} onRetry={detail.retry} onCancel={detail.cancel} />
-              <TaskComments api={api} taskId={taskId} />
-            </>
+                <MetaSidebar task={task} host={host} />
+              </aside>
+            </div>
           )}
 
           {/* 执行记录: the runner thread, rendered with the same chat styling. */}
@@ -313,69 +350,111 @@ function TaskDetailLoading() {
   );
 }
 
-function Stepper({ currentState }: { currentState: TaskState }) {
+/**
+ * Activity timeline — a real, timestamp-derived event rail (newest first).
+ * Built from the task's own timestamps (`createdAt`, `updatedAt`,
+ * `completedAt`) plus the `runs` history (each attempt's start + how it
+ * ended, with the runner's `errorMessage` shown inline on failures). This
+ * replaces the old hardcoded 5-dot stepper + fake 0/0.5/1 progress bar —
+ * everything here is genuine data already on the wire.
+ *
+ * Visible behavior: the user sees a vertical timeline; the top (current) row
+ * gets a live pulsing dot while the task is running, failed-attempt rows show
+ * a red dot and the failure reason/message, finished work shows a green dot.
+ */
+function TaskTimeline({ task, runs }: { task: ProjectTask; runs: TaskRun[] }) {
   const { t } = useTranslation();
-  const isFailed = currentState === "failed";
-  const isCancelled = currentState === "cancelled";
-  const effective: TaskState = isFailed || isCancelled ? "running" : currentState;
-  const currentIdx = STEPPER.findIndex((s) => s.state === effective);
+  type Tone = "live" | "good" | "bad" | "plain";
+  const entries: { ts: number; what: string; detail?: string | null; tone: Tone }[] = [];
+  const at = (iso: string | null | undefined) => (iso ? Date.parse(iso) : NaN);
+
+  entries.push({ ts: at(task.createdAt), what: t("project.task.tlQueued"), tone: "plain" });
+
+  [...runs].sort((a, b) => a.attemptNumber - b.attemptNumber).forEach((run) => {
+    entries.push({ ts: at(run.startedAt), what: t("project.task.tlAttemptStarted", { n: run.attemptNumber }), tone: "plain" });
+    if (run.endedAt) {
+      const bad = run.exitReason === "failed" || run.exitReason === "timeout" || run.exitReason === "host-disconnect";
+      entries.push({ ts: at(run.endedAt), what: exitReasonLabel(t, run.exitReason), detail: run.errorMessage, tone: bad ? "bad" : "good" });
+    }
+  });
+
+  // Head row for the current state. Ongoing states (running / needs-input /
+  // reviewing) pulse; a completed task gets a terminal "done" row.
+  if (task.state === "running" || task.state === "needs-input" || task.state === "reviewing") {
+    const label =
+      task.state === "running"     ? t("project.task.tlRunning")
+      : task.state === "needs-input" ? t("project.task.tlNeedsInput")
+      :                                t("project.task.tlReviewing");
+    entries.push({ ts: at(task.updatedAt), what: label, tone: "live" });
+  } else if (task.state === "done" && task.completedAt) {
+    entries.push({ ts: at(task.completedAt), what: t("project.task.tlCompleted"), tone: "good" });
+  }
+
+  const rows = entries.filter((e) => Number.isFinite(e.ts)).sort((a, b) => b.ts - a.ts);
+  if (rows.length === 0) return <div className="td-tl__empty">{t("project.task.noActivity")}</div>;
 
   return (
-    <ol className="td-stepper">
-      {STEPPER.map((s, i) => {
-        const cls = "td-stepper__step"
-          + (i < currentIdx  ? " td-stepper__step--past"    : "")
-          + (i === currentIdx ? " td-stepper__step--current" : "")
-          + ((isFailed || isCancelled) && i === currentIdx ? " td-stepper__step--failed" : "");
-        return (
-          <li key={s.state} className={cls}>
-            <span className="td-stepper__dot" />
-            <span className="td-stepper__label">{t(s.labelKey)}</span>
-            {i < STEPPER.length - 1 && <span className="td-stepper__line" />}
-          </li>
-        );
-      })}
+    <ol className="td-tl">
+      {rows.map((e, i) => (
+        <li key={i} className={"td-tl__item td-tl__item--" + e.tone}>
+          <span className="td-tl__when">{formatClock(e.ts)}</span>
+          <div className="td-tl__body">
+            <div className="td-tl__what">{e.what}</div>
+            {e.detail && <div className="td-tl__detail">{e.detail}</div>}
+          </div>
+        </li>
+      ))}
     </ol>
   );
 }
 
-function ActivityCard({ task }: { task: ProjectTask }) {
+/** Linear-style priority glyph: three bars lit bottom-up, urgent in red. */
+function PriorityGlyph({ priority }: { priority: Priority }) {
   const { t } = useTranslation();
-  const elapsed = formatElapsed(task);
-  const progress =
-    task.state === "done" || task.state === "reviewing" ? 1 :
-    task.state === "running" || task.state === "failed" ? 0.5 : 0;
+  const meta = PRIO_META[priority];
   return (
-    <div className="td-card">
-      <div className="td-card__head">
-        <span className="td-card__head-label">{t("project.task.currentActivity")}</span>
-        <span className="td-card__head-time">{elapsed ?? "—"}</span>
-      </div>
-      <div className="td-card__activity">
-        {task.needsInputWhat ?? drawerStateLabel(t, task.state)}
-      </div>
-      {(task.state === "running" || task.state === "reviewing" || task.state === "failed") && (
-        <div className="kb-progress td-card__progress">
-          <div className="kb-progress__fill" style={{
-            width: `${progress * 100}%`,
-            background: task.state === "failed" ? "var(--bad)" : "var(--accent)",
-          }} />
-        </div>
-      )}
-      <div className="td-card__metrics">
-        <Metric label={t("project.task.metricState")}>{drawerStateLabel(t, task.state)}</Metric>
-        <Metric label={t("project.task.metricRetry")} tone={task.retries > 0 ? "warn" : "muted"}>{task.retries} / {task.maxRetries}</Metric>
-        <Metric label={t("project.task.metricAttempt")}>#{task.retries + 1}</Metric>
-      </div>
-    </div>
+    <span className={"td-prio" + (priority === 1 ? " td-prio--urgent" : "")}>
+      <span className="td-prio__bars" data-level={meta.level}><i /><i /><i /></span>
+      <span>{t("project.task." + meta.key)}</span>
+    </span>
   );
 }
 
-function Metric({ label, tone, children }: { label: string; tone?: "muted" | "warn"; children: React.ReactNode }) {
+/** Right-side metadata column — surfaces the ProjectTask fields the old
+ *  drawer never showed (priority, labels, adapter, branch) alongside host,
+ *  attempts, created-at and elapsed. */
+function MetaSidebar({ task, host }: { task: ProjectTask; host?: HostInfo }) {
+  const { t } = useTranslation();
+  const none = <span className="td-meta__none">{t("project.task.metaNone")}</span>;
+  const elapsed = formatElapsed(task);
   return (
-    <div className="td-metric">
-      <div className="td-metric__label">{label.toUpperCase()}</div>
-      <div className={"td-metric__value" + (tone ? ` td-metric__value--${tone}` : "")}>{children}</div>
+    <dl className="td-meta">
+      <MetaRow k={t("project.task.metaState")}><StatePill state={task.state} /></MetaRow>
+      <MetaRow k={t("project.task.metaPriority")}><PriorityGlyph priority={task.priority} /></MetaRow>
+      <MetaRow k={t("project.task.metaLabels")}>
+        {task.labels.length > 0
+          ? <span className="td-labels">{task.labels.map((l) => <span key={l} className="td-label">{l}</span>)}</span>
+          : none}
+      </MetaRow>
+      <MetaRow k={t("project.task.metaAgent")}>{task.adapter ?? none}</MetaRow>
+      <MetaRow k={t("project.task.metaHost")}>
+        {host
+          ? <span className="td-meta__host"><span className={"dot " + (host.status === "online" ? "dot-online" : "dot-offline")} />{host.name}</span>
+          : <span className="td-meta__none">{t("project.task.metaUnassigned")}</span>}
+      </MetaRow>
+      <MetaRow k={t("project.task.metaBranch")}>{task.branchName ? <span className="td-meta__mono">{task.branchName}</span> : none}</MetaRow>
+      <MetaRow k={t("project.task.metaAttempts")}>{task.retries + 1} / {task.maxRetries + 1}</MetaRow>
+      <MetaRow k={t("project.task.metaCreated")}>{formatDateTime(task.createdAt)}</MetaRow>
+      <MetaRow k={t("project.task.metaElapsed")}>{elapsed ?? none}</MetaRow>
+    </dl>
+  );
+}
+
+function MetaRow({ k, children }: { k: string; children: React.ReactNode }) {
+  return (
+    <div className="td-meta__row">
+      <dt className="td-meta__k">{k}</dt>
+      <dd className="td-meta__v">{children}</dd>
     </div>
   );
 }
@@ -471,6 +550,22 @@ function formatAgo(iso: string): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+/** HH:MM from an epoch-ms timestamp, for timeline rows. */
+function formatClock(ts: number): string {
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** MM-DD HH:MM from an ISO string, for the metadata sidebar's created-at. */
+function formatDateTime(iso: string): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return iso;
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 function formatElapsed(t: ProjectTask): string | null {

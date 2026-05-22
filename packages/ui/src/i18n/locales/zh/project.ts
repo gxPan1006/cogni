@@ -218,6 +218,45 @@ export const project = {
     actionRunAgain: "再跑一次",
     // ThreadSection
     runnerSilent: "runner 还没说话…",
+    // ── V1 双栏概览 ──
+    secDescription: "描述",
+    secActivity: "活动",
+    secFileChanges: "文件改动",
+    viewFiles: "在「文件」中查看 →",
+    noDescription: "这个任务没有描述。",
+    noActivity: "还没有活动记录。",
+    // 右侧元数据栏
+    metaState: "状态",
+    metaPriority: "优先级",
+    metaLabels: "标签",
+    metaAgent: "Agent",
+    metaHost: "Host",
+    metaBranch: "分支",
+    metaAttempts: "尝试",
+    metaCreated: "创建",
+    metaElapsed: "耗时",
+    metaUnassigned: "未分配",
+    metaNone: "—",
+    // 优先级 (0=无..4=低)
+    prioNone: "无",
+    prioUrgent: "紧急",
+    prioHigh: "高",
+    prioMedium: "中",
+    prioLow: "低",
+    // 活动时间线
+    tlQueued: "入队",
+    tlAttemptStarted: "第 {{n}} 次执行开始",
+    tlRunning: "进行中",
+    tlNeedsInput: "等待输入",
+    tlReviewing: "进入 review",
+    tlCompleted: "完成",
+    // 退出原因
+    exitDone: "成功结束",
+    exitFailed: "失败",
+    exitTimeout: "超时",
+    exitHostDisconnect: "host 掉线",
+    exitCancelled: "已取消",
+    exitBusinessClarification: "需要澄清",
   },
 
   // ── TaskComments ──

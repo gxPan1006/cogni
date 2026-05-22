@@ -218,6 +218,45 @@ export const project = {
     actionRunAgain: "Run again",
     // ThreadSection
     runnerSilent: "The runner hasn't said anything yet…",
+    // ── V1 two-pane overview ──
+    secDescription: "Description",
+    secActivity: "Activity",
+    secFileChanges: "File changes",
+    viewFiles: "View in Files →",
+    noDescription: "This task has no description.",
+    noActivity: "No activity yet.",
+    // Metadata sidebar
+    metaState: "State",
+    metaPriority: "Priority",
+    metaLabels: "Labels",
+    metaAgent: "Agent",
+    metaHost: "Host",
+    metaBranch: "Branch",
+    metaAttempts: "Attempts",
+    metaCreated: "Created",
+    metaElapsed: "Elapsed",
+    metaUnassigned: "Unassigned",
+    metaNone: "—",
+    // Priority (0=none..4=low)
+    prioNone: "None",
+    prioUrgent: "Urgent",
+    prioHigh: "High",
+    prioMedium: "Medium",
+    prioLow: "Low",
+    // Activity timeline
+    tlQueued: "Queued",
+    tlAttemptStarted: "Attempt {{n}} started",
+    tlRunning: "Running",
+    tlNeedsInput: "Needs input",
+    tlReviewing: "Entered review",
+    tlCompleted: "Completed",
+    // Exit reasons
+    exitDone: "Finished",
+    exitFailed: "Failed",
+    exitTimeout: "Timed out",
+    exitHostDisconnect: "Host disconnected",
+    exitCancelled: "Cancelled",
+    exitBusinessClarification: "Needs clarification",
   },
 
   // ── TaskComments ──
