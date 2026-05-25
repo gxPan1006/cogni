@@ -571,7 +571,7 @@ function AboutPage() {
           </div>
           <dl className="settings-card__kv">
             <dt>Build</dt><dd>sp1.0.4-dev · e715bb5</dd>
-            <dt>Cloud</dt><dd>cloud.ai-cognit.com</dd>
+            <dt>Cloud</dt><dd>{import.meta.env.VITE_CLOUD_URL ?? "(not configured)"}</dd>
             <dt>Tenant</dt><dd>default</dd>
           </dl>
         </div>
