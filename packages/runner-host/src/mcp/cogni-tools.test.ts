@@ -4,7 +4,7 @@ import { callCogniTool, httpBaseFromWsUrl } from "./cogni-tools.js";
 describe("cogni-tools", () => {
   it("httpBaseFromWsUrl converts ws→http and wss→https", () => {
     expect(httpBaseFromWsUrl("ws://localhost:8787")).toBe("http://localhost:8787");
-    expect(httpBaseFromWsUrl("wss://chat.ai-cognit.com")).toBe("https://chat.ai-cognit.com");
+    expect(httpBaseFromWsUrl("wss://chat.example.com")).toBe("https://chat.example.com");
   });
 
   it("create_task POSTs to /api/projects/:id/tasks with Host auth", async () => {

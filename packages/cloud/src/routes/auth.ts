@@ -82,7 +82,7 @@ export function registerAuthRoutes(app: Hono, deps: ServerDeps): void {
 
   // Two callers:
   //   • desktop: opens this in the system browser with ?redirect=cogni://auth (and origin=desktop by default)
-  //   • web:    redirects user here with ?origin=web; cloud sends them to chat.ai-cognit.com/chat afterwards
+  //   • web:    redirects user here with ?origin=web; cloud sends them to the web SPA's /chat afterwards
   app.get("/auth/google/start", async (c) => {
     const origin = readOrigin(c.req.query("origin"));
     const redirect = origin === "web" ? `${deps.webUrl}/chat` : safeRedirect(c.req.query("redirect"));

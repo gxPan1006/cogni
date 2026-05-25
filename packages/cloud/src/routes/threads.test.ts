@@ -38,7 +38,7 @@ async function setup() {
     emailTransport: new FakeTransport(),
     magicLinkTtlMinutes: 15,
     publicUrl: "http://localhost",
-    webUrl: "https://chat.ai-cognit.com",
+    webUrl: "https://chat.example.com",
   };
   const { app } = createServer(deps);
 

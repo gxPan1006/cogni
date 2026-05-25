@@ -7,7 +7,7 @@
  *     no API key needed, no real email sent, copy-paste the link to test.
  *   - ResendTransport: REST-API path; POSTs to api.resend.com.
  *   - SmtpTransport: classic SMTP via nodemailer. Used when the operator
- *     already has an SMTP mailbox (e.g. spacemail / postmark / aws-ses-smtp)
+ *     already has an SMTP mailbox (e.g. postmark / aws-ses-smtp / your own SMTP)
  *     and doesn't want to add Resend as a dependency.
  *
  * `main.ts` picks the implementation from EMAIL_TRANSPORT env.
@@ -95,7 +95,7 @@ export interface SmtpOpts {
   secure: boolean;
   user: string;
   pass: string;
-  /** e.g. `"Cogni <us@ai-cognit.com>"` — must match the SMTP account / verified sender. */
+  /** e.g. `"Cogni <us@your-domain.example.com>"` — must match the SMTP account / verified sender. */
   from: string;
   /**
    * Optional SNI override. Use when `host` is a tunnel endpoint

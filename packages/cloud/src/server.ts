@@ -56,7 +56,7 @@ export interface ServerDeps {
   emailTransport: EmailTransport;
   magicLinkTtlMinutes: number;
   publicUrl: string;
-  /** SP-2: where the web SPA lives (https://chat.ai-cognit.com). Used to build
+  /** SP-2: where the web SPA lives (e.g. https://chat.your-cogni-cloud.example.com). Used to build
    * Google `redirect_uri` and magic-link URLs when the user came from web. */
   webUrl: string;
   /** Web Push public VAPID key, served to clients so they can subscribe. Null
@@ -68,7 +68,7 @@ export function createServer(deps: ServerDeps) {
   const app = new Hono();
   const { upgradeWebSocket, injectWebSocket } = createNodeWebSocket({ app });
 
-  // SP-2: web SPA at chat.ai-cognit.com calls these endpoints from browser
+  // SP-2: web SPA (e.g. chat.your-cogni-cloud.example.com) calls these endpoints from browser
   // JS. localhost:5173 covers `pnpm --filter web dev`. tauri://localhost +
   // localhost:1420 cover desktop (Tauri prod / vite dev). Settings page needs
   // PATCH (rename host) + DELETE (revoke device, soft-remove host, disconnect

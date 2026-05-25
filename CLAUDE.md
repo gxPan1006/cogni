@@ -29,7 +29,7 @@ magic-link setup, build steps, the acceptance checklist — is documented in
 | `packages/runner-host` | `@cogni/runner-host` | Desktop daemon: registers with cloud via `~/.cogni/host.json`, manages runner adapters (`adapters/claude-code.ts`, `adapters/codex/*`), dispatches host-RPC requests for git-ops + fs-browse + thread-title generation. Entry: `src/main.ts`. |
 | `packages/ui` | `@cogni/ui` | React 19 component + hooks library shared by desktop and web. `main`/`types` point at `src/index.ts` (no build step) — consumers Vite-transform it on demand. |
 | `apps/desktop` | `desktop` *(unscoped!)* | Tauri 2 + React app. Owns deep-link OAuth callback, daemon spawn/register. Filter is `pnpm --filter desktop ...`, **not** `@cogni/desktop`. |
-| `apps/web` | `web` *(unscoped!)* | React + react-router SPA (chat.ai-cognit.com in prod). Same UI components as desktop via `@cogni/ui`. |
+| `apps/web` | `web` *(unscoped!)* | React + react-router SPA (the public web client). Same UI components as desktop via `@cogni/ui`. |
 
 ## Common commands (run from repo root)
 
@@ -87,19 +87,16 @@ and runs on Node 22 — match these locally to reproduce CI failures.
   `apps/desktop` and `apps/web` Vite-transform it — don't add `tsc` build
   output assumptions to UI code.
 - **No `CLAUDE.md` in `packages/*` today.** Architectural notes live in
-  `docs/superpowers/specs/` and `docs/superpowers/plans/`; ad-hoc context in
-  `MEMORY.md`, `HANDOFF-NOTES.md`, `tbd.md`. Read these before
-  proposing structural changes.
+  `docs/superpowers/specs/` and `docs/superpowers/plans/`. Read these
+  before proposing structural changes.
 
 ## Verifying user-visible changes
 
-`MEMORY.md` documents a recurring trap: after a desktop / cloud change the
-user re-tests against a *stale* process (an old `Cogni.app` bundle, a
-PPID=1 orphaned `target/debug/desktop` binary, a second `vite` from another
-worktree). Before declaring a UI / streaming fix "done":
+After a desktop / cloud change, watch out for *stale* processes the
+re-test might hit instead of the new code: an old `Cogni.app` bundle, a
+PPID=1 orphaned `target/debug/desktop` binary, a second `vite` from
+another worktree. Before declaring a UI / streaming fix "done":
 
 1. Grep processes from **both** angles — `ps -ef | grep -iE "tauri|cargo|vite|Cogni\.app"` and `ps -ef | grep -E "target/(debug|release)/(desktop|cogni)"` — and inspect PPID=1 orphans.
 2. Confirm which client the user will hit (`pnpm --filter web dev` vs prod web vs `pnpm --filter desktop tauri dev` vs a built `Cogni.app`) and whether it's running the new code.
 3. Kill stale instances before asking the user to retest; tell them exactly which window and which reload key (`Cmd+R` in the Tauri webview).
-
-Full lesson + the 2026-05-18 incident that prompted it is in `MEMORY.md`.

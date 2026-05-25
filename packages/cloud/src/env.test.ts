@@ -30,12 +30,12 @@ describe("loadEnv", () => {
     expect(env.publicUrl).toBe("http://localhost:8787");
     expect(env.port).toBe(8787);
   });
-  it("reads WEB_URL when set, else falls back to https://chat.ai-cognit.com", () => {
+  it("reads WEB_URL when set, else falls back to the placeholder default", () => {
     setRequired();
     process.env.WEB_URL = "https://chat.example.com";
     expect(loadEnv().webUrl).toBe("https://chat.example.com");
     delete process.env.WEB_URL;
-    expect(loadEnv().webUrl).toBe("https://chat.ai-cognit.com");
+    expect(loadEnv().webUrl).toBe("https://chat.your-cogni-cloud.example.com");
   });
   it("throws on a non-numeric PORT", () => {
     setRequired();

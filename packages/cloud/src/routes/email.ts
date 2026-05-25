@@ -15,7 +15,7 @@ interface PendingMagic { email: string; origin: Origin }
 
 const emailSchema = z.object({
   email: z.string().email(),
-  // SP-2: web SPA at chat.ai-cognit.com calls with origin="web" so the link in
+  // SP-2: web SPA (e.g. chat.your-cogni-cloud.example.com) calls with origin="web" so the link in
   // the email points back to a https:// URL instead of a cogni:// deep link.
   origin: z.enum(["desktop", "web"]).optional(),
 });

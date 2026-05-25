@@ -101,7 +101,7 @@ desktop app.
 
 You can pick either Resend (REST API) or classic SMTP. Both give the same
 end-user behaviour (real email arrives in the inbox); SMTP is faster to wire
-when you already have a mailbox (e.g. spacemail / postmark / aws-ses-smtp).
+when you already have a mailbox (e.g. postmark / aws-ses-smtp / your own SMTP).
 
 **Option A — Resend:**
 
@@ -122,7 +122,7 @@ when you already have a mailbox (e.g. spacemail / postmark / aws-ses-smtp).
 
 **Option B — SMTP (nodemailer):**
 
-1. Have an SMTP mailbox handy (any provider — Spacemail, Postmark, AWS SES
+1. Have an SMTP mailbox handy (any provider — Postmark, AWS SES,
    SMTP, Gmail with an app password, etc.).
 2. Fill `packages/cloud/.env`:
 

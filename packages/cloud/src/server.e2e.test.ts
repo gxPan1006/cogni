@@ -74,7 +74,7 @@ describe("cloud server e2e (headless spine)", () => {
       emailTransport: new FakeTransport(),
       magicLinkTtlMinutes: 15,
       publicUrl: "http://localhost",
-      webUrl: "https://chat.ai-cognit.com",
+      webUrl: "https://chat.example.com",
     });
     // `serve()` calls `server.listen()` and returns synchronously — the TCP
     // socket isn't bound yet. Reading `server.address()` immediately can race
@@ -182,7 +182,7 @@ describe("cloud server e2e (headless spine)", () => {
       emailTransport: new FakeTransport(),
       magicLinkTtlMinutes: 15,
       publicUrl: "http://localhost",
-      webUrl: "https://chat.ai-cognit.com",
+      webUrl: "https://chat.example.com",
     });
     const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
       const s = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" }, () => resolve(s));
@@ -234,7 +234,7 @@ describe("cloud server e2e (headless spine)", () => {
       emailTransport: new FakeTransport(),
       magicLinkTtlMinutes: 15,
       publicUrl: "http://localhost",
-      webUrl: "https://chat.ai-cognit.com",
+      webUrl: "https://chat.example.com",
     });
     const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
       const s = serve({ fetch: app.fetch, port: 0, hostname: "127.0.0.1" }, () => resolve(s));
