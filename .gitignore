@@ -23,3 +23,20 @@ changelog/
 # Playwright MCP screenshots / snapshots from local UI verification
 .playwright-mcp/
 .claude-supervisor/
+
+# Internal engineering notes — kept on the maintainer's machine but not
+# checked into the public repo. (Previously tracked; untracked at
+# open-sourcing time. Stay out of pull requests.)
+MEMORY.md
+HANDOFF-NOTES.md
+tbd.md
+docs/integration-log.md
+docs/sp3-design-brief.md
+docs/SP-2-E2E-VERIFICATION.md
+docs/SP-2-OPS-MANUAL.md
+docs/SP1-functional-test-plan.md
+docs/DEPLOYMENT.md
+docs/deploy/
+docs/task-card-style-options.html
+.scratch/
+LAUNCH.md
