@@ -1,0 +1,381 @@
+/* Project · Files view
+ * Tokens consumed from tokens.css. Class names follow .pf, .pf__*, .pf--variant.
+ * Tree rows use the .pf-ft__ prefix to distinguish file-tree atoms from the
+ * outer .pf__ layout atoms. */
+
+.pf {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+}
+
+/* ── Top status bar ─────────────────────────────────── */
+.pf__statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.pf__statusbar-l,
+.pf__statusbar-r { display: inline-flex; align-items: center; gap: 10px; }
+.pf__crumb     { font-size: 11.5px; color: var(--ink-2); letter-spacing: 0.02em; }
+.pf__divider   { width: 1px; height: 14px; background: var(--line); }
+.pf__branch    { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-2); }
+.pf__branch-glyph    { color: var(--muted); font-size: 13px; line-height: 1; }
+.pf__aheadbehind     { font-size: 11px; color: var(--muted); letter-spacing: 0.02em; }
+.pf__aheadbehind--dim { opacity: 0.5; }
+.pf__dirty           { display: inline-flex; align-items: center; gap: 6px; color: var(--warn); }
+.pf__dirty-dot       { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
+.pf__review          { display: inline-flex; align-items: center; gap: 6px; color: oklch(60% 0.10 270); }
+.pf__review-dot      { width: 6px; height: 6px; border-radius: 50%; background: oklch(60% 0.10 270); }
+
+/* ── Body grid ──────────────────────────────────────── */
+.pf__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 280px 1fr;
+}
+.pf--triple  .pf__body { grid-template-columns: 280px 1fr 280px; }
+.pf--compact .pf__body { grid-template-columns: 1fr; }
+.pf--compact .pf__tree { border-right: 0; }
+
+/* ── Tree pane ──────────────────────────────────────── */
+.pf__tree {
+  border-right: 1px solid var(--line-soft);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.pf__search {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.pf__search-icon { color: var(--muted-2); display: inline-flex; }
+.pf__search-input {
+  flex: 1; min-width: 0;
+  border: 0; background: transparent;
+  font: inherit; font-size: 13px;
+  color: var(--ink); outline: none;
+}
+.pf__search-input::placeholder { color: var(--muted-2); }
+.pf__search-kbd {
+  font-size: 10.5px; color: var(--muted-2);
+  background: var(--bg-sunk);
+  padding: 1px 6px; border-radius: 4px;
+}
+
+.pf__tree-head { display: flex; align-items: center; gap: 4px; padding: 10px 12px 4px; }
+.pf__iconbtn {
+  width: 24px; height: 24px;
+  border-radius: var(--r-2);
+  border: 0; background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .12s, color .12s;
+}
+.pf__iconbtn:hover { background: var(--bg-sunk); color: var(--ink-2); }
+
+.pf__tree-body { flex: 1; overflow-y: auto; padding: 2px 6px 8px; min-height: 0; }
+
+/* Tree rows */
+.pf-ft__row {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; padding: 3px 8px;
+  background: transparent; border: 0; cursor: pointer;
+  font: inherit; color: var(--ink-2);
+  border-radius: 4px; text-align: left;
+  transition: background .08s, color .08s;
+  min-height: 24px;
+}
+.pf-ft__row:hover    { background: var(--bg-sunk); color: var(--ink); }
+.pf-ft__row.is-active { background: color-mix(in oklch, var(--accent), transparent 88%); color: var(--ink); }
+.pf-ft__row.has-live  { color: var(--ink); }
+.pf-ft__chev          { font-size: 10px; color: var(--muted-2); width: 10px; display: inline-block; flex-shrink: 0; }
+.pf-ft__row--dir.is-open .pf-ft__chev { color: var(--ink-2); }
+.pf-ft__icon {
+  font-family: var(--font-mono);
+  font-size: 9px; font-weight: 700; letter-spacing: 0;
+  width: 18px; height: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 3px;
+  background: color-mix(in oklch, currentColor, transparent 88%);
+  border: 1px solid color-mix(in oklch, currentColor, transparent 76%);
+  flex-shrink: 0;
+}
+.pf-ft__name { font-size: 13px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-ft__row--dir .pf-ft__name { font-weight: 500; color: var(--ink); }
+
+.pf-ft__annot {
+  font-family: var(--font-mono);
+  font-size: 9.5px; letter-spacing: 0.04em;
+  padding: 1px 5px; border-radius: 3px;
+  flex-shrink: 0; line-height: 1.3;
+}
+.pf-ft__annot--mod  { color: var(--warn);              background: var(--warn-soft); }
+.pf-ft__annot--rev  { color: oklch(60% 0.10 270);      background: oklch(94% 0.04 270); font-size: 11px; padding: 0 4px; }
+.pf-ft__annot--new  { color: var(--good);              background: var(--good-soft); }
+.pf-ft__annot--fail { color: var(--bad);               background: var(--bad-soft); }
+.pf-ft__annot--live { color: var(--accent-ink);        background: var(--accent-soft);
+                      display: inline-flex; align-items: center; gap: 3px; }
+.pf-ft__annot-dot   {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent), transparent 75%);
+  animation: pf-pulse 1.4s ease-in-out infinite;
+}
+@keyframes pf-pulse { 50% { transform: scale(1.2); opacity: 0.55; } }
+
+/* ── Legend ─────────────────────────────────────────── */
+.pf__legend {
+  border-top: 1px solid var(--line-soft);
+  padding: 10px 14px 12px;
+  background: var(--bg-sunk);
+  flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.pf__legend-head { font-size: 9.5px; letter-spacing: 0.1em; color: var(--muted-2); margin-bottom: 4px; }
+.pf__legend-row  { font-size: 11.5px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 8px; }
+.pf__legend-dot  { width: 6px; height: 6px; border-radius: 50%; }
+.pf__legend-dot--live { background: var(--accent);
+                        box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent), transparent 75%); }
+.pf__legend-tag  {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  padding: 0 5px; border-radius: 3px;
+  min-width: 16px; text-align: center;
+}
+.pf__legend-tag--mod  { color: var(--warn);          background: var(--warn-soft); }
+.pf__legend-tag--rev  { color: oklch(60% 0.10 270);  background: oklch(94% 0.04 270); }
+.pf__legend-tag--new  { color: var(--good);          background: var(--good-soft); }
+.pf__legend-tag--fail { color: var(--bad);           background: var(--bad-soft); }
+
+/* ── Viewer ─────────────────────────────────────────── */
+.pf__viewer {
+  display: flex; flex-direction: column;
+  min-height: 0; min-width: 0;
+  background: var(--bg);
+}
+
+.pf__tabs {
+  display: flex; align-items: stretch; gap: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+  padding: 0 4px 0 8px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.pf__tab {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 10px;
+  background: transparent; border: 0; border-radius: 0;
+  font: inherit; cursor: pointer;
+  color: var(--muted);
+  white-space: nowrap; position: relative;
+  border-right: 1px solid var(--line-soft);
+}
+.pf__tab.is-active { color: var(--ink); background: var(--bg); }
+.pf__tab.is-active::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px;
+  height: 1.5px; background: var(--accent);
+}
+.pf__tab:hover { color: var(--ink-2); }
+.pf__tab-name  { font-size: 12.5px; }
+.pf__tab-close {
+  color: var(--muted-2); font-size: 14px; line-height: 1;
+  padding: 0 4px; margin-left: 2px; border-radius: 3px;
+}
+.pf__tab-close:hover { background: var(--surface-3); color: var(--ink); }
+.pf__tab-live  {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 9.5px; color: var(--accent-ink);
+  background: var(--accent-soft);
+  padding: 1px 6px 1px 5px; border-radius: 99px;
+}
+.pf__tab-live-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent);
+  animation: pf-pulse 1.4s ease-in-out infinite;
+}
+
+.pf__view { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.pf__view-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg);
+}
+.pf__view-crumb       { font-size: 11px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 4px; }
+.pf__view-crumb-sep   { color: var(--muted-2); padding: 0 2px; }
+.pf__view-crumb-leaf  { color: var(--ink); }
+.pf__view-head-r      { display: inline-flex; align-items: center; gap: 6px; }
+.pf__readonly {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 9.5px; letter-spacing: 0.08em;
+  color: var(--accent-ink); background: var(--accent-soft);
+  padding: 3px 8px; border-radius: 99px;
+}
+.pf__readonly-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  animation: pf-pulse 1.4s ease-in-out infinite;
+}
+
+.pf__editbanner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 16px;
+  background: color-mix(in oklch, var(--accent), var(--bg) 92%);
+  border-bottom: 1px solid color-mix(in oklch, var(--accent), transparent 70%);
+}
+.pf__editbanner-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent), transparent 75%);
+  animation: pf-pulse 1.4s ease-in-out infinite;
+}
+.pf__editbanner-ref  { color: var(--accent-ink); font-weight: 600; }
+.pf__editbanner-host { font-size: 11px; }
+
+.pf__code {
+  flex: 1; overflow: auto;
+  padding: 12px 0;
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 19px;
+  color: var(--ink);
+  position: relative;
+  background: var(--bg);
+}
+.pf__line { display: grid; grid-template-columns: 48px 1fr auto; padding: 0; align-items: center; }
+.pf__line.is-edit {
+  background: color-mix(in oklch, var(--accent), transparent 92%);
+  position: relative;
+}
+.pf__line.is-edit::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 2px; background: var(--accent);
+}
+.pf__line-num   { text-align: right; padding-right: 14px; color: var(--muted-2); font-size: 11px; user-select: none; }
+.pf__line-txt   { white-space: pre; overflow: hidden; }
+.pf__line-badge {
+  font-size: 9px; color: var(--accent-ink); background: var(--accent-soft);
+  padding: 1px 6px; border-radius: 99px; margin-right: 16px; letter-spacing: 0.04em;
+}
+
+.pf__cursor       { position: absolute; left: 48px; right: 16px; height: 18px; pointer-events: none; }
+.pf__cursor-caret {
+  position: absolute; left: 0; top: 2px;
+  width: 2px; height: 14px;
+  background: var(--accent);
+  animation: pf-caret 0.9s ease-in-out infinite;
+}
+@keyframes pf-caret { 50% { opacity: 0.2; } }
+
+.pf__empty       { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.pf__empty-label { font-size: 11px; letter-spacing: 0.1em; }
+.pf__empty-body  { margin-top: 6px; }
+
+/* ── Activity rail ──────────────────────────────────── */
+.pf__rail {
+  border-left: 1px solid var(--line-soft);
+  background: var(--surface);
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.pf__act {
+  padding: 14px 16px 18px;
+  display: flex; flex-direction: column; gap: 12px;
+  height: 100%; min-height: 0; overflow-y: auto;
+}
+.pf__act-head    { display: flex; align-items: center; gap: 6px; }
+.pf__act-count   { font-size: 11px; }
+.pf__act-sub     { word-break: break-all; }
+.pf__act-stateblock {
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-2);
+  background: var(--bg-sunk);
+}
+.pf__act-stateblock-label { font-size: 9px; letter-spacing: 0.12em; color: var(--muted-2); margin-bottom: 6px; }
+.pf__act-state-row        { display: flex; align-items: center; gap: 8px; }
+.pf__act-livedot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent), transparent 78%);
+  animation: pf-pulse 1.4s ease-in-out infinite;
+}
+.pf__act-revdot { width: 8px; height: 8px; border-radius: 50%; background: oklch(60% 0.10 270); }
+.pf__act-moddot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.pf__act-ref    { color: var(--accent-ink); }
+
+.pf__act-events  { display: flex; flex-direction: column; }
+.pf__act-ev {
+  display: grid; grid-template-columns: 48px 56px 1fr; gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--line-soft);
+  align-items: baseline;
+}
+.pf__act-ev:last-child { border-bottom: 0; }
+.pf__act-ev-t   { font-size: 10.5px; color: var(--muted-2); }
+.pf__act-ev-tag {
+  font-size: 10.5px;
+  padding: 1px 6px; border-radius: 3px;
+  background: var(--surface-3); color: var(--ink-2);
+  text-align: center; max-width: max-content;
+}
+.pf__act-ev--live   .pf__act-ev-tag { background: var(--accent-soft);  color: var(--accent-ink); }
+.pf__act-ev--review .pf__act-ev-tag { background: oklch(94% 0.04 270); color: oklch(50% 0.10 270); }
+.pf__act-ev--you    .pf__act-ev-tag { background: var(--ink);          color: var(--bg); }
+.pf__act-ev-what                    { font-size: 12.5px; color: var(--ink-2); }
+.pf__act-ev--live   .pf__act-ev-what { color: var(--ink); }
+.pf__act-empty                      { padding: 12px 0; }
+
+.pf__act-actions {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-top: auto; padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.pf__act-action { width: 100%; justify-content: center; }
+
+/* ── Responsive ─────────────────────────────────────── */
+@media (max-width: 1200px) {
+  .pf--triple .pf__body { grid-template-columns: 240px 1fr; }
+  .pf--triple .pf__rail { display: none; }
+}
+
+/* ── Adaptations for the real-data port ─────────────────
+   The prototype relied on global atom classes (.t-mono / .t-h3 / .t-small /
+   .t-muted) that don't exist in this app — fold the few that mattered into the
+   .pf__ classes, and add the classes the real-data viewer introduced
+   (loading / image / binary-download / empty states). */
+.pf__crumb,
+.pf__tab-live,
+.pf__readonly,
+.pf__act-count,
+.pf__act-ev-t,
+.pf__act-ev-tag,
+.pf__act-stateblock-label { font-family: var(--font-mono); }
+
+.pf__tree-title { font-size: 12px; font-weight: 600; color: var(--ink-2); letter-spacing: 0.02em; }
+.pf__act-title  { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+
+.pf__tree-error { font-size: 12px; color: var(--bad); padding: 10px 12px; line-height: 1.5; }
+.pf__tree-empty,
+.pf__view-loading { font-size: 12.5px; color: var(--muted); padding: 12px; }
+
+.pf__tabs--empty { min-height: 37px; }
+
+.pf__image { flex: 1; min-height: 0; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--bg); }
+.pf__image img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+.pf__dl-btn {
+  font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 7px 14px; border-radius: var(--r-2);
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2);
+  cursor: pointer;
+}
+.pf__dl-btn:hover { border-color: var(--accent); color: var(--accent); }
