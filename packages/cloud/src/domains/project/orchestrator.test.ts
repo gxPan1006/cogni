@@ -92,7 +92,7 @@ describe("ProjectOrchestrator dispatch", () => {
 
     // Subscribe a client to the project channel so we can see the broadcast.
     const sub = vi.fn();
-    f.orchestrator; // ensure deps captured
+    // Accessing f.orchestrator below lazily constructs it and captures deps.
     const hub = (f.orchestrator as unknown as { deps: { clients: ClientHub } }).deps.clients;
     hub.register({ clientId: "c1", userId: f.user.id, send: sub });
     hub.subscribeProject("c1", f.project.id);
