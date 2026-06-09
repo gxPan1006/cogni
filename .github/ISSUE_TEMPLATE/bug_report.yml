@@ -1,0 +1,62 @@
+name: Bug report
+description: Report something that isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Please fill out the sections
+        below so we can reproduce and fix it faster.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect to happen, and what actually happened?
+      placeholder: I expected X, but Y happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: A minimal, ordered list of steps that triggers the bug.
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. See error
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which part?
+      description: Where did you see the problem?
+      options:
+        - Cloud control plane (@cogni/cloud)
+        - Runner host daemon (@cogni/runner-host)
+        - Desktop app (Tauri)
+        - Web client
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, browser (if web-side), and anything else relevant.
+      placeholder: |
+        - OS: macOS 15.x
+        - Node: 22.x
+        - Browser: Chrome 130 (web only)
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Paste any relevant log output. Desktop logs live at
+        `~/.cogni/runner-host.log`; cloud logs go to the server's stdout.
+      render: shell
+    validations:
+      required: false
