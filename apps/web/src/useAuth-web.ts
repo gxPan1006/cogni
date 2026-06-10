@@ -8,14 +8,14 @@ import { api, ApiError } from "./api.js";
  * the web app rides browser navigation:
  *
  *   - loginWithGoogle: top-level redirect to the cloud's `/auth/google/start`
- *     with `origin=web`. The cloud picks `chat.ai-cognit.com/auth/google/callback`
+ *     with `origin=web`. The cloud picks `<web-spa-host>/auth/google/callback`
  *     as the registered Google OAuth redirect_uri and, after the round-trip,
  *     bounces the browser back here with `#token=<JWT>` in the URL fragment.
  *     The GoogleAuthCallback component reads the fragment, calls acceptToken,
  *     and replaces history to `/chat`.
  *
  *   - loginWithEmail: POST `/auth/email/send` with `origin: "web"` so the
- *     cloud emits an `https://chat.ai-cognit.com/auth/email/callback?token=…`
+ *     cloud emits an `https://<web-spa-host>/auth/email/callback?token=…`
  *     magic link (rather than the desktop's `cogni://`). When the user clicks
  *     it, EmailAuthCallback exchanges the magic for a JWT via acceptMagic.
  *

@@ -104,7 +104,7 @@ export function loadEnv(): Env {
       ? {
           publicKey: vapidPublicKey,
           privateKey: vapidPrivateKey,
-          subject: process.env.VAPID_SUBJECT ?? "mailto:admin@ai-cognit.com",
+          subject: process.env.VAPID_SUBJECT ?? "mailto:admin@your-cogni-cloud.example.com",
         }
       : null;
 
@@ -114,7 +114,7 @@ export function loadEnv(): Env {
     googleClientId: get("GOOGLE_CLIENT_ID"),
     googleClientSecret: get("GOOGLE_CLIENT_SECRET"),
     publicUrl: process.env.PUBLIC_URL ?? "http://localhost:8787",
-    webUrl: process.env.WEB_URL ?? "https://chat.ai-cognit.com",
+    webUrl: process.env.WEB_URL ?? "https://chat.your-cogni-cloud.example.com",
     port,
     emailTransport,
     resendApiKey,

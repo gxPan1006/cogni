@@ -24,7 +24,7 @@ const MOCK_ARTIFACTS: {
   { id: "a-005", kind: "patch",      title: "tauri deep-link wiring",           thread: "Deep-link callback",        when: "Mon",     size: "3 files · +44 −12",  pinned: false },
   { id: "a-006", kind: "note",       title: "Phone notes about Cogni naming",   thread: "—",                         when: "Mon",     size: "0.8 KB",             pinned: false },
   { id: "a-007", kind: "doc",        title: "How the dispatcher works",         thread: "Refactor the dispatcher",   when: "Sun",     size: "12 paragraphs",      pinned: false },
-  { id: "a-008", kind: "shell",      title: "pnpm dev recipe for prod-cognit",  thread: "Deployment recipe",         when: "Sun",     size: "14 lines",           pinned: false },
+  { id: "a-008", kind: "shell",      title: "pnpm dev recipe for staging",      thread: "Deployment recipe",         when: "Sun",     size: "14 lines",           pinned: false },
 ];
 
 const KIND_ICON: Record<Kind, React.ReactNode> = {

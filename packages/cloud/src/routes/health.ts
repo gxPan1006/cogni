@@ -28,7 +28,7 @@ import type { ServerDeps } from "../server.js";
  *     the outage instead of routing user traffic into a broken backend.
  *
  * User-visible behavior:
- *   • Healthy: `curl https://cloud.ai-cognit.com/healthz` → 200 + JSON, CF
+ *   • Healthy: `curl https://your-cogni-cloud.example.com/healthz` → 200 + JSON, CF
  *     probe stays green, the web/desktop apps can sign in normally.
  *   • DB down: same curl → 503 + JSON `{ ok:false, checks:{ db:"fail", … } }`,
  *     CF probe flips red and load-balancer drops the origin until recovery.

@@ -5,7 +5,7 @@ import { api } from "./api.js";
 
 /**
  * /auth/google/callback — Cloud's `/auth/google/callback` ultimately bounces
- * the browser back to `https://chat.ai-cognit.com/auth/google/callback#token=<JWT>`.
+ * the browser back to `https://<your-web-spa>/auth/google/callback#token=<JWT>`.
  * We parse the fragment, hand the JWT to acceptToken, scrub the URL bar, and
  * navigate to /chat.
  *

@@ -11,7 +11,7 @@ const TOKEN_KEY = "cogni_token";
  * acceptMagic) is picked up automatically without re-wiring.
  *
  * The only meaningful difference vs desktop is VITE_CLOUD_URL's default
- * production target (cloud.ai-cognit.com instead of localhost) — see
+ * production target (your-cogni-cloud.example.com instead of localhost) — see
  * apps/web/.env.production.
  */
 export const api = new ApiClient({

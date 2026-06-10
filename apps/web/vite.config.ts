@@ -4,7 +4,7 @@ import { VitePWA } from "vite-plugin-pwa";
 
 // Pure-browser SPA. No Tauri concerns here — the dev server just needs a
 // stable port (the cloud's CORS allowlist + Google OAuth redirect_uri are
-// registered against 5173 / chat.ai-cognit.com).
+// registered against 5173 / your production web origin).
 export default defineConfig({
   plugins: [
     react(),
