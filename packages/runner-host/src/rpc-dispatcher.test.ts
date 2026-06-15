@@ -147,7 +147,7 @@ function deps(over: Partial<RpcDeps>): RpcDeps {
     gitMergeToMain: stub, gitPushToRemote: stub, gitTestsRun: stub,
     gitDiffSnapshot: stub, fsBrowse: stub, readFile: stub, generateThreadTitle: stub,
     uploadBegin: stub, uploadChunk: stub, uploadCommit: stub, uploadAbort: stub,
-    setProjectsRoot: stub,
+    setProjectsRoot: stub, setKeepAwake: stub, setDefaultAdapter: stub,
     ...over,
   } as RpcDeps;
 }
@@ -183,6 +183,20 @@ describe("dispatchHostRpc upload arms", () => {
       ok: true,
       method: "set-projects-root",
       result: { projectsRoot: "/Users/x/cogni", locked: false },
+    });
+  });
+
+  it("routes set-default-adapter", async () => {
+    const setDefaultAdapter = vi.fn().mockResolvedValue({ defaultAdapter: "claude-code-snapshot" });
+    const resp = await dispatchHostRpc(
+      { method: "set-default-adapter", params: { defaultAdapter: "claude-code-snapshot" } },
+      deps({ setDefaultAdapter }),
+    );
+    expect(setDefaultAdapter).toHaveBeenCalled();
+    expect(resp).toEqual({
+      ok: true,
+      method: "set-default-adapter",
+      result: { defaultAdapter: "claude-code-snapshot" },
     });
   });
 });

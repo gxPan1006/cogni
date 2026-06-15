@@ -60,8 +60,15 @@ describe("protocol schemas", () => {
   });
   it("accepts host register with adapterCommands", () => {
     expect(hostToCloudSchema.safeParse({
-      t: "register", hostId: "h1", capabilities: ["streaming"], adapters: ["claude-code", "codex"],
-      adapterCommands: { "claude-code": ["clear", "branch"], codex: ["clear"] }, version: "0.0.0",
+      t: "register", hostId: "h1", capabilities: ["streaming"], adapters: ["claude-code", "claude-code-snapshot", "codex"],
+      adapterCommands: { "claude-code": ["clear", "branch"], "claude-code-snapshot": ["clear", "branch"], codex: ["clear"] },
+      version: "0.0.0",
+    }).success).toBe(true);
+  });
+  it("accepts host register with defaultAdapter", () => {
+    expect(hostToCloudSchema.safeParse({
+      t: "register", hostId: "h1", capabilities: ["streaming"], adapters: ["claude-code", "claude-code-snapshot", "codex"],
+      defaultAdapter: "claude-code-snapshot", version: "0.0.0",
     }).success).toBe(true);
   });
   it("rejects host register with an unknown command id", () => {

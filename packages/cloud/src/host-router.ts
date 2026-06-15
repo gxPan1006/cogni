@@ -4,6 +4,10 @@ export interface ConnectedHost {
   hostId: string;
   userId: string;
   send: (msg: CloudToHost) => void;
+  /** Adapters this live runner host advertised on register. */
+  adapters?: string[];
+  /** Preferred adapter for new sessions on this host. */
+  defaultAdapter?: string | null;
   /**
    * Per-adapter composer commands the host advertised on `register` (keyed by
    * adapter id). Absent for old hosts. The chat domain reads this to tell a
@@ -88,5 +92,11 @@ export class HostRouter {
     const set = this.byUser.get(userId);
     if (!set || !set.has(hostId)) return null;
     return this.byHost.get(hostId) ?? null;
+  }
+
+  updateHostRuntime(hostId: string, patch: Partial<Pick<ConnectedHost, "adapters" | "adapterCommands" | "defaultAdapter">>): void {
+    const host = this.byHost.get(hostId);
+    if (!host) return;
+    this.byHost.set(hostId, { ...host, ...patch });
   }
 }

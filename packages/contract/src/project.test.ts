@@ -357,6 +357,12 @@ describe("HostRpc envelope dispatch", () => {
         params: { projectsRoot: "~/cogni" },
       }).success,
     ).toBe(true);
+    expect(
+      hostRpcRequestSchema.safeParse({
+        method: "set-default-adapter",
+        params: { defaultAdapter: "claude-code-snapshot" },
+      }).success,
+    ).toBe(true);
   });
 
   it("hostRpcRequestSchema rejects wrong params shape for chosen method", () => {

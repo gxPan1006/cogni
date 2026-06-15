@@ -6,7 +6,7 @@ import { hostToCloudSchema } from "@cogni/contract";
 import type { CloudToHost } from "@cogni/contract";
 // SP-3 additions for the host-RPC envelope plumbing below.
 import type { HostRpcRequest, HostRpcResponse } from "@cogni/contract";
-import { findHostByToken, setHostStatus, setHostProjectsRoot, setHostKeepAwake } from "../db/hosts.js";
+import { findHostByToken, setHostStatus, setHostProjectsRoot, setHostKeepAwake, setHostDefaultAdapter } from "../db/hosts.js";
 import { hosts as hostsTable } from "../db/schema.js";
 import { logger } from "@cogni/shared";
 import type { ServerDeps } from "../server.js";
@@ -233,10 +233,15 @@ export function registerHostWs(app: Hono, upgradeWebSocket: UpgradeWebSocket, de
                     msg.keepAwakeLocked ?? false,
                   );
                 }
+                if (msg.defaultAdapter) {
+                  await setHostDefaultAdapter(deps.db, host.id, msg.defaultAdapter);
+                }
                 deps.hosts.register({
                   hostId: host.id,
                   userId: host.userId,
                   send: (m: CloudToHost) => ws.send(JSON.stringify(m)),
+                  adapters: msg.adapters,
+                  defaultAdapter: msg.defaultAdapter ?? null,
                   ...(msg.adapterCommands ? { adapterCommands: msg.adapterCommands } : {}),
                 });
                 // SP-3: also pin (hostId → send-fn) for sendHostRpc, which is

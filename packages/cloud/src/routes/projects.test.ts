@@ -38,6 +38,8 @@ function makeProjectDomainMock(): {
     fsBrowse: ReturnType<typeof vi.fn>;
     readFile: ReturnType<typeof vi.fn>;
     setProjectsRoot: ReturnType<typeof vi.fn>;
+    setKeepAwake: ReturnType<typeof vi.fn>;
+    setDefaultAdapter: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
   };
 } {
@@ -57,6 +59,8 @@ function makeProjectDomainMock(): {
     fsBrowse: vi.fn(),
     readFile: vi.fn(),
     setProjectsRoot: vi.fn(),
+    setKeepAwake: vi.fn(),
+    setDefaultAdapter: vi.fn(),
     dispose: vi.fn(),
   };
   return { domain: fns as unknown as ProjectDomain, fns };
@@ -895,6 +899,56 @@ describe("PUT /api/hosts/:id/projects-root", () => {
       body: JSON.stringify({ projectsRoot: "~/work" }),
     });
     expect(res.status).toBe(502);
+    await close();
+  });
+});
+
+// ─── set default adapter ───────────────────────────────────────────────────
+
+describe("PUT /api/hosts/:id/default-adapter", () => {
+  it("updates the host's default adapter and persists the host's answer", async () => {
+    const { db, user, host, fns, req, close } = await setup();
+    fns.setDefaultAdapter.mockResolvedValue({ defaultAdapter: "claude-code-snapshot" });
+
+    const res = await req(`/api/hosts/${host.hostId}/default-adapter`, {
+      method: "PUT",
+      body: JSON.stringify({ defaultAdapter: "claude-code-snapshot" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ defaultAdapter: "claude-code-snapshot" });
+    expect(fns.setDefaultAdapter).toHaveBeenCalledWith(host.hostId, "claude-code-snapshot");
+
+    const { getActiveHostsForUser } = await import("../db/hosts.js");
+    const row = (await getActiveHostsForUser(db, user.id)).find((h) => h.id === host.hostId)!;
+    expect(row.defaultAdapter).toBe("claude-code-snapshot");
+    await close();
+  });
+
+  it("400 on unknown adapter", async () => {
+    const { host, fns, req, close } = await setup();
+    const res = await req(`/api/hosts/${host.hostId}/default-adapter`, {
+      method: "PUT",
+      body: JSON.stringify({ defaultAdapter: "unknown" }),
+    });
+    expect(res.status).toBe(400);
+    expect(fns.setDefaultAdapter).not.toHaveBeenCalled();
+    await close();
+  });
+
+  it("404 on cross-user host", async () => {
+    const { db, fns, req, close } = await setup();
+    const bob = await findOrCreateUserByEmail(db, "bob-default-adapter@x.com");
+    const bobHost = await createHost(db, {
+      userId: bob.id,
+      tenantId: bob.tenantId,
+      name: "Bob",
+    });
+    const res = await req(`/api/hosts/${bobHost.hostId}/default-adapter`, {
+      method: "PUT",
+      body: JSON.stringify({ defaultAdapter: "codex" }),
+    });
+    expect(res.status).toBe(404);
+    expect(fns.setDefaultAdapter).not.toHaveBeenCalled();
     await close();
   });
 });

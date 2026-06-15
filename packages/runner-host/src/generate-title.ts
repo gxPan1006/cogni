@@ -78,13 +78,13 @@ export async function generateThreadTitle(
   req: GenerateThreadTitleRequest,
   runner: TitleRunner = defaultTitleRunner,
 ): Promise<GenerateThreadTitleResponse> {
-  if (req.adapter !== "claude-code") {
-    // Cloud currently only dispatches the chat domain through claude-code;
-    // if a future adapter triggers this RPC, fail loud rather than silently
-    // mis-using the claude CLI for a non-claude conversation.
+  if (req.adapter !== "claude-code" && req.adapter !== "claude-code-snapshot") {
+    // Only Claude-compatible adapters should use this title runner. Codex or a
+    // future non-Claude adapter should fail loud rather than silently using the
+    // wrong CLI/model family.
     throw new GenerateTitleError(
       "unsupported-adapter",
-      `generate-thread-title only supports adapter=claude-code (got ${req.adapter})`,
+      `generate-thread-title only supports Claude Code adapters (got ${req.adapter})`,
     );
   }
 

@@ -44,6 +44,7 @@ class CodexSession implements RunnerSessionHandle {
   constructor(
     private readonly runner: CodexRunner,
     private readonly cwd: string,
+    private readonly appendSystemPrompt?: string,
   ) {}
 
   get runnerSessionId(): string | null {
@@ -52,7 +53,10 @@ class CodexSession implements RunnerSessionHandle {
 
   async *send(message: string): AsyncIterable<RunnerEvent> {
     let sawTerminal = false;
-    const iterator = this.runner({ cwd: this.cwd, message })[Symbol.asyncIterator]();
+    const effectiveMessage = this.appendSystemPrompt
+      ? `${this.appendSystemPrompt}\n\n${message}`
+      : message;
+    const iterator = this.runner({ cwd: this.cwd, message: effectiveMessage })[Symbol.asyncIterator]();
     this.activeIterator = iterator;
     try {
       while (true) {
@@ -99,7 +103,7 @@ export class CodexAdapter implements RunnerAdapter {
   constructor(private readonly runner: CodexRunner = defaultCodexRunner) {}
 
   async startSession(opts: StartSessionOpts): Promise<RunnerSessionHandle> {
-    return new CodexSession(this.runner, opts.cwd);
+    return new CodexSession(this.runner, opts.cwd, opts.appendSystemPrompt);
   }
 
   async resumeSession(): Promise<RunnerSessionHandle> {

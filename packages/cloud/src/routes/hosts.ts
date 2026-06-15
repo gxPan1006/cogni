@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { eq, and, isNull } from "drizzle-orm";
 import { z } from "zod";
+import { DEFAULT_RUNNER_ADAPTER_ID } from "@cogni/contract";
 import { logger } from "@cogni/shared";
 import {
   createHost,
@@ -46,21 +47,26 @@ export function registerHostsRoutes(app: Hono, deps: ServerDeps): void {
     // SP-2: excludes soft-removed hosts (filter on hosts.removed_at IS NULL).
     const rows = await getActiveHostsForUser(deps.db, userId);
     return c.json(
-      rows.map((h) => ({
-        id: h.id,
-        name: h.name,
-        status: h.status,
-        // ISO string for the UI to render "X 之前"; null when the host has
-        // never connected (freshly created, no Runner handshake yet).
-        lastSeen: h.lastSeen ? h.lastSeen.toISOString() : null,
-        // SP-4: the host's configured projects-root (NewProject pre-fill) and
-        // whether it's env-locked. null ⇢ old host that never reported one.
-        projectsRoot: h.projectsRoot ?? null,
-        projectsRootLocked: h.projectsRootLocked ?? false,
-        // Keep-awake toggle state. Defaults ON for hosts that predate the column.
-        keepAwake: h.keepAwake ?? true,
-        keepAwakeLocked: h.keepAwakeLocked ?? false,
-      })),
+      rows.map((h) => {
+        const live = deps.hosts.getHostByIdForUser(userId, h.id);
+        return {
+          id: h.id,
+          name: h.name,
+          status: h.status,
+          // ISO string for the UI to render "X 之前"; null when the host has
+          // never connected (freshly created, no Runner handshake yet).
+          lastSeen: h.lastSeen ? h.lastSeen.toISOString() : null,
+          // SP-4: the host's configured projects-root (NewProject pre-fill) and
+          // whether it's env-locked. null ⇢ old host that never reported one.
+          projectsRoot: h.projectsRoot ?? null,
+          projectsRootLocked: h.projectsRootLocked ?? false,
+          // Keep-awake toggle state. Defaults ON for hosts that predate the column.
+          keepAwake: h.keepAwake ?? true,
+          keepAwakeLocked: h.keepAwakeLocked ?? false,
+          defaultAdapter: h.defaultAdapter ?? DEFAULT_RUNNER_ADAPTER_ID,
+          adapters: live?.adapters ?? [],
+        };
+      }),
     );
   });
 

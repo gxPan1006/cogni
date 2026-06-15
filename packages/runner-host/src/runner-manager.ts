@@ -130,7 +130,7 @@ export class RunnerManager {
     }
 
     // File-upload: copy this turn's staged attachments into <cwd>/.cogni-uploads/
-    // BEFORE the runner starts, so Claude Code can read them. Runs for both the
+    // BEFORE the runner starts, so the selected adapter can read them. Runs for both the
     // chat scratch dir and the project-task worktree; materializeUploads mkdirs
     // the target subdir and (for worktrees) adds a git exclude.
     if (input.attachments && input.attachments.length > 0) {
@@ -189,7 +189,8 @@ export class RunnerManager {
             ...(input.model ? { model: input.model } : {}),
           }
         : { cwd, ...(input.model ? { model: input.model } : {}) };
-      const handle = input.runnerSessionId
+      const canResume = adapter.capabilities.includes("session-resume");
+      const handle = input.runnerSessionId && canResume
         ? await adapter.resumeSession(input.runnerSessionId, opts)
         : await adapter.startSession(opts);
       this.cacheSet(input.sessionId, handle);
@@ -212,7 +213,8 @@ export class RunnerManager {
     }
     // Branch forks the parent session id; otherwise resume our own (if any).
     const resumeId = input.forkFromRunnerSessionId ?? input.runnerSessionId;
-    const handle = resumeId
+    const canResume = adapter.capabilities.includes("session-resume");
+    const handle = resumeId && canResume
       ? await adapter.resumeSession(resumeId, opts)
       : await adapter.startSession(opts);
     this.cacheSet(input.sessionId, handle);

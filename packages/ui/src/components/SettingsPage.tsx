@@ -8,8 +8,9 @@
  * `user` prop carries the display name + email until /api/me lands; pass it
  * down from whatever decoded the JWT (Shell.tsx on desktop, WebShell on web).
  */
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { DEFAULT_RUNNER_ADAPTER_ID, type RunnerAdapterId } from "@cogni/contract";
 import { Icon } from "./icons.js";
 import type { ApiClient, HostInfo } from "../transport/api.js";
 import { useIdentities } from "../hooks/useIdentities.js";
@@ -370,6 +371,7 @@ function HostsPage({ api }: { api: ApiClient }) {
             />
             <HostProjectsRootRow api={api} host={h} />
             <HostKeepAwakeRow api={api} host={h} />
+            <HostDefaultAdapterRow api={api} host={h} />
             </div>
           );
         })}
@@ -490,6 +492,78 @@ function HostKeepAwakeRow({ api, host }: { api: ApiClient; host: HostInfo }) {
               ? t("settings.hosts.keepAwakeOnHint")
               : t("settings.hosts.keepAwakeOffHint")}
       </div>
+    </div>
+  );
+}
+
+const AGENT_CORES: Array<{ id: RunnerAdapterId; labelKey: string }> = [
+  { id: "claude-code", labelKey: "settings.hosts.agentCoreClaude" },
+  { id: "claude-code-snapshot", labelKey: "settings.hosts.agentCoreClaudeSnapshot" },
+  { id: "codex", labelKey: "settings.hosts.agentCoreCodex" },
+];
+
+function HostDefaultAdapterRow({ api, host }: { api: ApiClient; host: HostInfo }) {
+  const { t } = useTranslation();
+  const [value, setValue] = useState<RunnerAdapterId>(host.defaultAdapter ?? DEFAULT_RUNNER_ADAPTER_ID);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const online = host.status === "online";
+  const reported = host.adapters ?? [];
+  const supports = (id: RunnerAdapterId) => reported.length === 0 || reported.includes(id);
+
+  useEffect(() => {
+    setValue(host.defaultAdapter ?? DEFAULT_RUNNER_ADAPTER_ID);
+    setError(null);
+  }, [host.id, host.defaultAdapter]);
+
+  const apply = async (next: RunnerAdapterId) => {
+    if (!online || saving || next === value || !supports(next)) return;
+    setSaving(true);
+    setError(null);
+    const prev = value;
+    setValue(next);
+    try {
+      const r = await api.setDefaultAdapter(host.id, next);
+      setValue(r.defaultAdapter);
+    } catch (e) {
+      setValue(prev);
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hint = error
+    ? error
+    : !online
+      ? t("settings.hosts.agentCoreOfflineHint")
+      : !supports(value)
+        ? t("settings.hosts.agentCoreUnsupportedHint")
+        : value === "codex"
+          ? t("settings.hosts.agentCoreCodexHint")
+          : value === "claude-code-snapshot"
+            ? t("settings.hosts.agentCoreClaudeSnapshotHint")
+            : t("settings.hosts.agentCoreClaudeHint");
+
+  return (
+    <div className="settings__projroot">
+      <label className="field__label">{t("settings.hosts.agentCoreLabel")}</label>
+      <div className="seg">
+        {AGENT_CORES.map((core) => {
+          const disabled = !online || saving || !supports(core.id);
+          return (
+            <button
+              key={core.id}
+              className={"seg__btn" + (value === core.id ? " is-on" : "")}
+              disabled={disabled}
+              onClick={() => { void apply(core.id); }}
+            >
+              {t(core.labelKey)}
+            </button>
+          );
+        })}
+      </div>
+      <div className="field__hint">{hint}</div>
     </div>
   );
 }

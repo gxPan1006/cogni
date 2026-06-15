@@ -1,6 +1,13 @@
-import { readHostConfig, setProjectsRoot, setKeepAwake, resolveKeepAwake } from "./config.js";
+import {
+  readHostConfig,
+  setProjectsRoot,
+  setKeepAwake,
+  setDefaultAdapter,
+  resolveKeepAwake,
+  resolveClaudeSnapshotKernel,
+} from "./config.js";
 import { RunnerManager } from "./runner-manager.js";
-import { ClaudeCodeAdapter } from "./adapters/claude-code.js";
+import { ClaudeCodeAdapter, makeClaudeProcessFactory } from "./adapters/claude-code.js";
 import { CodexAdapter } from "./adapters/codex/index.js";
 import { connectToCloud } from "./registry.js";
 import { dispatchHostRpc } from "./rpc-dispatcher.js";
@@ -40,6 +47,14 @@ if (process.argv.includes("mcp-serve")) {
 
   const manager = new RunnerManager();
   manager.register(new ClaudeCodeAdapter());
+  const snapshot = resolveClaudeSnapshotKernel(config.claudeKernel);
+  if (snapshot.kernel) {
+    logger.info(
+      { command: snapshot.kernel.command, args: snapshot.kernel.args, locked: snapshot.locked },
+      "claude snapshot kernel resolved",
+    );
+    manager.register(new ClaudeCodeAdapter(makeClaudeProcessFactory(snapshot.kernel), "claude-code-snapshot"));
+  }
   // SP-3: second adapter — see adapters/codex/index.ts for the capability
   // asymmetry with claude-code (no session-resume, no permission-prompt).
   manager.register(new CodexAdapter());
@@ -73,6 +88,7 @@ if (process.argv.includes("mcp-serve")) {
         else stopKeepAwake();
         return res;
       },
+      setDefaultAdapter: (req) => setDefaultAdapter(req.defaultAdapter),
     }),
   );
   logger.info({ hostId: config.hostId }, "runner host daemon started");

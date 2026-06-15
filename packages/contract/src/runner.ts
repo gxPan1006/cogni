@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+export const RUNNER_ADAPTER_IDS = ["claude-code", "claude-code-snapshot", "codex"] as const;
+export const runnerAdapterIdSchema = z.enum(RUNNER_ADAPTER_IDS);
+export type RunnerAdapterId = z.infer<typeof runnerAdapterIdSchema>;
+export const DEFAULT_RUNNER_ADAPTER_ID: RunnerAdapterId = "claude-code";
+
 export const RUNNER_CAPABILITIES = [
   "streaming",
   "session-resume",

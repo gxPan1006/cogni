@@ -66,6 +66,7 @@ import type {
   ReadFileResponse,
   GitDiffSnapshotResponse,
   Attachment,
+  RunnerAdapterId,
 } from "@cogni/contract";
 import type { ChatDomain } from "../chat.js";
 import { HostRpcClient, HostRpcError, type HostRpcLogger } from "./host-rpc.js";
@@ -511,6 +512,15 @@ export class ProjectDomain {
    */
   async setKeepAwake(hostId: string, enabled: boolean): Promise<{ enabled: boolean; locked: boolean }> {
     return this.deps.hostRpc.setKeepAwake(hostId, { enabled });
+  }
+
+  /**
+   * Settings → Runner Hosts: change the host's default Agent Loop core.
+   * Passthrough to the host RPC; the route persists the returned adapter +
+   * updates the live HostRouter entry.
+   */
+  async setDefaultAdapter(hostId: string, defaultAdapter: RunnerAdapterId): Promise<{ defaultAdapter: RunnerAdapterId }> {
+    return this.deps.hostRpc.setDefaultAdapter(hostId, { defaultAdapter });
   }
 
   /**

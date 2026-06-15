@@ -45,6 +45,8 @@ import type {
   SetProjectsRootResponse,
   SetKeepAwakeRequest,
   SetKeepAwakeResponse,
+  SetDefaultAdapterRequest,
+  SetDefaultAdapterResponse,
   HostRpcMethod,
 } from "@cogni/contract";
 
@@ -120,6 +122,9 @@ export class HostRpcClient {
   }
   async setKeepAwake(hostId: string, params: SetKeepAwakeRequest): Promise<SetKeepAwakeResponse> {
     return this.call(hostId, "set-keep-awake", params) as Promise<SetKeepAwakeResponse>;
+  }
+  async setDefaultAdapter(hostId: string, params: SetDefaultAdapterRequest): Promise<SetDefaultAdapterResponse> {
+    return this.call(hostId, "set-default-adapter", params) as Promise<SetDefaultAdapterResponse>;
   }
 
   private async call(

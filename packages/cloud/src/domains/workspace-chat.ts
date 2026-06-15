@@ -28,8 +28,7 @@ import {
   openRunnerSession,
   setRunnerSessionStatus,
 } from "../db/sessions.js";
-
-const ADAPTER = "claude-code";
+import { selectHostDefaultAdapter } from "../adapter-selection.js";
 
 /**
  * Build the system preamble prepended to the first user turn of a new
@@ -134,14 +133,20 @@ export class WorkspaceChatDomain {
       createdAt: userMsg.createdAt,
     });
 
+    const conn = this.hosts.getHostByIdForUser(p.userId, p.hostId);
+    if (!conn) {
+      this.clients.sendToUser(p.userId, { t: "host-status", online: false });
+      return;
+    }
+    const adapter = selectHostDefaultAdapter(conn);
     const latest = await getLatestSessionForThread(this.db, p.threadId);
-    const reusable = latest && latest.hostId === p.hostId && latest.status !== "closed";
+    const reusable = latest && latest.hostId === p.hostId && latest.adapter === adapter && latest.status !== "closed";
     const session = reusable
       ? latest
       : await openRunnerSession(this.db, {
           threadId: p.threadId,
           hostId: p.hostId,
-          adapter: ADAPTER,
+          adapter,
         });
     await setRunnerSessionStatus(this.db, session.id, "running");
 
@@ -161,18 +166,12 @@ export class WorkspaceChatDomain {
       : { task };
     const appendSystemPrompt = preamble(scope);
 
-    const conn = this.hosts.getHostByIdForUser(p.userId, p.hostId);
-    if (!conn) {
-      await setRunnerSessionStatus(this.db, session.id, "failed");
-      this.clients.sendToUser(p.userId, { t: "host-status", online: false });
-      return;
-    }
     try {
       conn.send({
         t: "dispatch",
         sessionId: session.id,
         threadId: p.threadId,
-        adapter: ADAPTER,
+        adapter,
         runnerSessionId: session.runnerSessionId,
         message: p.content,
         orchestrator: true,

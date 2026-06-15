@@ -90,6 +90,19 @@ export async function setHostKeepAwake(
     .where(eq(hosts.id, hostId));
 }
 
+/** Persist a host's preferred Agent Loop core. Written on register and by
+ *  PUT /api/hosts/:id/default-adapter. */
+export async function setHostDefaultAdapter(
+  db: AnyDb,
+  hostId: string,
+  defaultAdapter: string,
+): Promise<void> {
+  await db
+    .update(hosts)
+    .set({ defaultAdapter })
+    .where(eq(hosts.id, hostId));
+}
+
 export async function getActiveHostsForUser(db: AnyDb, userId: string) {
   return db
     .select()

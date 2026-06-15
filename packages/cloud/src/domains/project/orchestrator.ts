@@ -67,13 +67,10 @@ import { evaluateAndApplyMergeGate } from "./merge-gate.js";
 import { transitionTask, StateMismatch } from "./lifecycle.js";
 import { gatherUnconsumedUserComments, markCommentsConsumed } from "../../db/task-comments.js";
 import { renderCommentsForRunner, commentAttachments, captureWorkerNote, collectDeliverables } from "./comments.js";
+import { selectHostDefaultAdapter } from "../../adapter-selection.js";
 
 const TICK_INTERVAL_MS = 5_000;
 const HOST_OFFLINE_THRESHOLD_MS = 60_000;
-// SP-3 has no per-project default adapter column yet; orchestrator falls back
-// to "claude-code" until SP-3+1 adds `projects.default_adapter`. Document this
-// at the dispatch call-site too.
-const DEFAULT_ADAPTER = "claude-code";
 
 export interface OrchestratorDeps {
   db: AnyDb;
@@ -412,14 +409,6 @@ export class ProjectOrchestrator {
       return false;
     }
 
-    const adapter = task.adapter ?? DEFAULT_ADAPTER;
-
-    const session = await openRunnerSession(this.deps.db, {
-      threadId: task.executionThreadId,
-      hostId,
-      adapter,
-    });
-
     // Send the dispatch frame to the host. We go through hostRouter so the
     // host's WS sees a frame in the same exact shape SP-1 uses.
     const conn = this.deps.hostRouter.getHostByIdForUser(project.userId, hostId);
@@ -432,6 +421,13 @@ export class ProjectOrchestrator {
       );
       return false;
     }
+    const adapter = task.adapter ?? selectHostDefaultAdapter(conn);
+
+    const session = await openRunnerSession(this.deps.db, {
+      threadId: task.executionThreadId,
+      hostId,
+      adapter,
+    });
     try {
       // Compose the dispatch message: project system prompt (if any) +
       // file-commit operational suffix + task title/description.
