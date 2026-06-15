@@ -28,7 +28,10 @@ import type { HostRpcRequest, HostRpcResponse, CloudToHost } from "@cogni/contra
  * The HostRouter has the host registered with a vi.fn() send so we can assert
  * dispatch frames. host-rpc handler is configured per-test via `setHandler`.
  */
-async function seedFixture(opts: { mergePolicy?: "require-review" | "auto-merge" | "auto-merge-if-tests-pass" } = {}) {
+async function seedFixture(opts: {
+  mergePolicy?: "require-review" | "auto-merge" | "auto-merge-if-tests-pass";
+  defaultAdapter?: "claude-code" | "claude-code-snapshot" | "codex";
+} = {}) {
   const { db, close } = await makeTestDb();
   const u = await findOrCreateUserByEmail(db, "orch@x.com");
   const host = await createHost(db, { userId: u.id, tenantId: u.tenantId, name: "Mac" });
@@ -58,7 +61,13 @@ async function seedFixture(opts: { mergePolicy?: "require-review" | "auto-merge"
 
   const hostRouter = new HostRouter();
   const hostSend = vi.fn();
-  hostRouter.register({ hostId: host.hostId, userId: u.id, send: hostSend });
+  hostRouter.register({
+    hostId: host.hostId,
+    userId: u.id,
+    send: hostSend,
+    adapters: ["claude-code", "claude-code-snapshot", "codex"],
+    defaultAdapter: opts.defaultAdapter ?? "claude-code",
+  });
 
   const clients = new ClientHub();
 
@@ -126,6 +135,19 @@ describe("ProjectOrchestrator dispatch", () => {
     expect(taskEvents.length).toBeGreaterThan(0);
     expect(taskEvents[0]).toMatchObject({ kind: "state-changed" });
 
+    await f.close();
+  });
+
+  it("uses the host default Claude snapshot adapter when the task has no explicit adapter", async () => {
+    const f = await seedFixture({ defaultAdapter: "claude-code-snapshot" });
+    f.setHandler(okWorktreeFlow);
+
+    await f.orchestrator.tick();
+
+    const after = await getTask(f.db, f.task.id);
+    expect(after?.adapter).toBe("claude-code-snapshot");
+    const frame = f.hostSend.mock.calls[0]?.[0] as CloudToHost;
+    expect(frame).toMatchObject({ adapter: "claude-code-snapshot" });
     await f.close();
   });
 

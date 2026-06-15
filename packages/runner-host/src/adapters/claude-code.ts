@@ -72,8 +72,15 @@ const CAPABILITIES: RunnerCapability[] = ["streaming", "session-resume", "tool-e
  * execa v9 note: `buffer: { stdout: false }` keeps stdout an unbuffered
  * Readable we drive with `readline`; stderr stays buffered so a non-zero exit
  * can report a useful message. stdin stays a pipe we write turns into.
+ *
+ * Configurable kernel. The spawned executable is `kernel.command` with
+ * `kernel.args` prefixed before the standard flags. `{ command: "claude",
+ * args: [] }` runs the globally-installed CLI; pointing it at a local source
+ * checkout runs a snapshot kernel that still speaks Claude Code's stream-json
+ * protocol.
  */
-export const defaultClaudeProcessFactory: ClaudeProcessFactory = ({ cwd, resumeId, appendSystemPrompt, mcpConfigPath, allowedTools, model, fork }) => {
+export function makeClaudeProcessFactory(kernel: { command: string; args: string[] }): ClaudeProcessFactory {
+  return ({ cwd, resumeId, appendSystemPrompt, mcpConfigPath, allowedTools, model, fork }) => {
   const args = [
     "--print",
     "--input-format", "stream-json",
@@ -97,7 +104,7 @@ export const defaultClaudeProcessFactory: ClaudeProcessFactory = ({ cwd, resumeI
   if (mcpConfigPath) args.push("--mcp-config", mcpConfigPath);
   if (allowedTools && allowedTools.length) args.push("--allowed-tools", allowedTools.join(","));
 
-  const proc = execa("claude", args, {
+  const proc = execa(kernel.command, [...kernel.args, ...args], {
     cwd,
     reject: false,
     stdin: "pipe",
@@ -130,7 +137,11 @@ export const defaultClaudeProcessFactory: ClaudeProcessFactory = ({ cwd, resumeI
     onExit: (cb) => { exitCbs.push(cb); },
     kill: () => { proc.kill(); },
   };
-};
+  };
+}
+
+/** Back-compat default: spawns the globally-installed `claude` binary. */
+export const defaultClaudeProcessFactory: ClaudeProcessFactory = makeClaudeProcessFactory({ command: "claude", args: [] });
 
 /**
  * If a graceful `control_request` interrupt doesn't end the turn within this
@@ -281,12 +292,17 @@ class ClaudeCodeSession implements RunnerSessionHandle {
 }
 
 export class ClaudeCodeAdapter implements RunnerAdapter {
-  readonly id = "claude-code";
+  readonly id: string;
   readonly capabilities = CAPABILITIES;
   // Composer "/" menu for claude-code threads. clear = reset context;
   // branch = fork the conversation into a new thread (`--fork-session`).
   readonly commands: readonly RunnerCommandId[] = ["clear", "branch"];
-  constructor(private readonly factory: ClaudeProcessFactory = defaultClaudeProcessFactory) {}
+  constructor(
+    private readonly factory: ClaudeProcessFactory = defaultClaudeProcessFactory,
+    id: string = "claude-code",
+  ) {
+    this.id = id;
+  }
 
   async startSession(opts: StartSessionOpts): Promise<RunnerSessionHandle> {
     return new ClaudeCodeSession(this.factory, opts.cwd, null, {

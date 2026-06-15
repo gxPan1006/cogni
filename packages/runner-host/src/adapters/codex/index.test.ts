@@ -124,6 +124,19 @@ describe("CodexAdapter — startSession streams a turn", () => {
     expect(session.runnerSessionId).toBe("codex-sess-1");
   });
 
+  it("prepends appendSystemPrompt to the codex prompt when provided", async () => {
+    let seenMessage = "";
+    const adapter = new CodexAdapter(async function* ({ message }) {
+      seenMessage = message;
+      yield JSON.stringify({ type: "turn.completed" });
+    });
+    const session = await adapter.startSession({ cwd: "/tmp/x", appendSystemPrompt: "system preamble" });
+
+    await collect(session.send("user prompt"));
+
+    expect(seenMessage).toBe("system preamble\n\nuser prompt");
+  });
+
   it("maps a process.error line to a single terminal error event", async () => {
     const adapter = new CodexAdapter(
       fakeRunner([

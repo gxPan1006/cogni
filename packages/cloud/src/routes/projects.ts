@@ -9,6 +9,8 @@ import {
   type Project,
   type ProjectTask,
   type TaskRun,
+  runnerAdapterIdSchema,
+  type RunnerAdapterId,
 } from "@cogni/contract";
 import {
   getProject,
@@ -868,6 +870,43 @@ export function registerProjectsRoutes(app: Hono, deps: ServerDeps): void {
 
     const { setHostKeepAwake } = await import("../db/hosts.js");
     await setHostKeepAwake(deps.db, id, result.enabled, result.locked);
+    deps.clients.publishHostMeta(userId, {
+      hostId: id,
+      name: owned.name,
+      status: owned.status as "online" | "offline",
+      lastSeen: owned.lastSeen ? owned.lastSeen.toISOString() : null,
+    });
+    return c.json(result);
+  });
+
+  // PUT /api/hosts/:id/default-adapter - choose which registered runner
+  // adapter new sessions on this host should use. The live HostRouter entry is
+  // updated too, so the next dispatch sees the change without a host reconnect.
+  app.put("/api/hosts/:id/default-adapter", async (c) => {
+    const { userId } = c.get("claims");
+    const id = c.req.param("id");
+    const owned = await ownedHostRow(deps, id, userId);
+    if (!owned) return c.json({ error: "not found" }, 404);
+
+    const raw = await c.req.json().catch(() => ({}));
+    const parsed = z.object({ defaultAdapter: runnerAdapterIdSchema }).safeParse(raw);
+    if (!parsed.success) return c.json({ error: "invalid defaultAdapter" }, 400);
+
+    if (!deps.projectDomain) {
+      return c.json({ error: "project domain unavailable" }, 503);
+    }
+
+    let result: { defaultAdapter: RunnerAdapterId };
+    try {
+      result = await deps.projectDomain.setDefaultAdapter(id, parsed.data.defaultAdapter);
+    } catch (err) {
+      logger.warn({ hostId: id, err: String(err) }, "set default-adapter RPC failed");
+      return c.json({ error: "host unavailable" }, 502);
+    }
+
+    const { setHostDefaultAdapter } = await import("../db/hosts.js");
+    await setHostDefaultAdapter(deps.db, id, result.defaultAdapter);
+    deps.hosts.updateHostRuntime(id, { defaultAdapter: result.defaultAdapter });
     deps.clients.publishHostMeta(userId, {
       hostId: id,
       name: owned.name,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ClaudeCodeAdapter, type ClaudeProcess, type ClaudeProcessFactory } from "./claude-code.js";
+import { ClaudeCodeAdapter, makeClaudeProcessFactory, type ClaudeProcess, type ClaudeProcessFactory } from "./claude-code.js";
 import type { RunnerEvent } from "@cogni/contract";
 
 /**
@@ -64,6 +64,27 @@ describe("ClaudeCodeAdapter", () => {
     expect(a.id).toBe("claude-code");
     expect(a.capabilities).toEqual(["streaming", "session-resume", "tool-events"]);
     expect(a.commands).toEqual(["clear", "branch"]);
+  });
+  it("can be registered as the Claude Code snapshot core with the same protocol surface", () => {
+    const { factory } = fakeFactory([]);
+    const a = new ClaudeCodeAdapter(factory, "claude-code-snapshot");
+    expect(a.id).toBe("claude-code-snapshot");
+    expect(a.capabilities).toEqual(["streaming", "session-resume", "tool-events"]);
+    expect(a.commands).toEqual(["clear", "branch"]);
+  });
+  it("prefixes custom kernel args before the standard Claude Code stream-json flags", async () => {
+    const factory = makeClaudeProcessFactory({
+      command: "bash",
+      args: ["-lc", 'sleep 0.05; printf "%s\\n" "$0 $*"'],
+    });
+    const proc = factory({ cwd: "/tmp" });
+    const lines: string[] = [];
+    const exited = new Promise<void>((resolve) => {
+      proc.onExit(() => resolve());
+    });
+    proc.onLine((line) => lines.push(line));
+    await exited;
+    expect(lines[0]).toContain("--print --input-format stream-json --output-format stream-json");
   });
 
   it("interrupt() pokes the live process and the turn-ending error reads as a clean done", async () => {

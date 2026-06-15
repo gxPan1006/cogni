@@ -57,6 +57,34 @@ describe("WorkspaceChatDomain.handleClientSend", () => {
     await close();
   });
 
+  it("uses the host default Claude snapshot adapter for orchestrator frames", async () => {
+    const { db, close, user, host, hosts, domain } = await seed();
+    const sends: CloudToHost[] = [];
+    hosts.register({
+      hostId: host.hostId,
+      userId: user.id,
+      send: (m) => sends.push(m),
+      adapters: ["claude-code", "claude-code-snapshot", "codex"],
+      defaultAdapter: "claude-code-snapshot",
+    });
+    const thread = await getOrCreateWorkspaceThread(db, {
+      userId: user.id,
+      tenantId: user.tenantId,
+    });
+    await domain.handleClientSend({
+      userId: user.id,
+      threadId: thread.id,
+      content: "建个任务",
+      sourceClientId: "c1",
+    });
+    expect(sends[0]).toMatchObject({
+      t: "dispatch",
+      orchestrator: true,
+      adapter: "claude-code-snapshot",
+    });
+    await close();
+  });
+
   it("carries the orchestrator preamble via appendSystemPrompt, message stays raw", async () => {
     const { db, close, user, host, hosts, domain } = await seed();
     const sends: CloudToHost[] = [];

@@ -81,6 +81,39 @@ describe("ChatDomain (SP-2 state machine)", () => {
     await close();
   });
 
+  it("uses the host default Claude snapshot adapter for new sessions", async () => {
+    const { db, close } = await makeTestDb();
+    const u = await findOrCreateUserByEmail(db, "snapshot-chat@x.com");
+    const thread = await createThread(db, { userId: u.id, tenantId: u.tenantId });
+    const reg = await createHost(db, { userId: u.id, tenantId: u.tenantId, name: "Mac" });
+    const hub = new ClientHub();
+    hub.register({ clientId: "c1", userId: u.id, send: vi.fn() });
+    const router = new HostRouter();
+    const hostSend = vi.fn();
+    router.register({
+      hostId: reg.hostId,
+      userId: u.id,
+      send: hostSend,
+      adapters: ["claude-code", "claude-code-snapshot", "codex"],
+      defaultAdapter: "claude-code-snapshot",
+      adapterCommands: {
+        "claude-code": ["clear", "branch"],
+        "claude-code-snapshot": ["clear", "branch"],
+        codex: ["clear"],
+      },
+    });
+    const chat = new ChatDomain(db, router, hub);
+
+    await chat.handleClientSend({
+      userId: u.id, threadId: thread.id, content: "hi", sourceClientId: "c1",
+    });
+
+    expect(hostSend.mock.calls[0]![0]).toMatchObject({ adapter: "claude-code-snapshot" });
+    const active = await getCurrentActiveSession(db, thread.id);
+    expect(active?.adapter).toBe("claude-code-snapshot");
+    await close();
+  });
+
   it("preferred offline + alternative online: emits host-fallback-prompt; no persist yet", async () => {
     const { db, close } = await makeTestDb();
     const u = await findOrCreateUserByEmail(db, "a@x.com");
@@ -360,11 +393,11 @@ describe("ChatDomain — runner commands + stop", () => {
   }
 
   it("commandsForThread returns the online host's adapter commands (empty when offline)", async () => {
-    const { db, close, u, chat } = await setup();
-    expect(chat.commandsForThread(u.id)).toEqual(["clear", "branch"]);
+    const { db, close, u, thread, chat } = await setup();
+    expect(await chat.commandsForThread(u.id, thread.id)).toEqual(["clear", "branch"]);
     // A different user with no host sees no commands.
     const other = await findOrCreateUserByEmail(db, "b@x.com");
-    expect(chat.commandsForThread(other.id)).toEqual([]);
+    expect(await chat.commandsForThread(other.id, thread.id)).toEqual([]);
     await close();
   });
 

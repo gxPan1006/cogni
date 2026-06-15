@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { runnerEventSchema, RUNNER_CAPABILITIES, RUNNER_COMMAND_IDS } from "./runner.js";
+import { runnerAdapterIdSchema, runnerEventSchema, RUNNER_CAPABILITIES, RUNNER_COMMAND_IDS } from "./runner.js";
 import {
   projectSchema,
   projectTaskSchema,
@@ -67,6 +67,8 @@ export const hostToCloudSchema = z.discriminatedUnion("t", [
      * slash menu. Cloud relays the active thread's set to clients.
      */
     adapterCommands: z.record(z.array(z.enum(RUNNER_COMMAND_IDS))).optional(),
+    /** Host's preferred adapter for new runner sessions. Optional for old hosts. */
+    defaultAdapter: runnerAdapterIdSchema.optional(),
     version: z.string(),
     /** SP-4: host's configured projects-root (absolute, ~-expanded). Optional for old hosts. */
     projectsRoot: z.string().optional(),

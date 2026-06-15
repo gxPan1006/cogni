@@ -1,7 +1,14 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import type { SetProjectsRootResponse, SetKeepAwakeResponse } from "@cogni/contract";
+import {
+  DEFAULT_RUNNER_ADAPTER_ID,
+  RUNNER_ADAPTER_IDS,
+  type RunnerAdapterId,
+  type SetDefaultAdapterResponse,
+  type SetProjectsRootResponse,
+  type SetKeepAwakeResponse,
+} from "@cogni/contract";
 import { expandTilde } from "./paths.js";
 
 export interface HostConfig {
@@ -14,6 +21,20 @@ export interface HostConfig {
   /** Whether the daemon blocks OS sleep while running. Absent ⇢ default ON
    *  (so old configs keep the machine reachable for remote clients). */
   keepAwake?: boolean;
+  /** Preferred Agent Loop core for new sessions. Absent => Claude Code. */
+  defaultAdapter?: RunnerAdapterId;
+  /** Optional custom Claude Code snapshot kernel. When present, the host also
+   *  advertises `claude-code-snapshot` as a selectable core. */
+  claudeKernel?: ClaudeKernel;
+}
+
+/** A spawnable Claude Code-compatible kernel: an executable plus prefix args
+ *  that precede the standard stream-json flags. `{ command: "claude", args: [] }`
+ *  is the stock global CLI; `{ command: "bun", args: ["run", "<entry>.tsx"] }`
+ *  runs a local source checkout/snapshot. */
+export interface ClaudeKernel {
+  command: string;
+  args: string[];
 }
 
 export function configDir(): string {
@@ -82,6 +103,27 @@ export function resolveKeepAwake(configValue: boolean | undefined): { enabled: b
   return { enabled: configValue ?? true, locked: false };
 }
 
+/** Resolve the optional Claude Code snapshot kernel: COGNI_CLAUDE_KERNEL env
+ *  (locked; whitespace-split into command + prefix args) → host.json
+ *  `claudeKernel` → null. The default global CLI is registered separately as
+ *  `claude-code`, so this only enables the third `claude-code-snapshot` core. */
+export function resolveClaudeSnapshotKernel(
+  configValue: ClaudeKernel | undefined,
+): { kernel: ClaudeKernel | null; locked: boolean } {
+  const env = process.env.COGNI_CLAUDE_KERNEL;
+  if (env && env.trim().length > 0) {
+    const [command, ...args] = env.trim().split(/\s+/);
+    return { kernel: { command: command ?? "claude", args }, locked: true };
+  }
+  if (configValue && typeof configValue.command === "string" && configValue.command.length > 0) {
+    return {
+      kernel: { command: configValue.command, args: Array.isArray(configValue.args) ? configValue.args : [] },
+      locked: false,
+    };
+  }
+  return { kernel: null, locked: false };
+}
+
 /** Persist the keep-awake flag into host.json (no-op + locked when env pins it). */
 export async function setKeepAwake(enabled: boolean): Promise<SetKeepAwakeResponse> {
   const resolved = resolveKeepAwake(enabled);
@@ -89,4 +131,28 @@ export async function setKeepAwake(enabled: boolean): Promise<SetKeepAwakeRespon
   const cfg = await readHostConfig();
   if (cfg) await writeHostConfig({ ...cfg, keepAwake: enabled });
   return { enabled, locked: false };
+}
+
+function isRunnerAdapterId(value: string | undefined): value is RunnerAdapterId {
+  return value !== undefined && (RUNNER_ADAPTER_IDS as readonly string[]).includes(value);
+}
+
+/** Resolve the host's preferred adapter against what this binary registered. */
+export function resolveDefaultAdapter(
+  configValue: string | undefined,
+  availableAdapters: readonly string[] = RUNNER_ADAPTER_IDS,
+): RunnerAdapterId {
+  if (isRunnerAdapterId(configValue) && availableAdapters.includes(configValue)) {
+    return configValue;
+  }
+  if (availableAdapters.includes(DEFAULT_RUNNER_ADAPTER_ID)) return DEFAULT_RUNNER_ADAPTER_ID;
+  const firstKnown = availableAdapters.find((adapter) => isRunnerAdapterId(adapter));
+  return firstKnown ?? DEFAULT_RUNNER_ADAPTER_ID;
+}
+
+/** Persist the preferred Agent Loop core into host.json. */
+export async function setDefaultAdapter(defaultAdapter: RunnerAdapterId): Promise<SetDefaultAdapterResponse> {
+  const cfg = await readHostConfig();
+  if (cfg) await writeHostConfig({ ...cfg, defaultAdapter });
+  return { defaultAdapter };
 }

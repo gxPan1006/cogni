@@ -13,7 +13,7 @@ function fakeAdapter(events: RunnerEvent[]): RunnerAdapter {
   });
   return {
     id: "claude-code",
-    capabilities: ["streaming"],
+    capabilities: ["streaming", "session-resume"],
     commands: ["clear", "branch"],
     startSession: vi.fn(async () => make(null)),
     resumeSession: vi.fn(async (id: string) => make(id)),
@@ -43,6 +43,22 @@ describe("RunnerManager", () => {
       () => {},
     );
     expect(adapter.resumeSession).toHaveBeenCalledWith("claude-prev", expect.objectContaining({ cwd: expect.any(String) }));
+  });
+
+  it("cold-starts adapters without session-resume even when runnerSessionId is present", async () => {
+    const adapter = fakeAdapter([{ type: "done" }]);
+    Object.defineProperty(adapter, "id", { value: "codex" });
+    Object.defineProperty(adapter, "capabilities", { value: ["streaming"] });
+    const mgr = new RunnerManager();
+    mgr.register(adapter);
+
+    await mgr.dispatch(
+      { sessionId: "s1", threadId: "t1", adapter: "codex", runnerSessionId: "codex-prev", message: "go" },
+      () => {},
+    );
+
+    expect(adapter.startSession).toHaveBeenCalledOnce();
+    expect(adapter.resumeSession).not.toHaveBeenCalled();
   });
 
   it("emits an error event when the adapter is unknown", async () => {
@@ -105,7 +121,7 @@ describe("RunnerManager", () => {
 
   it("capabilities() returns adapter ids and the deduped union of capabilities", () => {
     const mgr = new RunnerManager();
-    mgr.register(fakeAdapter([])); // id "claude-code", capabilities ["streaming"]
+    mgr.register(fakeAdapter([])); // id "claude-code", capabilities ["streaming", "session-resume"]
     const codex: RunnerAdapter = {
       id: "codex",
       capabilities: ["streaming", "tool-events"],
@@ -114,11 +130,23 @@ describe("RunnerManager", () => {
       resumeSession: async () => ({ runnerSessionId: null, async *send() {}, async close() {} }),
     };
     mgr.register(codex);
+    const snapshot: RunnerAdapter = {
+      id: "claude-code-snapshot",
+      capabilities: ["streaming", "session-resume", "tool-events"],
+      commands: ["clear", "branch"],
+      startSession: async () => ({ runnerSessionId: null, async *send() {}, async close() {} }),
+      resumeSession: async () => ({ runnerSessionId: null, async *send() {}, async close() {} }),
+    };
+    mgr.register(snapshot);
     const caps = mgr.capabilities();
-    expect(caps.adapters.sort()).toEqual(["claude-code", "codex"]);
-    expect(caps.capabilities.sort()).toEqual(["streaming", "tool-events"]);
+    expect(caps.adapters.sort()).toEqual(["claude-code", "claude-code-snapshot", "codex"]);
+    expect(caps.capabilities.sort()).toEqual(["session-resume", "streaming", "tool-events"]);
     // Per-adapter commands are surfaced separately (the composer "/" menu).
-    expect(caps.adapterCommands).toEqual({ "claude-code": ["clear", "branch"], codex: ["clear"] });
+    expect(caps.adapterCommands).toEqual({
+      "claude-code": ["clear", "branch"],
+      "claude-code-snapshot": ["clear", "branch"],
+      codex: ["clear"],
+    });
   });
 
   it("interrupt() pokes the live session handle's interrupt and is a no-op for unknown sessions", async () => {

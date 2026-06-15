@@ -2,7 +2,7 @@ import type {
   ThreadSummary, ThreadDetail, HostRegistration,
   Project, ProjectTask, TaskRun, MergePolicy,
   FsBrowseResponse, GitDiffSnapshotResponse, Attachment,
-  TaskComment, TaskState,
+  TaskComment, TaskState, RunnerAdapterId,
 } from "@cogni/contract";
 import { createWsClient, type WsClient } from "./ws-client.js";
 import { ClientCache } from "./cache.js";
@@ -82,6 +82,10 @@ export interface HostInfo {
   keepAwake?: boolean;
   /** true ⇢ pinned by COGNI_KEEP_AWAKE env (toggle shown read-only). */
   keepAwakeLocked?: boolean;
+  /** Host's preferred Agent Loop core for new runner sessions. */
+  defaultAdapter?: RunnerAdapterId;
+  /** Live adapters reported by the host. Empty when offline or from an old host. */
+  adapters?: string[];
 }
 
 export interface DeviceRow {
@@ -242,6 +246,12 @@ export class ApiClient {
   setKeepAwake = (id: string, enabled: boolean): Promise<{ enabled: boolean; locked: boolean }> =>
     this.request(`${this.cloudUrl}/api/hosts/${id}/keep-awake`, {
       method: "PUT", headers: this.authHeaders(), body: JSON.stringify({ enabled }),
+    });
+
+  /** Settings → Runner Hosts: choose the default Agent Loop core for new sessions. */
+  setDefaultAdapter = (id: string, defaultAdapter: RunnerAdapterId): Promise<{ defaultAdapter: RunnerAdapterId }> =>
+    this.request(`${this.cloudUrl}/api/hosts/${id}/default-adapter`, {
+      method: "PUT", headers: this.authHeaders(), body: JSON.stringify({ defaultAdapter }),
     });
 
   // ─── Devices (auth_sessions) ──────────────────────────────────────────

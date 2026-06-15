@@ -3,7 +3,7 @@ import type { CloudToHost, HostToCloud, HostRpcRequest, HostRpcResponse, RunnerC
 import { cloudToHostSchema } from "@cogni/contract";
 import { logger } from "@cogni/shared";
 import { RunnerManager } from "./runner-manager.js";
-import { readHostConfig, resolveProjectsRoot, resolveKeepAwake } from "./config.js";
+import { readHostConfig, resolveProjectsRoot, resolveKeepAwake, resolveDefaultAdapter } from "./config.js";
 import type { HostConfig } from "./config.js";
 
 /**
@@ -68,6 +68,7 @@ export function connectToCloud(
       const cfg = await readHostConfig();
       const pr = resolveProjectsRoot(cfg?.projectsRoot);
       const ka = resolveKeepAwake(cfg?.keepAwake);
+      const defaultAdapter = resolveDefaultAdapter(cfg?.defaultAdapter, caps.adapters);
       send({
         t: "register",
         hostId: config.hostId,
@@ -77,6 +78,7 @@ export function connectToCloud(
         capabilities: caps.capabilities as RunnerCapability[],
         adapters: caps.adapters,
         adapterCommands: caps.adapterCommands,
+        defaultAdapter,
         version: VERSION,
         projectsRoot: pr.root,
         projectsRootLocked: pr.locked,

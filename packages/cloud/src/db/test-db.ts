@@ -27,11 +27,13 @@ import * as schema from "./schema.js";
 // 2026-05-21 delta:
 //   • hosts: added keep_awake + keep_awake_locked (block-sleep toggle)
 //   • users: added name + avatar (profile editing — GET/PATCH /api/me)
+// 2026-06-15 delta:
+//   • hosts: added default_adapter (Agent Loop core selector)
 const DDL = `
 CREATE TABLE tenants (id uuid primary key default gen_random_uuid(), name text not null, created_at timestamp not null default now());
 CREATE TABLE users (id uuid primary key default gen_random_uuid(), tenant_id uuid not null references tenants(id), email text not null unique, password_hash text, name text, avatar text, created_at timestamp not null default now());
 CREATE TABLE user_identities (user_id uuid not null references users(id) on delete cascade, kind text not null, sub text not null, created_at timestamp not null default now(), constraint user_identities_pk unique (kind, sub));
-CREATE TABLE hosts (id uuid primary key default gen_random_uuid(), tenant_id uuid not null references tenants(id), user_id uuid not null references users(id), name text not null, status text not null default 'offline', registration_token text not null unique, capabilities_json jsonb not null default '[]', projects_root text, projects_root_locked boolean not null default false, keep_awake boolean not null default true, keep_awake_locked boolean not null default false, last_seen timestamp, removed_at timestamp, created_at timestamp not null default now());
+CREATE TABLE hosts (id uuid primary key default gen_random_uuid(), tenant_id uuid not null references tenants(id), user_id uuid not null references users(id), name text not null, status text not null default 'offline', registration_token text not null unique, capabilities_json jsonb not null default '[]', projects_root text, projects_root_locked boolean not null default false, keep_awake boolean not null default true, keep_awake_locked boolean not null default false, default_adapter text not null default 'claude-code', last_seen timestamp, removed_at timestamp, created_at timestamp not null default now());
 CREATE TABLE auth_sessions (id uuid primary key default gen_random_uuid(), user_id uuid not null references users(id) on delete cascade, device_name text not null, user_agent text, ip text, created_at timestamp not null default now(), last_seen_at timestamp not null default now(), revoked_at timestamp);
 CREATE INDEX auth_sessions_user_idx ON auth_sessions(user_id) WHERE revoked_at IS NULL;
 CREATE TABLE push_subscriptions (id uuid primary key default gen_random_uuid(), user_id uuid not null references users(id) on delete cascade, endpoint text not null unique, p256dh text not null, auth text not null, locale text not null default 'en', user_agent text, created_at timestamp not null default now());

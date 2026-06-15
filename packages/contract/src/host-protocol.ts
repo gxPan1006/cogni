@@ -29,6 +29,7 @@
  */
 
 import { z } from "zod";
+import { runnerAdapterIdSchema } from "./runner.js";
 
 // ─── Per-RPC payload schemas (request + response) ───────────────────────────
 
@@ -309,6 +310,19 @@ export const setKeepAwakeResponseSchema = z.object({
 });
 export type SetKeepAwakeResponse = z.infer<typeof setKeepAwakeResponseSchema>;
 
+// set-default-adapter - choose the host's preferred Agent Loop core
+export const setDefaultAdapterRequestSchema = z.object({
+  /** Adapter id supported by this app build. */
+  defaultAdapter: runnerAdapterIdSchema,
+});
+export type SetDefaultAdapterRequest = z.infer<typeof setDefaultAdapterRequestSchema>;
+
+export const setDefaultAdapterResponseSchema = z.object({
+  /** Effective adapter the host will use for new sessions. */
+  defaultAdapter: runnerAdapterIdSchema,
+});
+export type SetDefaultAdapterResponse = z.infer<typeof setDefaultAdapterResponseSchema>;
+
 // ─── Discriminated unions for typed dispatch ────────────────────────────────
 
 /**
@@ -333,6 +347,7 @@ export const hostRpcRequestSchema = z.discriminatedUnion("method", [
   z.object({ method: z.literal("upload-abort"), params: uploadAbortRequestSchema }),
   z.object({ method: z.literal("set-projects-root"), params: setProjectsRootRequestSchema }),
   z.object({ method: z.literal("set-keep-awake"), params: setKeepAwakeRequestSchema }),
+  z.object({ method: z.literal("set-default-adapter"), params: setDefaultAdapterRequestSchema }),
 ]);
 export type HostRpcRequest = z.infer<typeof hostRpcRequestSchema>;
 
@@ -353,6 +368,7 @@ export const hostRpcMethodSchema = z.enum([
   "upload-abort",
   "set-projects-root",
   "set-keep-awake",
+  "set-default-adapter",
 ]);
 
 /**
@@ -383,6 +399,7 @@ export const hostRpcResponseSchema = z.union([
   z.object({ ok: z.literal(true), method: z.literal("upload-abort"), result: uploadAbortResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("set-projects-root"), result: setProjectsRootResponseSchema }),
   z.object({ ok: z.literal(true), method: z.literal("set-keep-awake"), result: setKeepAwakeResponseSchema }),
+  z.object({ ok: z.literal(true), method: z.literal("set-default-adapter"), result: setDefaultAdapterResponseSchema }),
   z.object({
     ok: z.literal(false),
     method: hostRpcMethodSchema,
@@ -415,5 +432,6 @@ export const HOST_RPC_METHODS = [
   "upload-abort",
   "set-projects-root",
   "set-keep-awake",
+  "set-default-adapter",
 ] as const;
 export type HostRpcMethod = (typeof HOST_RPC_METHODS)[number];

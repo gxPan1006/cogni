@@ -20,6 +20,14 @@ describe("generateThreadTitle", () => {
     expect(out.title).toBe("会话起名实现");
   });
 
+  it("accepts the Claude Code snapshot adapter", async () => {
+    const out = await generateThreadTitle(
+      { adapter: "claude-code-snapshot", userMessage: "我要跑自己的 snapshot", assistantReply: "" },
+      async () => "Snapshot 调试",
+    );
+    expect(out.title).toBe("Snapshot 调试");
+  });
+
   it("strips surrounding quotes and code fences", async () => {
     const runner = async () => '```\n"如何调试 SSH 隧道"\n```';
     const out = await generateThreadTitle(

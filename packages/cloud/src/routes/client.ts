@@ -316,7 +316,7 @@ export function registerClientRoutes(
                 deps.clients.sendToConn(clientId, {
                   t: "thread-commands",
                   threadId: msg.threadId,
-                  commands: deps.chat.commandsForThread(claims.userId),
+                  commands: await deps.chat.commandsForThread(claims.userId, msg.threadId),
                 });
               } else if (msg.t === "unsubscribe-thread") {
                 deps.clients.unsubscribeThread(clientId, msg.threadId);

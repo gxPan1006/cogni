@@ -59,6 +59,9 @@ export const hosts = pgTable("hosts", {
   // COGNI_KEEP_AWAKE env pin (UI shows the toggle read-only).
   keepAwake: boolean("keep_awake").notNull().default(true),
   keepAwakeLocked: boolean("keep_awake_locked").notNull().default(false),
+  // Preferred Agent Loop core for new sessions on this host. Defaults to
+  // Claude Code for old rows/old hosts; Settings can switch it to Codex.
+  defaultAdapter: text("default_adapter").notNull().default("claude-code"),
   lastSeen: timestamp("last_seen"),
   // SP-2: soft delete. Filter `removedAt IS NULL` in user-visible lookups; keep
   // the row so historic runner_sessions / events keep a valid host_id reference.

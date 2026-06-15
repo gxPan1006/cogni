@@ -16,8 +16,7 @@ import type { HostRouter, ConnectedHost } from "../host-router.js";
 import type { ClientHub } from "../client-hub.js";
 import { logger } from "@cogni/shared";
 import { sendHostRpc } from "../routes/host-ws.js";
-
-const ADAPTER = "claude-code"; // SP-2: chat domain still always uses Claude Code
+import { selectHostDefaultAdapter } from "../adapter-selection.js";
 
 interface PendingFallback {
   userId: string;
@@ -186,19 +185,20 @@ export class ChatDomain {
     const hostId = preferredOnline?.hostId ?? onlineHosts[0]?.hostId;
     if (!hostId) return;
 
-    const reusable = latest && latest.hostId === hostId && latest.status !== "closed";
-    const session = reusable
-      ? latest
-      : await openRunnerSession(this.db, { threadId, hostId, adapter: ADAPTER });
-
     const conn = this.hosts.getHostByIdForUser(userId, hostId);
     if (!conn) return;
+    const adapter = selectHostDefaultAdapter(conn);
+    const reusable = latest && latest.hostId === hostId && latest.adapter === adapter && latest.status !== "closed";
+    const session = reusable
+      ? latest
+      : await openRunnerSession(this.db, { threadId, hostId, adapter });
+
     try {
       conn.send({
         t: "prewarm",
         sessionId: session.id,
         threadId,
-        adapter: ADAPTER,
+        adapter,
         runnerSessionId: session.runnerSessionId,
         ...(model ? { model } : {}),
       });
@@ -231,7 +231,7 @@ export class ChatDomain {
     }
 
     // Close the old session if any non-closed exists. Switching to a new host
-    // means starting a fresh Claude Code session there (runner_session_id=null);
+    // means starting a fresh runner session there (runner_session_id=null);
     // conversation history is rebuilt from messages.
     const latest = await getLatestSessionForThread(this.db, pending.threadId);
     if (latest && latest.status !== "closed") {
@@ -305,9 +305,15 @@ export class ChatDomain {
    * online (you can't run a command without a runner anyway) → UI hides the
    * "/" menu. Sent on subscribe-thread.
    */
-  commandsForThread(userId: string): RunnerCommandId[] {
+  async commandsForThread(userId: string, threadId: string): Promise<RunnerCommandId[]> {
+    const latest = await getLatestSessionForThread(this.db, threadId);
+    if (latest?.hostId && latest.status !== "closed") {
+      const host = this.hosts.getHostByIdForUser(userId, latest.hostId);
+      return host?.adapterCommands?.[latest.adapter] ?? [];
+    }
     for (const h of this.hosts.getOnlineHostsForUser(userId)) {
-      const cmds = h.adapterCommands?.[ADAPTER];
+      const adapter = selectHostDefaultAdapter(h);
+      const cmds = h.adapterCommands?.[adapter];
       if (cmds) return cmds;
     }
     return [];
@@ -329,6 +335,8 @@ export class ChatDomain {
   async handleThreadCommand(input: {
     userId: string; threadId: string; command: RunnerCommandId; sourceClientId: string;
   }): Promise<void> {
+    const supported = await this.commandsForThread(input.userId, input.threadId);
+    if (!supported.includes(input.command)) return;
     if (input.command === "clear") return this.handleClear(input);
     if (input.command === "branch") return this.handleBranch(input);
   }
@@ -390,7 +398,7 @@ export class ChatDomain {
     const parentSession = await getLatestSessionForThread(this.db, input.threadId);
     const hostId = parentSession?.hostId ?? this.hosts.getOnlineHostsForUser(input.userId)[0]?.hostId ?? null;
     if (hostId && parentSession?.runnerSessionId) {
-      const session = await openRunnerSession(this.db, { threadId: branch.id, hostId, adapter: ADAPTER });
+      const session = await openRunnerSession(this.db, { threadId: branch.id, hostId, adapter: parentSession.adapter });
       this.pendingForks.set(session.id, parentSession.runnerSessionId);
     }
 
@@ -414,26 +422,25 @@ export class ChatDomain {
       ...(p.attachments && p.attachments.length > 0 ? { attachments: p.attachments } : {}),
     });
 
-    // Reuse the same-host session across turns so Claude Code can --resume
-    // its conversation context. Only open a new session when switching hosts
-    // (latest.hostId !== p.hostId) OR the session was explicitly closed
-    // (status='closed', set by resolve-fallback's switch path).
+    // Reuse the same-host, same-adapter session across turns so adapters with
+    // session-resume can keep conversation context. Only open a new session when
+    // switching hosts/adapters OR the session was explicitly closed.
+    const conn = this.hosts.getHostByIdForUser(p.userId, p.hostId);
+    if (!conn) {
+      this.clients.sendToUser(p.userId, { t: "host-status", online: false });
+      return;
+    }
+    const adapter = selectHostDefaultAdapter(conn);
     const latest = await getLatestSessionForThread(this.db, p.threadId);
-    const reusable = latest && latest.hostId === p.hostId && latest.status !== "closed";
+    const reusable = latest && latest.hostId === p.hostId && latest.adapter === adapter && latest.status !== "closed";
     const session = reusable
       ? latest
-      : await openRunnerSession(this.db, { threadId: p.threadId, hostId: p.hostId, adapter: ADAPTER });
+      : await openRunnerSession(this.db, { threadId: p.threadId, hostId: p.hostId, adapter });
 
     await setRunnerSessionStatus(this.db, session.id, "running");
 
     // Host may have dropped between the online-check and now. Mark failed if
     // dispatch can't reach it.
-    const conn = this.hosts.getHostByIdForUser(p.userId, p.hostId);
-    if (!conn) {
-      await setRunnerSessionStatus(this.db, session.id, "failed");
-      this.clients.sendToUser(p.userId, { t: "host-status", online: false });
-      return;
-    }
     // Branch: a freshly branched session forks the parent on its first dispatch.
     const forkFrom = this.pendingForks.get(session.id);
     if (forkFrom) this.pendingForks.delete(session.id);
@@ -442,7 +449,7 @@ export class ChatDomain {
         t: "dispatch",
         sessionId: session.id,
         threadId: p.threadId,
-        adapter: ADAPTER,
+        adapter,
         runnerSessionId: session.runnerSessionId,
         message: withAttachmentPreamble(p.content, p.attachments),
         ...(p.attachments && p.attachments.length > 0 ? { attachments: p.attachments } : {}),

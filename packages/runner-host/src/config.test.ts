@@ -10,6 +10,9 @@ import {
   configPath,
   resolveProjectsRoot,
   setProjectsRoot,
+  resolveClaudeSnapshotKernel,
+  resolveDefaultAdapter,
+  setDefaultAdapter,
 } from "./config.js";
 
 beforeEach(() => {
@@ -45,9 +48,12 @@ describe("host config", () => {
 });
 
 const ORIG_PROJECTS_ROOT = process.env.COGNI_PROJECTS_ROOT;
+const ORIG_CLAUDE_KERNEL = process.env.COGNI_CLAUDE_KERNEL;
 afterEach(() => {
   if (ORIG_PROJECTS_ROOT === undefined) delete process.env.COGNI_PROJECTS_ROOT;
   else process.env.COGNI_PROJECTS_ROOT = ORIG_PROJECTS_ROOT;
+  if (ORIG_CLAUDE_KERNEL === undefined) delete process.env.COGNI_CLAUDE_KERNEL;
+  else process.env.COGNI_CLAUDE_KERNEL = ORIG_CLAUDE_KERNEL;
 });
 
 describe("resolveProjectsRoot", () => {
@@ -86,5 +92,59 @@ describe("setProjectsRoot", () => {
     expect(res).toEqual({ projectsRoot: `${homedir()}/envroot`, locked: true });
     const saved = JSON.parse(await rf(configPath(), "utf8"));
     expect(saved.projectsRoot).toBeUndefined();
+  });
+});
+
+describe("resolveClaudeSnapshotKernel", () => {
+  it("is absent by default, so only the global Claude Code core is registered", () => {
+    delete process.env.COGNI_CLAUDE_KERNEL;
+    expect(resolveClaudeSnapshotKernel(undefined)).toEqual({ kernel: null, locked: false });
+  });
+  it("uses the structured host.json snapshot value when no env", () => {
+    delete process.env.COGNI_CLAUDE_KERNEL;
+    expect(resolveClaudeSnapshotKernel({ command: "bun", args: ["run", "/x/cli.tsx"] })).toEqual({
+      kernel: { command: "bun", args: ["run", "/x/cli.tsx"] },
+      locked: false,
+    });
+  });
+  it("env wins and locks, whitespace-split into command + prefix args", () => {
+    process.env.COGNI_CLAUDE_KERNEL = "bun run /Users/me/code/claude-code/src/entrypoints/cli.tsx";
+    expect(resolveClaudeSnapshotKernel({ command: "claude", args: [] })).toEqual({
+      kernel: { command: "bun", args: ["run", "/Users/me/code/claude-code/src/entrypoints/cli.tsx"] },
+      locked: true,
+    });
+  });
+  it("treats a config value with an empty command as absent", () => {
+    delete process.env.COGNI_CLAUDE_KERNEL;
+    expect(resolveClaudeSnapshotKernel({ command: "", args: [] })).toEqual({ kernel: null, locked: false });
+  });
+});
+
+describe("resolveDefaultAdapter", () => {
+  it("defaults to claude-code", () => {
+    expect(resolveDefaultAdapter(undefined, ["claude-code", "claude-code-snapshot", "codex"])).toBe("claude-code");
+  });
+  it("uses codex when configured and available", () => {
+    expect(resolveDefaultAdapter("codex", ["claude-code", "claude-code-snapshot", "codex"])).toBe("codex");
+  });
+  it("uses the Claude snapshot when configured and available", () => {
+    expect(resolveDefaultAdapter("claude-code-snapshot", ["claude-code", "claude-code-snapshot", "codex"])).toBe(
+      "claude-code-snapshot",
+    );
+  });
+  it("falls back when configured adapter is unavailable", () => {
+    expect(resolveDefaultAdapter("claude-code-snapshot", ["claude-code", "codex"])).toBe("claude-code");
+  });
+});
+
+describe("setDefaultAdapter", () => {
+  it("writes defaultAdapter into host.json", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cogni-cfg-"));
+    process.env.COGNI_HOME = dir;
+    await wf(configPath(), JSON.stringify({ hostId: "h", registrationToken: "t", cloudUrl: "ws://x" }), "utf8");
+    const res = await setDefaultAdapter("claude-code-snapshot");
+    expect(res).toEqual({ defaultAdapter: "claude-code-snapshot" });
+    const saved = JSON.parse(await rf(configPath(), "utf8"));
+    expect(saved.defaultAdapter).toBe("claude-code-snapshot");
   });
 });
