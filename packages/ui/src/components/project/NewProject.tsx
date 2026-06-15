@@ -118,51 +118,49 @@ export function NewProject({
           <button className="modal__close" onClick={onClose} title={t("project.newProject.close")}>{Icon.x}</button>
         </header>
 
-        <div className="modal__body">
-          <Field label={t("project.newProject.fieldName")} required hint={t("project.newProject.fieldNameHint")}>
-            <input className="input" placeholder={t("project.newProject.fieldNamePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-          </Field>
+        <div className="modal__body np__body">
+          <div className="np__col np__col--primary">
+            <div className="np__col-label">{t("project.newProject.sectionSettings")}</div>
 
-          <Field label={t("project.newProject.fieldDescription")} hint={t("project.newProject.fieldDescriptionHint")}>
-            <textarea className="input np__textarea" placeholder={t("project.newProject.fieldDescriptionPlaceholder")} value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-          </Field>
+            <Field label={t("project.newProject.fieldName")} required hint={t("project.newProject.fieldNameHint")}>
+              <input className="input" placeholder={t("project.newProject.fieldNamePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+            </Field>
 
-          <Field label={t("project.newProject.defaultHost")} required hint={t("project.newProject.defaultHostHint")}>
-            <select className="input" value={defaultHostId} onChange={(e) => setDefaultHostId(e.target.value)}>
-              {hosts.length === 0 && <option value="">{t("project.newProject.noHosts")}</option>}
-              {hosts.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name}{h.status === "offline" ? t("project.newProject.hostOffline") : ""}
-                </option>
-              ))}
-            </select>
-          </Field>
+            <Field label={t("project.newProject.defaultHost")} required hint={t("project.newProject.defaultHostHint")}>
+              <select className="input" value={defaultHostId} onChange={(e) => setDefaultHostId(e.target.value)}>
+                {hosts.length === 0 && <option value="">{t("project.newProject.noHosts")}</option>}
+                {hosts.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name}{h.status === "offline" ? t("project.newProject.hostOffline") : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
-          <Field label={t("project.newProject.repoPath")} required hint={t("project.newProject.repoPathHint")}>
-            <div className="np__path">
-              <input
-                className="input np__path-input"
-                placeholder={repoPathPlaceholder}
-                value={repoPath}
-                onChange={(e) => { setRepoPath(e.target.value); setPathDirty(true); }}
-              />
-              {onBrowseHost && (
-                <button
-                  className="btn btn-sm"
-                  disabled={!defaultHostId}
-                  onClick={() => setBrowseOpen(true)}
-                >
-                  {Icon.search} {t("project.newProject.browse")}
-                </button>
-              )}
-            </div>
-            <label className="np__init">
-              <input type="checkbox" checked={initRepo} onChange={(e) => setInitRepo(e.target.checked)} />
-              <span>{t("project.newProject.initRepo")}</span>
-            </label>
-          </Field>
+            <Field label={t("project.newProject.repoPath")} required hint={t("project.newProject.repoPathHint")}>
+              <div className="np__path">
+                <input
+                  className="input np__path-input"
+                  placeholder={repoPathPlaceholder}
+                  value={repoPath}
+                  onChange={(e) => { setRepoPath(e.target.value); setPathDirty(true); }}
+                />
+                {onBrowseHost && (
+                  <button
+                    className="btn btn-sm"
+                    disabled={!defaultHostId}
+                    onClick={() => setBrowseOpen(true)}
+                  >
+                    {Icon.search} {t("project.newProject.browse")}
+                  </button>
+                )}
+              </div>
+              <label className="np__init">
+                <input type="checkbox" checked={initRepo} onChange={(e) => setInitRepo(e.target.checked)} />
+                <span>{t("project.newProject.initRepo")}</span>
+              </label>
+            </Field>
 
-          <div className="np__row">
             <Field label={t("project.newProject.mergePolicy")}>
               <select className="input" value={mergePolicy} onChange={(e) => setMergePolicy(e.target.value as MergePolicy)}>
                 <option value="require-review">{t("project.newProject.mergeRequireReview")}</option>
@@ -180,9 +178,17 @@ export function NewProject({
             </Field>
           </div>
 
-          <Field label={t("project.newProject.systemPrompt")} hint={t("project.newProject.systemPromptHint")}>
-            <textarea className="input np__textarea" placeholder={t("project.newProject.systemPromptPlaceholder")} rows={3} value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} />
-          </Field>
+          <div className="np__col np__col--aux">
+            <div className="np__col-label">{t("project.newProject.sectionContent")}</div>
+
+            <Field label={t("project.newProject.fieldDescription")} hint={t("project.newProject.fieldDescriptionHint")}>
+              <textarea className="input np__textarea np__textarea--sm" placeholder={t("project.newProject.fieldDescriptionPlaceholder")} value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+            </Field>
+
+            <Field label={t("project.newProject.systemPrompt")} hint={t("project.newProject.systemPromptHint")}>
+              <textarea className="input np__textarea np__textarea--sm" placeholder={t("project.newProject.systemPromptPlaceholder")} rows={3} value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} />
+            </Field>
+          </div>
         </div>
 
         <footer className="modal__foot">

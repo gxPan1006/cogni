@@ -113,11 +113,51 @@ select.input {
 
 /* ─── NewProject-specific ──────────────────── */
 
+/* Landscape layout: the modal is wider than the shared 520px default and the
+   body splits into two columns — required fields on the left, optional
+   "tune later" settings on the right behind a soft divider. */
+.modal.np { width: 900px; }
+
+/* Left = quick picks (name / host / path / merge / concurrency) → narrow strip.
+   Right = the free-text the user actually writes a lot into → dominant. */
+.modal__body.np__body {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 8fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.np__col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+/* Soft divider between the two columns. */
+.np__col--aux {
+  padding-left: 28px;
+  border-left: 1px solid var(--line-soft);
+  gap: 14px;
+}
+
+.np__col-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
 .np__textarea {
   resize: vertical;
   min-height: 60px;
   font-family: var(--font-sans);
 }
+/* Right column owns the bulk of the width and only holds two fields — let the
+   textareas grow to fill it: a roomy description, a tall system prompt. */
+.np__col--aux .np__textarea { min-height: 84px; }
+.np__col--aux .field:last-child .np__textarea { min-height: 168px; }
 
 .np__row {
   display: grid;
@@ -229,4 +269,14 @@ select.input {
   .modal__foot { padding: 12px 16px 16px; }
   .np__row { grid-template-columns: 1fr; }
   .input { font-size: 16px; }
+
+  /* Stack the landscape columns back to a single column on narrow screens. */
+  .modal.np { width: 100%; }
+  .modal__body.np__body { grid-template-columns: 1fr; gap: 20px; }
+  .np__col--aux {
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--line-soft);
+    padding-top: 18px;
+  }
 }

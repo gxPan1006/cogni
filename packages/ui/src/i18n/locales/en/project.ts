@@ -126,6 +126,8 @@ export const project = {
     eyebrow: "New",
     title: "New project",
     close: "Close (Esc)",
+    sectionSettings: "Setup",
+    sectionContent: "Context · optional",
     fieldName: "Name",
     fieldNameHint: "One line that says what this project does",
     fieldNamePlaceholder: "e.g. SP-2 multi-device sync",

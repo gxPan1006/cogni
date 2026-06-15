@@ -126,6 +126,8 @@ export const project = {
     eyebrow: "新建",
     title: "新项目",
     close: "关闭 (Esc)",
+    sectionSettings: "设置",
+    sectionContent: "内容 · 可选",
     fieldName: "名字",
     fieldNameHint: "一句话能说出这个项目做什么",
     fieldNamePlaceholder: "例:SP-2 多端同步",
