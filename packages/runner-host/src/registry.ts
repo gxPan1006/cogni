@@ -16,6 +16,7 @@ import type { HostConfig } from "./config.js";
 export type HostRpcHandler = (req: HostRpcRequest) => Promise<HostRpcResponse>;
 
 const HEARTBEAT_MS = 20_000;
+const PONG_TIMEOUT_MS = 10_000;
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
 const VERSION = "0.0.0";
@@ -56,6 +57,27 @@ export function connectToCloud(
     const send = (msg: HostToCloud) =>
       ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(msg));
     let heartbeat: ReturnType<typeof setInterval> | undefined;
+    let pongTimer: ReturnType<typeof setTimeout> | undefined;
+    const clearPongTimer = () => {
+      if (pongTimer) clearTimeout(pongTimer);
+      pongTimer = undefined;
+    };
+    const probeLiveness = () => {
+      send({ t: "heartbeat" });
+      if (ws.readyState !== WebSocket.OPEN) return;
+      clearPongTimer();
+      pongTimer = setTimeout(() => {
+        logger.warn({ hostId: config.hostId }, "cloud pong timed out; reconnecting");
+        ws.terminate();
+      }, PONG_TIMEOUT_MS);
+      pongTimer.unref?.();
+      try {
+        ws.ping();
+      } catch (err) {
+        logger.warn({ err: String(err), hostId: config.hostId }, "cloud ping failed; reconnecting");
+        ws.terminate();
+      }
+    };
     // The `ws` library does not await an async message handler — chain frames
     // per-connection so dispatches are processed in arrival order (the
     // RunnerManager session-handle cache is not concurrency-safe). Mirrors the
@@ -85,9 +107,10 @@ export function connectToCloud(
         keepAwake: ka.enabled,
         keepAwakeLocked: ka.locked,
       });
-      heartbeat = setInterval(() => send({ t: "heartbeat" }), HEARTBEAT_MS);
+      heartbeat = setInterval(probeLiveness, HEARTBEAT_MS);
       logger.info({ hostId: config.hostId }, "connected to cloud");
     });
+    ws.on("pong", clearPongTimer);
 
     ws.on("message", (data) => {
       let raw: unknown;
@@ -141,6 +164,7 @@ export function connectToCloud(
     ws.on("close", () => {
       // `ws` always emits `close` after `error`, so reconnect lives only here.
       if (heartbeat) clearInterval(heartbeat);
+      clearPongTimer();
       const delay = Math.min(RECONNECT_BASE_MS * 2 ** attempt, RECONNECT_MAX_MS);
       attempt += 1;
       logger.warn({ delay }, "cloud connection closed; reconnecting");
